@@ -551,8 +551,8 @@
 
   .map-tint {
     background:
-      linear-gradient(180deg, rgba(43, 69, 46, 0.34) 0%, rgba(17, 26, 20, 0.58) 100%),
-      radial-gradient(circle at center, rgba(98, 129, 92, 0.18), transparent 58%);
+      linear-gradient(180deg, rgba(66, 98, 70, 0.26) 0%, rgba(26, 40, 29, 0.44) 100%),
+      radial-gradient(circle at center, rgba(112, 146, 104, 0.12), transparent 58%);
     mix-blend-mode: multiply;
   }
 
@@ -568,10 +568,6 @@
       system-ui,
       sans-serif;
     background: var(--map-background);
-  }
-
-  :global(.leaflet-tile-pane) {
-    filter: saturate(0.8) brightness(0.66) contrast(1.02) sepia(0.18) hue-rotate(-22deg);
   }
 
   :global(.leaflet-popup-content) {

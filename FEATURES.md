@@ -2,9 +2,6 @@
 
 ## Map and Movement
 
-- Smooth aircraft position interpolation between snapshots.
-- Dynamic fetching based on the current map bounds.
-- Marker clustering for dense traffic areas.
 - `Follow aircraft` mode for a selected flight.
 - Multiple basemap styles: standard, satellite, dark, aviation.
 - Additional layers: country borders, FIRs, airports, ATS routes.
@@ -17,7 +14,6 @@
 ## Aircraft Details
 
 - Callsign, ICAO24, registration, aircraft type, operator, origin country.
-- Current altitude, speed, heading, vertical rate, airborne/on-ground status.
 - Origin and destination airports when available.
 - Estimated arrival time.
 - Position and altitude history for a selected flight.
@@ -29,7 +25,6 @@
 
 - Search by callsign, ICAO24, registration, airline, aircraft type.
 - Filters for altitude, speed, heading, country, operator.
-- `Airborne only` toggle.
 - `Arrivals/departures for selected airport` filter.
 - Traffic type filter: passenger, cargo, private, helicopter.
 - Filter by recent activity window.
@@ -81,13 +76,11 @@
 
 ## Data Quality and Performance
 
-- Backend cache and fallback to the last good snapshot.
 - Debounce and throttling on map moves.
 - WebSocket or SSE updates instead of polling only.
 - Progressive loading based on zoom level.
 - Unified retry and error-handling policy.
 - Performance monitoring and error logging.
-- Protection against upstream rate limits.
 - Automated backend and frontend tests.
 - Support for multiple data providers, not only OpenSky.
 - Data freshness and confidence indicators.

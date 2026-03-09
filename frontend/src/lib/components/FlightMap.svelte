@@ -2,6 +2,7 @@
   import { createEventDispatcher, onMount } from "svelte";
 
   import L from "leaflet";
+  import "leaflet.markercluster";
 
   import { syncAircraftMarkers } from "../map/aircraftMarkers.js";
 
@@ -42,7 +43,20 @@
       attribution: "&copy; OpenStreetMap contributors",
     }).addTo(map);
 
-    aircraftLayer = L.layerGroup().addTo(map);
+    aircraftLayer = L.markerClusterGroup({
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      removeOutsideVisibleBounds: true,
+      disableClusteringAtZoom: 9,
+      maxClusterRadius: 42,
+      iconCreateFunction(cluster) {
+        return L.divIcon({
+          html: `<span>${cluster.getChildCount()}</span>`,
+          className: "aircraft-cluster",
+          iconSize: [42, 42],
+        });
+      },
+    }).addTo(map);
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
     map.on("moveend zoomend", emitBounds);
     emitBounds();
@@ -86,6 +100,24 @@
   :global(.aircraft-icon-shell) {
     background: transparent;
     border: 0;
+  }
+
+  :global(.aircraft-cluster) {
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    color: #f7fbff;
+    font-weight: 800;
+    background:
+      radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.22), transparent 35%),
+      linear-gradient(135deg, #12395d 0%, #2d6c98 100%);
+    box-shadow:
+      0 12px 22px rgba(18, 57, 93, 0.24),
+      inset 0 0 0 4px rgba(255, 255, 255, 0.16);
+  }
+
+  :global(.aircraft-cluster span) {
+    transform: translateY(1px);
   }
 
   :global(.aircraft-icon) {

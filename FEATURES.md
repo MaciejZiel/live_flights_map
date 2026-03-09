@@ -34,7 +34,6 @@
 
 - Alert when a selected aircraft enters a chosen area.
 - Alert when an aircraft changes altitude, heading, or disappears.
-- Alert for a specific callsign or registration.
 - Airport alerts for arrival, departure, delay, or cancellation.
 - Push, email, or webhook notifications.
 - Geofencing with custom drawn areas.
@@ -66,7 +65,6 @@
 - Embeddable map widget.
 - PDF and CSV reports.
 - User roles: viewer, analyst, admin.
-- Alert history and audit trail.
 - Integrations with Discord, Slack, and Telegram.
 
 ## Suggested Delivery Order

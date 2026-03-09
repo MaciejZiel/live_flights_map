@@ -3,6 +3,7 @@
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
+  import AlertPanel from "./lib/components/AlertPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
   import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
@@ -70,6 +71,12 @@
   let watchlist = [];
   let watchModeEnabled = false;
   let flightAnnotations = {};
+  let alertRules = [];
+  let alertEvents = [];
+  let alertMatchState = {};
+  let alertToast = null;
+  let alertToastTimer = null;
+  let lastAlertCheckKey = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -87,6 +94,8 @@
       watchlist = savedPreferences.watchlist ?? watchlist;
       watchModeEnabled = savedPreferences.watchModeEnabled ?? watchModeEnabled;
       flightAnnotations = savedPreferences.flightAnnotations ?? flightAnnotations;
+      alertRules = savedPreferences.alertRules ?? alertRules;
+      alertEvents = savedPreferences.alertEvents ?? alertEvents;
     }
 
     applySharedStateFromUrl();
@@ -115,6 +124,9 @@
       }
       if (shareFeedbackTimer) {
         window.clearTimeout(shareFeedbackTimer);
+      }
+      if (alertToastTimer) {
+        window.clearTimeout(alertToastTimer);
       }
       unsubscribe();
       flightsStore.stop();
@@ -306,6 +318,101 @@
       shareFeedback = "";
       shareFeedbackTimer = null;
     }, 1800);
+  }
+
+  function pushAlertEvent(message) {
+    const nextEvent = {
+      id: crypto.randomUUID(),
+      message,
+      timestamp: Date.now(),
+    };
+
+    alertEvents = [nextEvent, ...alertEvents].slice(0, 30);
+    alertToast = nextEvent;
+
+    if (alertToastTimer) {
+      window.clearTimeout(alertToastTimer);
+    }
+
+    alertToastTimer = window.setTimeout(() => {
+      alertToast = null;
+      alertToastTimer = null;
+    }, 3500);
+  }
+
+  function addAlertRule(rule) {
+    const normalizedQuery = rule.query.trim().toLowerCase();
+    if (!normalizedQuery) {
+      return;
+    }
+
+    const duplicate = alertRules.some(
+      (existingRule) => existingRule.type === rule.type && existingRule.query.toLowerCase() === normalizedQuery
+    );
+    if (duplicate) {
+      return;
+    }
+
+    alertRules = [
+      {
+        id: crypto.randomUUID(),
+        type: rule.type,
+        query: rule.query.trim(),
+      },
+      ...alertRules,
+    ].slice(0, 12);
+  }
+
+  function removeAlertRule(ruleId) {
+    alertRules = alertRules.filter((rule) => rule.id !== ruleId);
+    const nextMatchState = { ...alertMatchState };
+    delete nextMatchState[ruleId];
+    alertMatchState = nextMatchState;
+  }
+
+  function clearAlertEvents() {
+    alertEvents = [];
+  }
+
+  function evaluateAlertRules() {
+    if (!alertRules.length) {
+      alertMatchState = {};
+      return;
+    }
+
+    const nextMatchState = {};
+    for (const rule of alertRules) {
+      const normalizedQuery = rule.query.toLowerCase();
+      const matches = state.flights.filter((flight) => {
+        if (rule.type === "callsign") {
+          return (flight.callsign ?? "").toLowerCase().includes(normalizedQuery);
+        }
+
+        return flight.icao24.includes(normalizedQuery);
+      });
+
+      const previousMatches = alertMatchState[rule.id]?.count ?? 0;
+      nextMatchState[rule.id] = {
+        count: matches.length,
+      };
+
+      if (matches.length > 0 && previousMatches === 0) {
+        const leadFlight = matches[0];
+        pushAlertEvent(
+          `${rule.type === "callsign" ? "Callsign" : "ICAO24"} ${rule.query} matched ${
+            leadFlight.callsign ?? leadFlight.icao24
+          }`
+        );
+      }
+
+      if (matches.length === 0 && previousMatches > 0) {
+        pushAlertEvent(
+          `${rule.type === "callsign" ? "Callsign" : "ICAO24"} ${rule.query} is no longer visible`
+        );
+      }
+    }
+
+    alertMatchState = nextMatchState;
   }
 
   function toggleFollowAircraft() {
@@ -748,6 +855,10 @@
   $: if (activeReplaySnapshot && followAircraft) {
     followAircraft = false;
   }
+  $: if (state.fetchedAt && state.fetchedAt !== lastAlertCheckKey && !activeReplaySnapshot) {
+    lastAlertCheckKey = state.fetchedAt;
+    evaluateAlertRules();
+  }
   $: {
     replayPlaybackActive;
     replaySnapshotIndex;
@@ -776,6 +887,8 @@
       watchlist,
       watchModeEnabled,
       flightAnnotations,
+      alertRules,
+      alertEvents,
     });
   }
 </script>
@@ -874,6 +987,10 @@
 
   {#if state.warning}
     <div class="warning-banner">{state.warning}</div>
+  {/if}
+
+  {#if alertToast}
+    <div class="alert-toast">{alertToast.message}</div>
   {/if}
 
   {#if isMobileViewport && mobileSidebarOpen}
@@ -1088,6 +1205,14 @@
         onSelectFlight={selectWatchedFlight}
       />
 
+      <AlertPanel
+        rules={alertRules}
+        events={alertEvents}
+        onAddRule={addAlertRule}
+        onRemoveRule={removeAlertRule}
+        onClearEvents={clearAlertEvents}
+      />
+
       <LegendPanel />
       <ShortcutsPanel />
     </aside>
@@ -1228,6 +1353,14 @@
     border-radius: 14px;
     background: var(--banner-warning-bg);
     color: var(--banner-warning-text);
+  }
+
+  .alert-toast {
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(39, 115, 68, 0.16);
+    color: #1f7d4a;
+    font-weight: 700;
   }
 
   .layout {

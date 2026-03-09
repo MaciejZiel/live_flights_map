@@ -52,18 +52,22 @@ function animateMarkerPosition(entry, nextLatLng) {
   entry.animationFrame = requestAnimationFrame(step);
 }
 
-export function createAircraftIcon(track = 0, selected = false) {
+export function createAircraftIcon(track = 0, selected = false, watched = false, watchModeEnabled = false) {
+  const fillColor = selected ? "#c46a17" : watched ? "#2e9f66" : watchModeEnabled ? "#48627c" : "#12395d";
+  const strokeColor = selected ? "#fff7ec" : watched ? "#eafbf2" : "#f2f8ff";
+  const opacity = watchModeEnabled && !watched && !selected ? 0.45 : 1;
+
   return L.divIcon({
     className: "aircraft-icon-shell",
     iconSize: [30, 30],
     iconAnchor: [15, 15],
     html: `
-      <div class="aircraft-icon" style="transform: rotate(${track}deg);">
+      <div class="aircraft-icon" style="transform: rotate(${track}deg); opacity: ${opacity};">
         <svg viewBox="0 0 48 48" width="30" height="30" aria-hidden="true">
           <path
             d="M24 3L29 20L43 24L29 28L24 45L19 28L5 24L19 20L24 3Z"
-            fill="${selected ? "#c46a17" : "#12395d"}"
-            stroke="${selected ? "#fff7ec" : "#f2f8ff"}"
+            fill="${fillColor}"
+            stroke="${strokeColor}"
             stroke-width="2"
             stroke-linejoin="round"
           />
@@ -73,18 +77,23 @@ export function createAircraftIcon(track = 0, selected = false) {
   });
 }
 
-function updateMarkerEntry(entry, flight, selected) {
+function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled) {
   const nextLatLng = [flight.latitude, flight.longitude];
 
   entry.flight = flight;
   animateMarkerPosition(entry, nextLatLng);
-  entry.marker.setIcon(createAircraftIcon(flight.true_track ?? 0, selected));
+  entry.marker.setIcon(createAircraftIcon(flight.true_track ?? 0, selected, watched, watchModeEnabled));
   entry.marker.bindPopup(buildPopupContent(flight));
 }
 
-function createMarkerEntry(layer, flight, selectedIcao24, onSelect) {
+function createMarkerEntry(layer, flight, selectedIcao24, watchedIcao24s, watchModeEnabled, onSelect) {
   const marker = L.marker([flight.latitude, flight.longitude], {
-    icon: createAircraftIcon(flight.true_track ?? 0, selectedIcao24 === flight.icao24),
+    icon: createAircraftIcon(
+      flight.true_track ?? 0,
+      selectedIcao24 === flight.icao24,
+      watchedIcao24s.has(flight.icao24),
+      watchModeEnabled
+    ),
     keyboard: false,
   }).bindPopup(buildPopupContent(flight));
 
@@ -104,7 +113,15 @@ function createMarkerEntry(layer, flight, selectedIcao24, onSelect) {
   return entry;
 }
 
-export function syncAircraftMarkers(layer, registry, flights, selectedIcao24, onSelect) {
+export function syncAircraftMarkers(
+  layer,
+  registry,
+  flights,
+  selectedIcao24,
+  watchedIcao24s = new Set(),
+  watchModeEnabled = false,
+  onSelect
+) {
   const nextIds = new Set();
 
   for (const flight of flights) {
@@ -112,11 +129,24 @@ export function syncAircraftMarkers(layer, registry, flights, selectedIcao24, on
 
     const existingEntry = registry.get(flight.icao24);
     if (existingEntry) {
-      updateMarkerEntry(existingEntry, flight, selectedIcao24 === flight.icao24);
+      updateMarkerEntry(
+        existingEntry,
+        flight,
+        selectedIcao24 === flight.icao24,
+        watchedIcao24s.has(flight.icao24),
+        watchModeEnabled
+      );
       continue;
     }
 
-    const entry = createMarkerEntry(layer, flight, selectedIcao24, onSelect);
+    const entry = createMarkerEntry(
+      layer,
+      flight,
+      selectedIcao24,
+      watchedIcao24s,
+      watchModeEnabled,
+      onSelect
+    );
     registry.set(flight.icao24, entry);
   }
 

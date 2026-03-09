@@ -11,7 +11,9 @@
   export let flight = null;
   export let followAircraft = false;
   export let trailPoints = [];
+  export let isWatched = false;
   export let onToggleFollow = () => {};
+  export let onToggleWatch = () => {};
 
   function buildMetricPath(points, getValue) {
     if (points.length < 2) {
@@ -119,6 +121,14 @@
         Stop following
       {:else}
         Follow aircraft
+      {/if}
+    </button>
+
+    <button class:active={isWatched} class="watch-button" type="button" on:click={onToggleWatch}>
+      {#if isWatched}
+        Remove from watchlist
+      {:else}
+        Add to watchlist
       {/if}
     </button>
 
@@ -300,6 +310,23 @@
 
   .follow-button.active {
     background: linear-gradient(135deg, #b25e10 0%, #de8b32 100%);
+  }
+
+  .watch-button {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.8rem 0.95rem;
+    font: inherit;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .watch-button.active {
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
+    border: 0;
   }
 
   dl {

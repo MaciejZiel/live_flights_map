@@ -6,6 +6,7 @@
   import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
+  import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
@@ -65,6 +66,8 @@
   let replayPlaybackTimer = null;
   let shareFeedback = "";
   let shareFeedbackTimer = null;
+  let watchlist = [];
+  let watchModeEnabled = false;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -79,6 +82,8 @@
       sortBy = savedPreferences.sortBy ?? sortBy;
       theme = savedPreferences.theme ?? theme;
       onboardingDismissed = savedPreferences.onboardingDismissed ?? onboardingDismissed;
+      watchlist = savedPreferences.watchlist ?? watchlist;
+      watchModeEnabled = savedPreferences.watchModeEnabled ?? watchModeEnabled;
     }
 
     applySharedStateFromUrl();
@@ -307,6 +312,34 @@
     }
 
     followAircraft = !followAircraft;
+  }
+
+  function toggleSelectedFlightWatchlist() {
+    if (!selectedFlight) {
+      return;
+    }
+
+    if (watchlist.includes(selectedFlight.icao24)) {
+      watchlist = watchlist.filter((icao24) => icao24 !== selectedFlight.icao24);
+      return;
+    }
+
+    watchlist = [selectedFlight.icao24, ...watchlist.filter((icao24) => icao24 !== selectedFlight.icao24)].slice(0, 12);
+  }
+
+  function removeFromWatchlist(icao24) {
+    watchlist = watchlist.filter((value) => value !== icao24);
+  }
+
+  function selectWatchedFlight(icao24) {
+    selectedIcao24 = icao24;
+    if (isMobileViewport) {
+      mobileSidebarOpen = false;
+    }
+  }
+
+  function toggleWatchMode() {
+    watchModeEnabled = !watchModeEnabled;
   }
 
   function resetFilters() {
@@ -632,6 +665,14 @@
     return matchesQuery && matchesAltitude && matchesGroundFilter && matchesRecentActivity;
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
+  $: watchedFlightEntries = watchlist.map((icao24) => {
+    const flight = state.flights.find((candidate) => candidate.icao24 === icao24) ?? null;
+    return {
+      icao24,
+      flight,
+      isLive: Boolean(flight),
+    };
+  });
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: canStepReplayBackward = snapshotHistory.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
   $: canStepReplayForward = snapshotHistory.length > 1 && replaySnapshotIndex !== -1;
@@ -673,6 +714,8 @@
       sortBy,
       theme,
       onboardingDismissed,
+      watchlist,
+      watchModeEnabled,
     });
   }
 </script>
@@ -961,7 +1004,18 @@
         flight={selectedFlight}
         followAircraft={followAircraft}
         trailPoints={selectedFlightTrail}
+        isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
         onToggleFollow={toggleFollowAircraft}
+        onToggleWatch={toggleSelectedFlightWatchlist}
+      />
+
+      <WatchlistPanel
+        entries={watchedFlightEntries}
+        selectedIcao24={selectedIcao24}
+        watchModeEnabled={watchModeEnabled}
+        onToggleWatchMode={toggleWatchMode}
+        onSelectFlight={selectWatchedFlight}
+        onRemoveFlight={removeFromWatchlist}
       />
 
       <LegendPanel />
@@ -975,6 +1029,8 @@
         followAircraft={followAircraft}
         mapStyle={mapStyle}
         trailPoints={selectedFlightTrail}
+        watchedIcao24s={watchlist}
+        watchModeEnabled={watchModeEnabled}
         initialViewport={mapViewport}
         fullscreenRequestId={fullscreenRequestId}
         viewPresetRequest={viewPresetRequest}

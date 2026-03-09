@@ -11,6 +11,8 @@
   export let followAircraft = false;
   export let mapStyle = "standard";
   export let trailPoints = [];
+  export let watchedIcao24s = [];
+  export let watchModeEnabled = false;
   export let initialViewport = null;
   export let fullscreenRequestId = 0;
   export let viewPresetRequest = null;
@@ -363,9 +365,17 @@
   });
 
   $: if (aircraftLayer) {
-    syncAircraftMarkers(aircraftLayer, markerRegistry, flights, selectedIcao24, (flight) => {
+    syncAircraftMarkers(
+      aircraftLayer,
+      markerRegistry,
+      flights,
+      selectedIcao24,
+      new Set(watchedIcao24s),
+      watchModeEnabled,
+      (flight) => {
       dispatch("select", { flight });
-    });
+      }
+    );
   }
 
   $: if (map) {

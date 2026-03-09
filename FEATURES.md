@@ -37,8 +37,6 @@
 - Alert for a specific callsign or registration.
 - Airport alerts for arrival, departure, delay, or cancellation.
 - Push, email, or webhook notifications.
-- Watchlist for tracked aircraft and flights.
-- Multi-aircraft watch mode.
 - Geofencing with custom drawn areas.
 
 ## History and Analytics

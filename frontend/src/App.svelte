@@ -10,6 +10,7 @@
   import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
+  import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
   import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
@@ -1374,46 +1375,15 @@
           <OnboardingPanel onDismiss={dismissOnboarding} />
         {/if}
 
-        <section class="hud-card">
-          <div class="card-header">
-            <div>
-              <p class="section-kicker">Hot traffic</p>
-              <h2>Fastest visible flights</h2>
-            </div>
-            <span class="card-badge">{leaderboardFlights.length}</span>
-          </div>
-
-          {#if leaderboardFlights.length}
-            <div class="traffic-list">
-              {#each leaderboardFlights as flight, index}
-                <button
-                  class:selected={flight.icao24 === selectedIcao24}
-                  class="traffic-row"
-                  type="button"
-                  on:click={() => {
-                    selectedIcao24 = flight.icao24;
-                    inspectorTab = "details";
-                    if (isMobileViewport) {
-                      mobileSidebarOpen = true;
-                    }
-                  }}
-                >
-                  <span class="traffic-rank">{index + 1}</span>
-                  <span class="traffic-main">
-                    <strong>{flight.callsign ?? flight.icao24}</strong>
-                    <span>{flight.origin_country ?? "Unknown"}</span>
-                  </span>
-                  <span class="traffic-meta">
-                    <strong>{formatSpeed(flight.velocity)}</strong>
-                    <span>{formatAltitude(flight.altitude)}</span>
-                  </span>
-                </button>
-              {/each}
-            </div>
-          {:else}
-            <p class="empty-copy">Waiting for traffic inside the active radar area.</p>
-          {/if}
-        </section>
+        <TrafficBoardPanel
+          flights={leaderboardFlights}
+          selectedIcao24={selectedIcao24}
+          viewport={mapViewport}
+          title="Priority traffic"
+          subtitle="Fast moving flights"
+          maxRows={6}
+          onSelectFlight={selectWatchedFlight}
+        />
 
         <section class="hud-card">
           <div class="card-header">
@@ -1603,6 +1573,9 @@
         <button class:active={inspectorTab === "filters"} class="inspector-tab" type="button" on:click={() => openInspectorTab("filters")}>
           Filters
         </button>
+        <button class:active={inspectorTab === "traffic"} class="inspector-tab" type="button" on:click={() => openInspectorTab("traffic")}>
+          Traffic
+        </button>
         <button class:active={inspectorTab === "watchlist"} class="inspector-tab" type="button" on:click={() => openInspectorTab("watchlist")}>
           Watchlist
         </button>
@@ -1633,6 +1606,16 @@
             onUpdateNotes={updateSelectedFlightNotes}
             onAddTag={addSelectedFlightTag}
             onRemoveTag={removeSelectedFlightTag}
+          />
+        {:else if inspectorTab === "traffic"}
+          <TrafficBoardPanel
+            flights={sortedFlights}
+            selectedIcao24={selectedIcao24}
+            viewport={mapViewport}
+            title="Traffic list"
+            subtitle="Current radar traffic"
+            maxRows={24}
+            onSelectFlight={selectWatchedFlight}
           />
         {:else if inspectorTab === "filters"}
           <section class="panel inspector-panel">
@@ -1794,6 +1777,9 @@
       </button>
       <button class:active={inspectorTab === "filters"} class="dock-button" type="button" on:click={() => openInspectorTab("filters")}>
         Filters
+      </button>
+      <button class:active={inspectorTab === "traffic"} class="dock-button" type="button" on:click={() => openInspectorTab("traffic")}>
+        Traffic
       </button>
       <button class:active={inspectorTab === "watchlist"} class="dock-button" type="button" on:click={() => openInspectorTab("watchlist")}>
         Watchlist
@@ -2099,62 +2085,23 @@
     background: #ffd34f;
   }
 
-  .traffic-list,
   .event-snippets {
     display: grid;
     gap: 0.6rem;
   }
 
-  .traffic-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.75rem;
-    align-items: center;
-    width: 100%;
-    padding: 0.75rem 0.85rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 16px;
-    color: inherit;
-    background: rgba(255, 255, 255, 0.04);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .traffic-row.selected {
-    border-color: rgba(245, 185, 8, 0.7);
-    box-shadow: inset 0 0 0 1px rgba(245, 185, 8, 0.55);
-  }
-
-  .traffic-rank {
-    display: grid;
-    place-items: center;
-    width: 1.8rem;
-    height: 1.8rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 800;
-    color: #171a1f;
-    background: #ffd34f;
-  }
-
-  .traffic-main,
-  .traffic-meta,
   .snapshot-meta,
   .event-snippet {
     display: grid;
     gap: 0.14rem;
   }
 
-  .traffic-main strong,
-  .traffic-meta strong,
   .snapshot-meta strong,
   .event-snippet strong,
   .hero-metric strong {
     color: #f6f8fb;
   }
 
-  .traffic-main span,
-  .traffic-meta span,
   .snapshot-meta span,
   .event-snippet span,
   .hero-metric span,

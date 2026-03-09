@@ -50,6 +50,8 @@
   let sortBy = "altitude_desc";
   let theme = "light";
   let onboardingDismissed = false;
+  let isMobileViewport = false;
+  let mobileSidebarOpen = true;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -70,12 +72,20 @@
     preferencesReady = true;
     flightsStore.start();
     window.addEventListener("keydown", handleKeyboardShortcut);
+    const mobileViewportQuery = window.matchMedia("(max-width: 960px)");
+    const syncViewportMode = (event) => {
+      isMobileViewport = event.matches;
+      mobileSidebarOpen = !event.matches;
+    };
+    syncViewportMode(mobileViewportQuery);
+    mobileViewportQuery.addEventListener("change", syncViewportMode);
     const freshnessTimer = window.setInterval(() => {
       now = Date.now();
     }, 1000);
 
     return () => {
       window.removeEventListener("keydown", handleKeyboardShortcut);
+      mobileViewportQuery.removeEventListener("change", syncViewportMode);
       window.clearInterval(freshnessTimer);
       unsubscribe();
       flightsStore.stop();
@@ -100,6 +110,9 @@
 
   function handleFlightSelect(event) {
     selectedIcao24 = event.detail.flight.icao24;
+    if (isMobileViewport) {
+      mobileSidebarOpen = false;
+    }
   }
 
   function handleViewportChange(event) {
@@ -178,6 +191,14 @@
 
   function dismissOnboarding() {
     onboardingDismissed = true;
+  }
+
+  function toggleMobileSidebar() {
+    mobileSidebarOpen = !mobileSidebarOpen;
+  }
+
+  function closeMobileSidebar() {
+    mobileSidebarOpen = false;
   }
 
   function handleKeyboardShortcut(event) {
@@ -368,46 +389,61 @@
       <h1>Live Flights Map</h1>
     </div>
 
-    <div class="status-panel">
-      <div class="theme-switcher" role="group" aria-label="Theme switcher">
-        <button
-          class:active={theme === "light"}
-          type="button"
-          title="Use the brighter cockpit-style palette"
-          on:click={() => setTheme("light")}
-        >
-          Light
-        </button>
-        <button
-          class:active={theme === "dark"}
-          type="button"
-          title="Use the darker low-glare palette"
-          on:click={() => setTheme("dark")}
-        >
-          Dark
-        </button>
-      </div>
-      <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
-        {#if state.status === "loading"}
-          Syncing...
-        {:else if state.status === "refreshing"}
-          Live sync...
-        {:else if state.status === "error"}
-          Upstream error
-        {:else if state.reason === "rate_limit" || state.reason === "cooldown"}
-          Rate limited
-        {:else if state.source === "cache"}
-          Cached
-        {:else if state.status === "success"}
-          Live
+    <div class="topbar-actions">
+      <button
+        class="mobile-sidebar-toggle"
+        type="button"
+        title="Open the filters, details, and help panels"
+        on:click={toggleMobileSidebar}
+      >
+        {#if mobileSidebarOpen}
+          Hide panels
         {:else}
-          Idle
+          Show panels
         {/if}
+      </button>
+
+      <div class="status-panel">
+        <div class="theme-switcher" role="group" aria-label="Theme switcher">
+          <button
+            class:active={theme === "light"}
+            type="button"
+            title="Use the brighter cockpit-style palette"
+            on:click={() => setTheme("light")}
+          >
+            Light
+          </button>
+          <button
+            class:active={theme === "dark"}
+            type="button"
+            title="Use the darker low-glare palette"
+            on:click={() => setTheme("dark")}
+          >
+            Dark
+          </button>
+        </div>
+        <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
+          {#if state.status === "loading"}
+            Syncing...
+          {:else if state.status === "refreshing"}
+            Live sync...
+          {:else if state.status === "error"}
+            Upstream error
+          {:else if state.reason === "rate_limit" || state.reason === "cooldown"}
+            Rate limited
+          {:else if state.source === "cache"}
+            Cached
+          {:else if state.status === "success"}
+            Live
+          {:else}
+            Idle
+          {/if}
+        </div>
+        <p>{filteredFlights.length} shown / {state.count} tracked</p>
+        <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
+        <p>Freshness: {getFreshnessLabel(state.fetchedAt)}</p>
+        <p>Confidence: {getConfidenceLabel(state)}</p>
       </div>
-      <p>{filteredFlights.length} shown / {state.count} tracked</p>
-      <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
-      <p>Freshness: {getFreshnessLabel(state.fetchedAt)}</p>
-      <p>Confidence: {getConfidenceLabel(state)}</p>
     </div>
   </header>
 
@@ -419,8 +455,20 @@
     <div class="warning-banner">{state.warning}</div>
   {/if}
 
+  {#if isMobileViewport && mobileSidebarOpen}
+    <button class="sidebar-backdrop" type="button" aria-label="Close panels" on:click={closeMobileSidebar}></button>
+  {/if}
+
   <main class="layout">
-    <aside class="sidebar">
+    <aside class:open={mobileSidebarOpen} class="sidebar">
+      <div class="sidebar-mobile-header">
+        <div>
+          <p class="eyebrow">Mobile controls</p>
+          <strong>Radar panels</strong>
+        </div>
+        <button class="mobile-sidebar-close" type="button" on:click={closeMobileSidebar}>Close</button>
+      </div>
+
       {#if !onboardingDismissed}
         <OnboardingPanel onDismiss={dismissOnboarding} />
       {/if}
@@ -621,6 +669,12 @@
     gap: 1rem;
   }
 
+  .topbar-actions {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+  }
+
   .eyebrow {
     margin: 0 0 0.3rem;
     text-transform: uppercase;
@@ -649,6 +703,20 @@
   .status-panel p {
     margin: 0;
     font-size: 0.92rem;
+  }
+
+  .mobile-sidebar-toggle,
+  .mobile-sidebar-close {
+    display: none;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.72rem 0.95rem;
+    font: inherit;
+    font-weight: 700;
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
+    cursor: pointer;
+    box-shadow: var(--shadow-soft);
   }
 
   .status-pill {
@@ -690,6 +758,17 @@
   .sidebar {
     display: grid;
     gap: 1rem;
+  }
+
+  .sidebar-mobile-header {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .sidebar-backdrop {
+    display: none;
   }
 
   .panel,
@@ -873,17 +952,64 @@
 
   @media (max-width: 960px) {
     .topbar,
+    .topbar-actions,
     .layout {
       grid-template-columns: 1fr;
       display: grid;
     }
 
+    .mobile-sidebar-toggle,
+    .mobile-sidebar-close {
+      display: inline-flex;
+      justify-content: center;
+      align-items: center;
+    }
+
     .status-panel {
       justify-items: start;
+      min-width: 0;
+    }
+
+    .layout {
+      display: block;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 0;
+      right: 0;
+      bottom: 0;
+      width: min(92vw, 380px);
+      max-width: 380px;
+      padding: 0.9rem;
+      overflow-y: auto;
+      background: var(--page-background);
+      box-shadow: var(--shadow-strong);
+      transform: translateX(108%);
+      transition: transform 180ms ease;
+      z-index: 1200;
+    }
+
+    .sidebar.open {
+      transform: translateX(0);
+    }
+
+    .sidebar-mobile-header {
+      display: flex;
+    }
+
+    .sidebar-backdrop {
+      display: block;
+      position: fixed;
+      inset: 0;
+      z-index: 1100;
+      border: 0;
+      background: rgba(5, 15, 24, 0.44);
     }
 
     .map-card {
-      min-height: 60vh;
+      min-height: 72vh;
+      border-radius: 22px;
     }
   }
 </style>

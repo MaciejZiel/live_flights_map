@@ -55,7 +55,6 @@
 ## UX and Accessibility
 
 - Collapsible and reorderable side panels.
-- Responsive mobile layout with simplified map mode.
 - Multi-language interface.
 - Favorites for airports and aircraft.
 

@@ -508,6 +508,32 @@
     filter: brightness(1.04);
   }
 
+  @media (max-width: 720px) {
+    .map-root {
+      min-height: 78vh;
+    }
+
+    .map-toolbar {
+      top: auto;
+      bottom: 0.9rem;
+      left: 0.75rem;
+      right: 0.75rem;
+      align-items: end;
+    }
+
+    .preset-group {
+      max-width: min(68vw, 320px);
+      overflow-x: auto;
+      padding-bottom: 0.15rem;
+    }
+
+    .map-action {
+      padding: 0.65rem 0.82rem;
+      font-size: 0.86rem;
+      white-space: nowrap;
+    }
+  }
+
   :global(.leaflet-container) {
     font-family:
       "IBM Plex Sans",

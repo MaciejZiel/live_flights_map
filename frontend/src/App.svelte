@@ -3,6 +3,7 @@
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
+  import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
   import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
@@ -30,6 +31,9 @@
   let mapStyle = "standard";
   let mapViewport = null;
   let preferencesReady = false;
+  let searchInput;
+  let fullscreenRequestId = 0;
+  let viewPresetRequest = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -44,8 +48,10 @@
 
     preferencesReady = true;
     flightsStore.start();
+    window.addEventListener("keydown", handleKeyboardShortcut);
 
     return () => {
+      window.removeEventListener("keydown", handleKeyboardShortcut);
       unsubscribe();
       flightsStore.stop();
     };
@@ -90,6 +96,62 @@
       minAltitude: "",
       hideGroundTraffic: true,
     };
+  }
+
+  function triggerViewPreset(presetKey) {
+    viewPresetRequest = {
+      presetKey,
+      id: Date.now(),
+    };
+  }
+
+  function triggerFullscreenToggle() {
+    fullscreenRequestId = Date.now();
+  }
+
+  function handleKeyboardShortcut(event) {
+    const target = event.target;
+    const isTypingField =
+      target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target?.isContentEditable;
+
+    if (event.key === "/") {
+      event.preventDefault();
+      searchInput?.focus();
+      searchInput?.select();
+      return;
+    }
+
+    if (isTypingField) {
+      return;
+    }
+
+    if (event.key === "1") {
+      mapStyle = "standard";
+    } else if (event.key === "2") {
+      mapStyle = "satellite";
+    } else if (event.key === "3") {
+      mapStyle = "dark";
+    } else if (event.key === "4") {
+      mapStyle = "aviation";
+    } else if (event.key === "0") {
+      resetFilters();
+    } else if (event.key.toLowerCase() === "f") {
+      toggleFollowAircraft();
+    } else if (event.key.toLowerCase() === "m") {
+      triggerFullscreenToggle();
+    } else if (event.key.toLowerCase() === "p") {
+      triggerViewPreset("poland");
+    } else if (event.key.toLowerCase() === "e") {
+      triggerViewPreset("europe");
+    } else if (event.key.toLowerCase() === "w") {
+      triggerViewPreset("world");
+    } else {
+      return;
+    }
+
+    event.preventDefault();
   }
 
   $: normalizedQuery = filters.query.trim().toLowerCase();
@@ -209,6 +271,7 @@
         <label class="field">
           <span>Search</span>
           <input
+            bind:this={searchInput}
             bind:value={filters.query}
             type="text"
             placeholder="callsign, ICAO24, country"
@@ -232,6 +295,7 @@
       />
 
       <LegendPanel />
+      <ShortcutsPanel />
     </aside>
 
     <section class="map-card">
@@ -241,6 +305,8 @@
         followAircraft={followAircraft}
         mapStyle={mapStyle}
         initialViewport={mapViewport}
+        fullscreenRequestId={fullscreenRequestId}
+        viewPresetRequest={viewPresetRequest}
         on:boundschange={handleBoundsChange}
         on:viewportchange={handleViewportChange}
         on:select={handleFlightSelect}

@@ -11,6 +11,8 @@
   export let followAircraft = false;
   export let mapStyle = "standard";
   export let initialViewport = null;
+  export let fullscreenRequestId = 0;
+  export let viewPresetRequest = null;
 
   const dispatch = createEventDispatcher();
   let shell;
@@ -21,6 +23,8 @@
   let aircraftLayer;
   const markerRegistry = new Map();
   let isFullscreen = false;
+  let lastFullscreenRequestId = 0;
+  let lastViewPresetRequestId = 0;
   const viewPresets = {
     poland: [
       [49.0, 14.0],
@@ -254,6 +258,24 @@
 
   $: if (map) {
     setBasemap(mapStyle);
+  }
+
+  $: if (
+    map &&
+    fullscreenRequestId &&
+    fullscreenRequestId !== lastFullscreenRequestId
+  ) {
+    lastFullscreenRequestId = fullscreenRequestId;
+    toggleFullscreen();
+  }
+
+  $: if (
+    map &&
+    viewPresetRequest?.id &&
+    viewPresetRequest.id !== lastViewPresetRequestId
+  ) {
+    lastViewPresetRequestId = viewPresetRequest.id;
+    applyViewPreset(viewPresetRequest.presetKey);
   }
 
   $: centerOnSelectedAircraft();

@@ -62,7 +62,6 @@
 - Collapsible and reorderable side panels.
 - Responsive mobile layout with simplified map mode.
 - Light and dark themes.
-- Keyboard shortcuts.
 - Tooltips and onboarding for new users.
 - Multi-language interface.
 - Clear `live`, `cached`, `error`, and `rate limited` states.

@@ -4,6 +4,7 @@
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
   import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
+  import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
@@ -25,6 +26,11 @@
     if (value.fetchedAt && value.fetchedAt !== lastHistoryFetchKey) {
       flightHistory = updateFlightHistory(flightHistory, value.flights ?? [], value.fetchedAt);
       lastHistoryFetchKey = value.fetchedAt;
+    }
+
+    if (value.fetchedAt && value.fetchedAt !== lastReplaySnapshotKey) {
+      snapshotHistory = pushReplaySnapshot(snapshotHistory, value);
+      lastReplaySnapshotKey = value.fetchedAt;
     }
   });
 
@@ -52,6 +58,9 @@
   let onboardingDismissed = false;
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
+  let snapshotHistory = [];
+  let replaySnapshotCursor = null;
+  let lastReplaySnapshotKey = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -193,12 +202,30 @@
     onboardingDismissed = true;
   }
 
+  function pushReplaySnapshot(history, snapshotState) {
+    const snapshot = {
+      fetchedAt: snapshotState.fetchedAt,
+      count: snapshotState.count ?? 0,
+      flights: (snapshotState.flights ?? []).map((flight) => ({ ...flight })),
+    };
+
+    return [...history.filter((entry) => entry.fetchedAt !== snapshot.fetchedAt), snapshot].slice(-90);
+  }
+
   function toggleMobileSidebar() {
     mobileSidebarOpen = !mobileSidebarOpen;
   }
 
   function closeMobileSidebar() {
     mobileSidebarOpen = false;
+  }
+
+  function selectReplaySnapshot(index) {
+    replaySnapshotCursor = snapshotHistory[index]?.fetchedAt ?? null;
+  }
+
+  function returnToLiveReplay() {
+    replaySnapshotCursor = null;
   }
 
   function handleKeyboardShortcut(event) {
@@ -318,7 +345,13 @@
   $: normalizedQuery = filters.query.trim().toLowerCase();
   $: minimumAltitude = Number(filters.minAltitude);
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
-  $: filteredFlights = state.flights.filter((flight) => {
+  $: replaySnapshotIndex = replaySnapshotCursor
+    ? snapshotHistory.findIndex((snapshot) => snapshot.fetchedAt === replaySnapshotCursor)
+    : -1;
+  $: activeReplaySnapshot =
+    replaySnapshotIndex >= 0 ? snapshotHistory[replaySnapshotIndex] ?? null : null;
+  $: replayFlights = activeReplaySnapshot?.flights ?? state.flights;
+  $: filteredFlights = replayFlights.filter((flight) => {
     const matchesQuery =
       !normalizedQuery ||
       flight.icao24.includes(normalizedQuery) ||
@@ -350,6 +383,7 @@
     return matchesQuery && matchesAltitude && matchesGroundFilter && matchesRecentActivity;
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
+  $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
     selectedIcao24 = null;
   }
@@ -358,6 +392,9 @@
     : null;
   $: selectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
   $: if (!selectedFlight) {
+    followAircraft = false;
+  }
+  $: if (activeReplaySnapshot && followAircraft) {
     followAircraft = false;
   }
   $: if (preferencesReady) {
@@ -439,7 +476,8 @@
             Idle
           {/if}
         </div>
-        <p>{filteredFlights.length} shown / {state.count} tracked</p>
+        <p>{filteredFlights.length} shown / {visibleTrackedCount} tracked</p>
+        <p>Mode: {activeReplaySnapshot ? "Replay" : "Live"}</p>
         <p>Transport: {state.transport === "sse" ? "SSE" : "Polling"}</p>
         <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
         <p>Freshness: {getFreshnessLabel(state.fetchedAt)}</p>
@@ -523,6 +561,14 @@
           <p>Using backend defaults until the first response arrives.</p>
         {/if}
       </section>
+
+      <ReplayTimeline
+        snapshots={snapshotHistory}
+        activeSnapshot={activeReplaySnapshot}
+        activeIndex={replaySnapshotIndex}
+        onSelectIndex={selectReplaySnapshot}
+        onReturnToLive={returnToLiveReplay}
+      />
 
       <section class="panel">
         <h2>Filters</h2>

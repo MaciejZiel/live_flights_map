@@ -6,6 +6,7 @@
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
+  import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
   import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
 
   let state = {
@@ -19,6 +20,11 @@
 
   const unsubscribe = flightsStore.subscribe((value) => {
     state = value;
+
+    if (value.fetchedAt && value.fetchedAt !== lastHistoryFetchKey) {
+      flightHistory = updateFlightHistory(flightHistory, value.flights ?? [], value.fetchedAt);
+      lastHistoryFetchKey = value.fetchedAt;
+    }
   });
 
   let filters = {
@@ -35,6 +41,8 @@
   let fullscreenRequestId = 0;
   let viewPresetRequest = null;
   let now = Date.now();
+  let flightHistory = new Map();
+  let lastHistoryFetchKey = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -208,6 +216,7 @@
   $: selectedFlight = selectedIcao24
     ? filteredFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
     : null;
+  $: selectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
   $: if (!selectedFlight) {
     followAircraft = false;
   }
@@ -338,6 +347,7 @@
         selectedIcao24={selectedIcao24}
         followAircraft={followAircraft}
         mapStyle={mapStyle}
+        trailPoints={selectedFlightTrail}
         initialViewport={mapViewport}
         fullscreenRequestId={fullscreenRequestId}
         viewPresetRequest={viewPresetRequest}

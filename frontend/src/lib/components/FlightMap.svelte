@@ -10,6 +10,7 @@
   export let selectedIcao24 = null;
   export let followAircraft = false;
   export let mapStyle = "standard";
+  export let trailPoints = [];
   export let initialViewport = null;
   export let fullscreenRequestId = 0;
   export let viewPresetRequest = null;
@@ -21,6 +22,7 @@
   let activeBaseLayer;
   let activeMapStyle = null;
   let aircraftLayer;
+  let trailLayer;
   const markerRegistry = new Map();
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
@@ -209,6 +211,32 @@
     });
   }
 
+  function syncTrailLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (trailLayer) {
+      map.removeLayer(trailLayer);
+      trailLayer = null;
+    }
+
+    if (!trailPoints || trailPoints.length < 2) {
+      return;
+    }
+
+    trailLayer = L.polyline(
+      trailPoints.map((point) => [point.latitude, point.longitude]),
+      {
+        color: "#c46a17",
+        weight: 3,
+        opacity: 0.85,
+        dashArray: "8 6",
+        lineCap: "round",
+      }
+    ).addTo(map);
+  }
+
   onMount(() => {
     const initialCenter = initialViewport?.center ?? [52.15, 19.4];
     const initialZoom = initialViewport?.zoom ?? 6;
@@ -246,6 +274,7 @@
       map.remove();
       activeBaseLayer = null;
       activeMapStyle = null;
+      trailLayer = null;
       markerRegistry.clear();
     };
   });
@@ -277,6 +306,8 @@
     lastViewPresetRequestId = viewPresetRequest.id;
     applyViewPreset(viewPresetRequest.presetKey);
   }
+
+  $: syncTrailLayer();
 
   $: centerOnSelectedAircraft();
 </script>

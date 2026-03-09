@@ -42,7 +42,6 @@
 
 - Regional traffic stats: flight count, average altitude, popular routes.
 - Day-over-day and week-over-week traffic comparison.
-- Saved and replayable monitoring sessions.
 
 ## UX and Accessibility
 

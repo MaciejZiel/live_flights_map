@@ -5,6 +5,7 @@
   import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
   import AlertPanel from "./lib/components/AlertPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
+  import MonitoringSessionsPanel from "./lib/components/MonitoringSessionsPanel.svelte";
   import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
@@ -77,6 +78,8 @@
   let alertToast = null;
   let alertToastTimer = null;
   let lastAlertCheckKey = null;
+  let monitoringSessions = [];
+  let activeMonitoringSessionId = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -96,6 +99,7 @@
       flightAnnotations = savedPreferences.flightAnnotations ?? flightAnnotations;
       alertRules = savedPreferences.alertRules ?? alertRules;
       alertEvents = savedPreferences.alertEvents ?? alertEvents;
+      monitoringSessions = savedPreferences.monitoringSessions ?? monitoringSessions;
     }
 
     applySharedStateFromUrl();
@@ -568,6 +572,15 @@
     return [...history.filter((entry) => entry.fetchedAt !== snapshot.fetchedAt), snapshot].slice(-90);
   }
 
+  function buildSessionLabel(timestamp) {
+    return new Intl.DateTimeFormat("pl-PL", {
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(new Date(timestamp));
+  }
+
   function toggleMobileSidebar() {
     mobileSidebarOpen = !mobileSidebarOpen;
   }
@@ -578,26 +591,27 @@
 
   function selectReplaySnapshot(index) {
     replayPlaybackActive = false;
-    replaySnapshotCursor = snapshotHistory[index]?.fetchedAt ?? null;
+    replaySnapshotCursor = replaySourceSnapshots[index]?.fetchedAt ?? null;
   }
 
   function returnToLiveReplay() {
     replayPlaybackActive = false;
+    activeMonitoringSessionId = null;
     replaySnapshotCursor = null;
   }
 
   function setReplaySnapshotIndex(index) {
-    if (!snapshotHistory.length) {
+    if (!replaySourceSnapshots.length) {
       replaySnapshotCursor = null;
       return;
     }
 
-    const boundedIndex = Math.max(0, Math.min(index, snapshotHistory.length - 1));
-    replaySnapshotCursor = snapshotHistory[boundedIndex]?.fetchedAt ?? null;
+    const boundedIndex = Math.max(0, Math.min(index, replaySourceSnapshots.length - 1));
+    replaySnapshotCursor = replaySourceSnapshots[boundedIndex]?.fetchedAt ?? null;
   }
 
   function stepReplay(direction) {
-    if (snapshotHistory.length < 2) {
+    if (replaySourceSnapshots.length < 2) {
       return;
     }
 
@@ -605,7 +619,7 @@
 
     if (replaySnapshotIndex < 0) {
       if (direction < 0) {
-        setReplaySnapshotIndex(snapshotHistory.length - 2);
+        setReplaySnapshotIndex(replaySourceSnapshots.length - 2);
       } else {
         setReplaySnapshotIndex(0);
       }
@@ -613,7 +627,7 @@
     }
 
     const nextIndex = replaySnapshotIndex + direction;
-    if (nextIndex >= snapshotHistory.length - 1) {
+    if (nextIndex >= replaySourceSnapshots.length - 1) {
       replaySnapshotCursor = null;
       return;
     }
@@ -622,7 +636,7 @@
   }
 
   function toggleReplayPlayback() {
-    if (snapshotHistory.length < 2) {
+    if (replaySourceSnapshots.length < 2) {
       return;
     }
 
@@ -638,6 +652,48 @@
     replayPlaybackActive = true;
   }
 
+  function saveCurrentMonitoringSession() {
+    if (snapshotHistory.length < 2) {
+      return;
+    }
+
+    const createdAt = Date.now();
+    const session = {
+      id: crypto.randomUUID(),
+      label: `Session ${buildSessionLabel(createdAt)}`,
+      createdAt,
+      snapshots: snapshotHistory.map((snapshot) => ({
+        ...snapshot,
+        flights: snapshot.flights.map((flight) => ({ ...flight })),
+      })),
+      viewport: mapViewport,
+    };
+
+    monitoringSessions = [session, ...monitoringSessions].slice(0, 8);
+  }
+
+  function loadMonitoringSession(sessionId) {
+    const session = monitoringSessions.find((entry) => entry.id === sessionId);
+    if (!session) {
+      return;
+    }
+
+    replayPlaybackActive = false;
+    activeMonitoringSessionId = sessionId;
+    replaySnapshotCursor = session.snapshots[0]?.fetchedAt ?? null;
+    if (session.viewport) {
+      mapViewport = session.viewport;
+    }
+  }
+
+  function deleteMonitoringSession(sessionId) {
+    monitoringSessions = monitoringSessions.filter((session) => session.id !== sessionId);
+    if (activeMonitoringSessionId === sessionId) {
+      activeMonitoringSessionId = null;
+      replaySnapshotCursor = null;
+    }
+  }
+
   function syncReplayPlaybackTimer() {
     if (typeof window === "undefined") {
       return;
@@ -648,7 +704,7 @@
       replayPlaybackTimer = null;
     }
 
-    if (!replayPlaybackActive || snapshotHistory.length < 2) {
+    if (!replayPlaybackActive || replaySourceSnapshots.length < 2) {
       return;
     }
 
@@ -659,7 +715,7 @@
       }
 
       const nextIndex = replaySnapshotIndex + 1;
-      if (nextIndex >= snapshotHistory.length - 1) {
+      if (nextIndex >= replaySourceSnapshots.length - 1) {
         replayPlaybackActive = false;
         replaySnapshotCursor = null;
         return;
@@ -786,11 +842,14 @@
   $: normalizedQuery = filters.query.trim().toLowerCase();
   $: minimumAltitude = Number(filters.minAltitude);
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
+  $: activeMonitoringSession =
+    monitoringSessions.find((session) => session.id === activeMonitoringSessionId) ?? null;
+  $: replaySourceSnapshots = activeMonitoringSession?.snapshots ?? snapshotHistory;
   $: replaySnapshotIndex = replaySnapshotCursor
-    ? snapshotHistory.findIndex((snapshot) => snapshot.fetchedAt === replaySnapshotCursor)
+    ? replaySourceSnapshots.findIndex((snapshot) => snapshot.fetchedAt === replaySnapshotCursor)
     : -1;
   $: activeReplaySnapshot =
-    replaySnapshotIndex >= 0 ? snapshotHistory[replaySnapshotIndex] ?? null : null;
+    replaySnapshotIndex >= 0 ? replaySourceSnapshots[replaySnapshotIndex] ?? null : null;
   $: replayFlights = activeReplaySnapshot?.flights ?? state.flights;
   $: filteredFlights = replayFlights.filter((flight) => {
     const matchesQuery =
@@ -837,15 +896,34 @@
     .map((entry) => entry.flight)
     .slice(0, 4);
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
-  $: canStepReplayBackward = snapshotHistory.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
-  $: canStepReplayForward = snapshotHistory.length > 1 && replaySnapshotIndex !== -1;
+  $: canStepReplayBackward =
+    replaySourceSnapshots.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
+  $: canStepReplayForward = replaySourceSnapshots.length > 1 && replaySnapshotIndex !== -1;
   $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
     selectedIcao24 = null;
   }
   $: selectedFlight = selectedIcao24
     ? sortedFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
     : null;
-  $: selectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
+  $: selectedFlightTrail = activeMonitoringSession
+    ? replaySourceSnapshots.flatMap((snapshot) => {
+        const flight = snapshot.flights.find((candidate) => candidate.icao24 === selectedIcao24);
+        if (!flight) {
+          return [];
+        }
+
+        return [
+          {
+            latitude: flight.latitude,
+            longitude: flight.longitude,
+            altitude: flight.altitude,
+            velocity: flight.velocity,
+            vertical_rate: flight.vertical_rate,
+            timestamp: new Date(snapshot.fetchedAt).getTime(),
+          },
+        ];
+      })
+    : getTrailPoints(flightHistory, selectedIcao24);
   $: selectedFlightAnnotation = selectedIcao24
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
@@ -862,7 +940,7 @@
   $: {
     replayPlaybackActive;
     replaySnapshotIndex;
-    snapshotHistory.length;
+    replaySourceSnapshots.length;
     syncReplayPlaybackTimer();
   }
   $: if (preferencesReady) {
@@ -889,6 +967,7 @@
       flightAnnotations,
       alertRules,
       alertEvents,
+      monitoringSessions,
     });
   }
 </script>
@@ -972,7 +1051,7 @@
           {/if}
         </div>
         <p>{filteredFlights.length} shown / {visibleTrackedCount} tracked</p>
-        <p>Mode: {activeReplaySnapshot ? "Replay" : "Live"}</p>
+        <p>Mode: {activeMonitoringSession ? "Saved session" : activeReplaySnapshot ? "Replay" : "Live"}</p>
         <p>Transport: {state.transport === "sse" ? "SSE" : "Polling"}</p>
         <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
         <p>Freshness: {getFreshnessLabel(state.fetchedAt)}</p>
@@ -1062,7 +1141,7 @@
       </section>
 
       <ReplayTimeline
-        snapshots={snapshotHistory}
+        snapshots={replaySourceSnapshots}
         activeSnapshot={activeReplaySnapshot}
         activeIndex={replaySnapshotIndex}
         isPlaying={replayPlaybackActive}
@@ -1073,6 +1152,14 @@
         onStepBackward={() => stepReplay(-1)}
         onStepForward={() => stepReplay(1)}
         onTogglePlayback={toggleReplayPlayback}
+      />
+
+      <MonitoringSessionsPanel
+        sessions={monitoringSessions}
+        activeSessionId={activeMonitoringSessionId}
+        onSaveSession={saveCurrentMonitoringSession}
+        onLoadSession={loadMonitoringSession}
+        onDeleteSession={deleteMonitoringSession}
       />
 
       <section class="panel">

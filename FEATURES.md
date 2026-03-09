@@ -4,7 +4,6 @@
 
 - Additional layers: country borders, FIRs, airports, ATS routes.
 - Traffic heatmap for the selected region.
-- Predicted heading and motion vector.
 
 ## Aircraft Details
 

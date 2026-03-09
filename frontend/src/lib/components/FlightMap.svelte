@@ -23,6 +23,7 @@
   let activeMapStyle = null;
   let aircraftLayer;
   let trailLayer;
+  let motionVectorLayer;
   const markerRegistry = new Map();
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
@@ -211,6 +212,31 @@
     });
   }
 
+  function projectPoint(latitude, longitude, bearingDegrees, distanceMeters) {
+    const earthRadiusMeters = 6371000;
+    const angularDistance = distanceMeters / earthRadiusMeters;
+    const bearing = (bearingDegrees * Math.PI) / 180;
+    const startLatitude = (latitude * Math.PI) / 180;
+    const startLongitude = (longitude * Math.PI) / 180;
+
+    const projectedLatitude = Math.asin(
+      Math.sin(startLatitude) * Math.cos(angularDistance) +
+        Math.cos(startLatitude) * Math.sin(angularDistance) * Math.cos(bearing)
+    );
+
+    const projectedLongitude =
+      startLongitude +
+      Math.atan2(
+        Math.sin(bearing) * Math.sin(angularDistance) * Math.cos(startLatitude),
+        Math.cos(angularDistance) - Math.sin(startLatitude) * Math.sin(projectedLatitude)
+      );
+
+    return [
+      (projectedLatitude * 180) / Math.PI,
+      (projectedLongitude * 180) / Math.PI,
+    ];
+  }
+
   function syncTrailLayer() {
     if (!map) {
       return;
@@ -235,6 +261,62 @@
         lineCap: "round",
       }
     ).addTo(map);
+  }
+
+  function syncMotionVectorLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (motionVectorLayer) {
+      map.removeLayer(motionVectorLayer);
+      motionVectorLayer = null;
+    }
+
+    if (!selectedIcao24) {
+      return;
+    }
+
+    const selectedFlight = flights.find((flight) => flight.icao24 === selectedIcao24);
+    if (
+      !selectedFlight ||
+      selectedFlight.on_ground ||
+      selectedFlight.velocity === null ||
+      selectedFlight.velocity === undefined ||
+      selectedFlight.true_track === null ||
+      selectedFlight.true_track === undefined
+    ) {
+      return;
+    }
+
+    const projectedPoint = projectPoint(
+      selectedFlight.latitude,
+      selectedFlight.longitude,
+      selectedFlight.true_track,
+      selectedFlight.velocity * 120
+    );
+
+    motionVectorLayer = L.layerGroup([
+      L.polyline(
+        [
+          [selectedFlight.latitude, selectedFlight.longitude],
+          projectedPoint,
+        ],
+        {
+          color: "#4bb7f5",
+          weight: 3,
+          opacity: 0.9,
+          dashArray: "10 8",
+        }
+      ),
+      L.circleMarker(projectedPoint, {
+        radius: 5,
+        weight: 2,
+        color: "#dff6ff",
+        fillColor: "#4bb7f5",
+        fillOpacity: 0.95,
+      }),
+    ]).addTo(map);
   }
 
   onMount(() => {
@@ -275,6 +357,7 @@
       activeBaseLayer = null;
       activeMapStyle = null;
       trailLayer = null;
+      motionVectorLayer = null;
       markerRegistry.clear();
     };
   });
@@ -308,6 +391,7 @@
   }
 
   $: syncTrailLayer();
+  $: syncMotionVectorLayer();
 
   $: centerOnSelectedAircraft();
 </script>

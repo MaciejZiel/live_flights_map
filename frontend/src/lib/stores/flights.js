@@ -15,6 +15,7 @@ const initialState = {
   source: "live",
   warning: null,
   stale: false,
+  reason: "live",
 };
 
 function normalizeBbox(bbox) {
@@ -71,6 +72,7 @@ function createFlightsStore() {
         source: payload.meta?.source ?? "live",
         warning: payload.meta?.warning ?? null,
         stale: payload.meta?.stale ?? false,
+        reason: payload.meta?.reason ?? "live",
       });
     } catch (error) {
       update((state) => ({
@@ -78,6 +80,7 @@ function createFlightsStore() {
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error.",
         warning: null,
+        reason: "error",
       }));
     }
   }

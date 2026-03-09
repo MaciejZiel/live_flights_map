@@ -213,6 +213,8 @@
           Live sync...
         {:else if state.status === "error"}
           Upstream error
+        {:else if state.reason === "rate_limit" || state.reason === "cooldown"}
+          Rate limited
         {:else if state.source === "cache"}
           Cached
         {:else if state.status === "success"}

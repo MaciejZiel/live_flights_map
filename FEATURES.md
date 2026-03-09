@@ -64,7 +64,6 @@
 - Light and dark themes.
 - Tooltips and onboarding for new users.
 - Multi-language interface.
-- Clear `live`, `cached`, `error`, and `rate limited` states.
 - Favorites for airports and aircraft.
 
 ## Data Quality and Performance

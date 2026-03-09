@@ -37,7 +37,12 @@ class FlightSnapshotService:
             cooldown_until = self._cooldown_until.get(cache_key, 0)
 
             if cache_entry and cache_entry.expires_at > now:
-                return self._with_meta(cache_entry.payload, source="cache", stale=False)
+                return self._with_meta(
+                    cache_entry.payload,
+                    source="cache",
+                    stale=False,
+                    reason="cache_hit",
+                )
 
         if cooldown_until > now:
             if cache_entry:
@@ -46,6 +51,7 @@ class FlightSnapshotService:
                     cache_entry.payload,
                     source="cache",
                     stale=True,
+                    reason="cooldown",
                     warning=f"Using cached snapshot while OpenSky cools down ({retry_after}s left).",
                 )
             raise OpenSkyError("OpenSky cooldown is active. Try again in a few seconds.")
@@ -61,6 +67,7 @@ class FlightSnapshotService:
                     cache_entry.payload,
                     source="cache",
                     stale=True,
+                    reason="rate_limit",
                     warning="OpenSky rate limit exceeded. Showing the last cached snapshot.",
                 )
 
@@ -71,6 +78,7 @@ class FlightSnapshotService:
                     cache_entry.payload,
                     source="cache",
                     stale=True,
+                    reason="upstream_error",
                     warning=f"{exc} Showing the last cached snapshot.",
                 )
             raise
@@ -82,7 +90,7 @@ class FlightSnapshotService:
             )
             self._cooldown_until.pop(cache_key, None)
 
-        return self._with_meta(payload, source="live", stale=False)
+        return self._with_meta(payload, source="live", stale=False, reason="live")
 
     @staticmethod
     def _cache_key(bbox: dict[str, float]) -> tuple[float, float, float, float]:
@@ -98,12 +106,14 @@ class FlightSnapshotService:
         payload: dict[str, object],
         source: str,
         stale: bool,
+        reason: str,
         warning: str | None = None,
     ) -> dict[str, object]:
         response_payload = deepcopy(payload)
         response_payload["meta"] = {
             "source": source,
             "stale": stale,
+            "reason": reason,
             "warning": warning,
         }
         return response_payload

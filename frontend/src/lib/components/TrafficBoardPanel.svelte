@@ -6,6 +6,7 @@
   export let title = "Traffic board";
   export let subtitle = "Visible traffic";
   export let maxRows = 12;
+  export let featuredFlight = null;
   export let onSelectFlight = () => {};
 
   function formatLastContact(lastContact) {
@@ -30,6 +31,25 @@
 <section aria-label={title} class="panel traffic-board-panel">
   {#if subtitle}
     <p class="board-note">{subtitle}</p>
+  {/if}
+
+  {#if featuredFlight}
+    <button class="featured-card" type="button" on:click={() => onSelectFlight(featuredFlight.icao24)}>
+      <span class="featured-kicker">Fastest in view</span>
+      <strong>{featuredFlight.callsign ?? featuredFlight.icao24}</strong>
+      <p>{featuredFlight.origin_country ?? "Unknown"} · {deriveOperatorCode(featuredFlight.callsign)}</p>
+      <div class="featured-metrics">
+        <span>
+          <strong>{formatSpeed(featuredFlight.velocity)}</strong>
+          <small>Speed</small>
+        </span>
+        <span>
+          <strong>{formatAltitude(featuredFlight.altitude)}</strong>
+          <small>Altitude</small>
+        </span>
+      </div>
+      <span class="featured-action">Track aircraft</span>
+    </button>
   {/if}
 
   {#if visibleRows.length}
@@ -87,6 +107,76 @@
     display: grid;
     gap: 0.4rem;
     align-content: start;
+  }
+
+  .featured-card {
+    display: grid;
+    gap: 0.48rem;
+    width: 100%;
+    padding: 0.86rem 0.88rem;
+    border: 1px solid rgba(245, 185, 8, 0.18);
+    border-radius: 16px;
+    color: inherit;
+    background:
+      radial-gradient(circle at top right, rgba(245, 185, 8, 0.16), transparent 38%),
+      linear-gradient(180deg, rgba(39, 42, 48, 0.98) 0%, rgba(21, 24, 28, 0.98) 100%);
+    text-align: left;
+    cursor: pointer;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.02),
+      0 12px 22px rgba(0, 0, 0, 0.2);
+  }
+
+  .featured-kicker,
+  .featured-card p,
+  .featured-metrics small {
+    margin: 0;
+    font-size: 0.69rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(194, 206, 219, 0.62);
+  }
+
+  .featured-card strong {
+    color: var(--color-text);
+    font-size: 1rem;
+  }
+
+  .featured-card p {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.76rem;
+  }
+
+  .featured-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .featured-metrics span {
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.56rem 0.6rem;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .featured-metrics strong {
+    font-size: 0.86rem;
+  }
+
+  .featured-action {
+    display: inline-flex;
+    justify-self: start;
+    align-items: center;
+    padding: 0.46rem 0.72rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   .board-row {

@@ -1767,6 +1767,7 @@
             title="Visible traffic"
             subtitle={`${visibleTrackedCount} aircraft in view`}
             maxRows={14}
+            featuredFlight={leadFeedFlight}
             onSelectFlight={selectWatchedFlight}
           />
         {/if}

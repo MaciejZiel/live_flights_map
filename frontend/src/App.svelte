@@ -1677,8 +1677,47 @@
             <p class="widget-empty">Waiting for flights in the active map view.</p>
           {/if}
         </section>
+
+        <section class="widget-card widget-card-secondary">
+          <div class="widget-header">
+            <div class="widget-heading">
+              <strong>Airspace focus</strong>
+              <span class="live-pill">LIVE</span>
+            </div>
+          </div>
+
+          {#if countryActivity.length}
+            <div class="mini-stat-list">
+              {#each countryActivity as entry}
+                <div>
+                  <span>
+                    <strong>{entry.country}</strong>
+                    <small>{entry.ground} ground</small>
+                  </span>
+                  <strong>{entry.count}</strong>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="widget-empty">Waiting for traffic clusters in view.</p>
+          {/if}
+
+          <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("europe")}>
+            Wider airspace
+          </button>
+        </section>
+
+        <button class="widget-footer-bar" type="button" on:click={() => (mobileSidebarOpen = true)}>
+          <span>Bookmarks</span>
+          <strong>{watchlist.length}</strong>
+        </button>
       </div>
     </aside>
+
+    <button class="overlay-card view-chip" type="button" on:click={cycleMapStyle}>
+      <span>View</span>
+      <strong>{mapStyleLabel}</strong>
+    </button>
 
     {#if isMobileViewport && mobileSidebarOpen}
       <button class="sidebar-backdrop" type="button" aria-label="Close panel" on:click={closeMobileSidebar}></button>
@@ -1780,6 +1819,7 @@
   .radar-left-panel,
   .radar-right-panel,
   .bottom-dock,
+  .view-chip,
   .floating-messages {
     position: absolute;
     z-index: 1100;
@@ -2033,6 +2073,10 @@
       inset 3px 0 0 #f5b908;
   }
 
+  .widget-card-secondary {
+    gap: 0.62rem;
+  }
+
   .widget-header {
     display: flex;
     justify-content: space-between;
@@ -2134,6 +2178,100 @@
     font-size: 0.88rem;
     font-weight: 900;
     color: #f5b908;
+  }
+
+  .mini-stat-list {
+    display: grid;
+    gap: 0.46rem;
+  }
+
+  .mini-stat-list div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.68rem 0.72rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .mini-stat-list span {
+    display: grid;
+    gap: 0.14rem;
+    font-size: 0.76rem;
+    color: #b3bcc8;
+  }
+
+  .mini-stat-list span strong,
+  .mini-stat-list div > strong {
+    color: #f3f6fa;
+  }
+
+  .mini-stat-list small {
+    font-size: 0.67rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(179, 188, 200, 0.66);
+  }
+
+  .widget-footer-button,
+  .widget-footer-bar {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 0.66rem 0.78rem;
+    font: inherit;
+    font-weight: 700;
+    color: #edf2f7;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+  }
+
+  .widget-footer-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    border-radius: 14px;
+    background:
+      linear-gradient(180deg, rgba(51, 54, 60, 0.98) 0%, rgba(32, 35, 39, 0.98) 100%);
+  }
+
+  .widget-footer-bar span {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.7rem;
+    color: #b4bdc9;
+  }
+
+  .widget-footer-bar strong {
+    color: #f5b908;
+    font-size: 0.86rem;
+  }
+
+  .view-chip {
+    top: 4.55rem;
+    right: 21.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    padding: 0.52rem 0.82rem;
+    border-radius: 999px;
+    color: #eef3f8;
+    background:
+      linear-gradient(180deg, rgba(53, 56, 62, 0.98) 0%, rgba(34, 36, 41, 0.98) 100%);
+    cursor: pointer;
+  }
+
+  .view-chip span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: #c3ccd7;
+  }
+
+  .view-chip strong {
+    font-size: 0.86rem;
   }
 
   .rail-header {
@@ -2249,6 +2387,10 @@
       display: none;
     }
 
+    .view-chip {
+      right: 0.75rem;
+    }
+
     .bottom-dock {
       bottom: 0.75rem;
       width: calc(100vw - 1.5rem);
@@ -2308,6 +2450,12 @@
     .center-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
+    }
+
+    .view-chip {
+      top: auto;
+      right: 0.75rem;
+      bottom: 5rem;
     }
 
     .bottom-dock {

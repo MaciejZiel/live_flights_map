@@ -66,7 +66,6 @@
 - Tooltips and onboarding for new users.
 - Multi-language interface.
 - Clear `live`, `cached`, `error`, and `rate limited` states.
-- Icon and symbol legend.
 - Favorites for airports and aircraft.
 
 ## Data Quality and Performance

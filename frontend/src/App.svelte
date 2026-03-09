@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
+  import LegendPanel from "./lib/components/LegendPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
   import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
@@ -229,6 +230,8 @@
         followAircraft={followAircraft}
         onToggleFollow={toggleFollowAircraft}
       />
+
+      <LegendPanel />
     </aside>
 
     <section class="map-card">

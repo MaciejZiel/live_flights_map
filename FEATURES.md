@@ -66,7 +66,6 @@
 - Side-by-side comparison for multiple flights.
 - Custom dashboards and saved views.
 - Public or private user API.
-- Shareable link to a specific aircraft or map state.
 - Embeddable map widget.
 - PDF and CSV reports.
 - User roles: viewer, analyst, admin.

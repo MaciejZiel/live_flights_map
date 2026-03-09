@@ -63,6 +63,8 @@
   let lastReplaySnapshotKey = null;
   let replayPlaybackActive = false;
   let replayPlaybackTimer = null;
+  let shareFeedback = "";
+  let shareFeedbackTimer = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -78,6 +80,8 @@
       theme = savedPreferences.theme ?? theme;
       onboardingDismissed = savedPreferences.onboardingDismissed ?? onboardingDismissed;
     }
+
+    applySharedStateFromUrl();
 
     syncThemeClass(theme);
     preferencesReady = true;
@@ -100,6 +104,9 @@
       window.clearInterval(freshnessTimer);
       if (replayPlaybackTimer) {
         window.clearInterval(replayPlaybackTimer);
+      }
+      if (shareFeedbackTimer) {
+        window.clearTimeout(shareFeedbackTimer);
       }
       unsubscribe();
       flightsStore.stop();
@@ -139,6 +146,158 @@
     }
 
     document.body.classList.toggle("theme-dark", nextTheme === "dark");
+  }
+
+  function applySharedStateFromUrl() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const nextFilters = { ...filters };
+    const latitude = Number(params.get("lat"));
+    const longitude = Number(params.get("lng"));
+    const zoom = Number(params.get("z"));
+    const sharedQuery = params.get("q");
+    const sharedMinAltitude = params.get("minAlt");
+    const sharedRecentActivity = params.get("recent");
+    const sharedSort = params.get("sort");
+    const sharedTheme = params.get("theme");
+    const sharedMapStyle = params.get("map");
+    const sharedSelectedIcao24 = params.get("sel");
+    const sharedGroundFlag = params.get("ground");
+
+    if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(zoom)) {
+      mapViewport = {
+        center: [latitude, longitude],
+        zoom,
+      };
+    }
+
+    if (sharedQuery !== null) {
+      nextFilters.query = sharedQuery;
+    }
+
+    if (sharedMinAltitude !== null) {
+      nextFilters.minAltitude = sharedMinAltitude;
+    }
+
+    if (["any", "30s", "2m", "5m", "15m"].includes(sharedRecentActivity)) {
+      nextFilters.recentActivity = sharedRecentActivity;
+    }
+
+    if (["altitude_desc", "speed_desc", "distance_asc", "last_contact_desc"].includes(sharedSort)) {
+      sortBy = sharedSort;
+    }
+
+    if (sharedTheme === "light" || sharedTheme === "dark") {
+      theme = sharedTheme;
+    }
+
+    if (["standard", "satellite", "dark", "aviation"].includes(sharedMapStyle)) {
+      mapStyle = sharedMapStyle;
+    }
+
+    if (sharedSelectedIcao24) {
+      selectedIcao24 = sharedSelectedIcao24;
+    }
+
+    if (sharedGroundFlag === "0" || sharedGroundFlag === "1") {
+      nextFilters.hideGroundTraffic = sharedGroundFlag === "1";
+    }
+
+    filters = nextFilters;
+  }
+
+  function syncShareUrl() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const url = new URL(window.location.href);
+    const params = url.searchParams;
+
+    if (filters.query.trim()) {
+      params.set("q", filters.query.trim());
+    } else {
+      params.delete("q");
+    }
+
+    if (filters.minAltitude !== "") {
+      params.set("minAlt", filters.minAltitude);
+    } else {
+      params.delete("minAlt");
+    }
+
+    if (filters.recentActivity !== "any") {
+      params.set("recent", filters.recentActivity);
+    } else {
+      params.delete("recent");
+    }
+
+    if (!filters.hideGroundTraffic) {
+      params.set("ground", "0");
+    } else {
+      params.delete("ground");
+    }
+
+    if (sortBy !== "altitude_desc") {
+      params.set("sort", sortBy);
+    } else {
+      params.delete("sort");
+    }
+
+    if (theme !== "light") {
+      params.set("theme", theme);
+    } else {
+      params.delete("theme");
+    }
+
+    if (mapStyle !== "standard") {
+      params.set("map", mapStyle);
+    } else {
+      params.delete("map");
+    }
+
+    if (selectedIcao24) {
+      params.set("sel", selectedIcao24);
+    } else {
+      params.delete("sel");
+    }
+
+    if (mapViewport?.center && Number.isFinite(mapViewport.zoom)) {
+      params.set("lat", mapViewport.center[0].toFixed(4));
+      params.set("lng", mapViewport.center[1].toFixed(4));
+      params.set("z", String(mapViewport.zoom));
+    } else {
+      params.delete("lat");
+      params.delete("lng");
+      params.delete("z");
+    }
+
+    window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+  }
+
+  async function copyShareLink() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    try {
+      await window.navigator.clipboard.writeText(window.location.href);
+      shareFeedback = "Link copied";
+    } catch {
+      shareFeedback = "Copy failed";
+    }
+
+    if (shareFeedbackTimer) {
+      window.clearTimeout(shareFeedbackTimer);
+    }
+
+    shareFeedbackTimer = window.setTimeout(() => {
+      shareFeedback = "";
+      shareFeedbackTimer = null;
+    }, 1800);
   }
 
   function toggleFollowAircraft() {
@@ -496,6 +655,15 @@
     syncReplayPlaybackTimer();
   }
   $: if (preferencesReady) {
+    filters;
+    sortBy;
+    theme;
+    mapStyle;
+    selectedIcao24;
+    mapViewport;
+    syncShareUrl();
+  }
+  $: if (preferencesReady) {
     syncThemeClass(theme);
     saveUserPreferences({
       filters,
@@ -557,7 +725,20 @@
             Dark
           </button>
         </div>
-      <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
+        <div class="status-actions">
+          <button
+            class="share-button"
+            type="button"
+            title="Copy a link to the current map state and selected aircraft"
+            on:click={copyShareLink}
+          >
+            Copy share link
+          </button>
+          {#if shareFeedback}
+            <span class="share-feedback">{shareFeedback}</span>
+          {/if}
+        </div>
+        <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
           {#if state.status === "loading"}
             Syncing...
           {:else if state.status === "refreshing"}
@@ -857,6 +1038,30 @@
     font-size: 0.92rem;
   }
 
+  .status-actions {
+    display: grid;
+    justify-items: end;
+    gap: 0.35rem;
+    margin-bottom: 0.2rem;
+  }
+
+  .share-button {
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 0.45rem 0.72rem;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .share-feedback {
+    font-size: 0.78rem;
+    color: var(--color-muted);
+  }
+
   .mobile-sidebar-toggle,
   .mobile-sidebar-close {
     display: none;
@@ -1120,6 +1325,10 @@
     .status-panel {
       justify-items: start;
       min-width: 0;
+    }
+
+    .status-actions {
+      justify-items: start;
     }
 
     .layout {

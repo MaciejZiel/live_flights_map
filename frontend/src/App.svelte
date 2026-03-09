@@ -7,7 +7,6 @@
   import AlertPanel from "./lib/components/AlertPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
   import MonitoringSessionsPanel from "./lib/components/MonitoringSessionsPanel.svelte";
-  import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
@@ -1385,32 +1384,32 @@
     </div>
 
     <header class="radar-topbar">
-      <div class="overlay-card brand-block">
-        <div class="brand-mark">24</div>
-        <div class="brand-copy">
-          <p class="section-kicker">Live air traffic</p>
-          <strong>Live Flights Radar</strong>
+      <div class="overlay-card center-bar">
+        <div class="brand-inline">
+          <div class="brand-mark">24</div>
+          <div class="brand-copy">
+            <strong>Live Flights</strong>
+            <span>live air traffic</span>
+          </div>
         </div>
-      </div>
 
-      <div class="overlay-card search-block">
         <label class="search-field">
           <input
             bind:this={searchInput}
             bind:value={filters.query}
             type="text"
-            placeholder="Find flights, ICAO24, operator, country"
+            placeholder="Find flights, airports and more"
             title="Search by callsign, ICAO24, origin country, or operator code"
           />
         </label>
-        <div class="search-meta">
-          <span>{renderedFlights.length} visible on map</span>
-          <span>{getFreshnessLabel(state.fetchedAt)} · {state.transport === "sse" ? "SSE" : "Polling"}</span>
-        </div>
+
+        <button class="map-view-chip" type="button" on:click={() => openInspectorTab("traffic")}>
+          View <strong>Map</strong>
+        </button>
       </div>
 
-      <div class="topbar-actions">
-        <div class="overlay-card status-strip">
+      <div class="topbar-side">
+        <div class="overlay-card status-strip compact">
           <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
             {#if state.status === "loading"}
               Syncing
@@ -1438,33 +1437,26 @@
           </div>
         </div>
 
-        <div class="overlay-card theme-switcher" role="group" aria-label="Theme switcher">
-          <button class:active={theme === "light"} type="button" on:click={() => setTheme("light")}>
-            Day
+        <div class="topbar-actions">
+          <button
+            class="overlay-card topbar-action"
+            type="button"
+            title="Copy a link to the current map state and selected aircraft"
+            on:click={copyShareLink}
+          >
+            Share
           </button>
-          <button class:active={theme === "dark"} type="button" on:click={() => setTheme("dark")}>
-            Night
-          </button>
+
+          {#if isMobileViewport}
+            <button class="overlay-card topbar-action accent" type="button" on:click={toggleMobileSidebar}>
+              {mobileSidebarOpen ? "Hide panel" : "Open panel"}
+            </button>
+          {/if}
+
+          {#if shareFeedback}
+            <span class="share-feedback">{shareFeedback}</span>
+          {/if}
         </div>
-
-        <button
-          class="overlay-card topbar-action"
-          type="button"
-          title="Copy a link to the current map state and selected aircraft"
-          on:click={copyShareLink}
-        >
-          Share
-        </button>
-
-        {#if isMobileViewport}
-          <button class="overlay-card topbar-action accent" type="button" on:click={toggleMobileSidebar}>
-            {mobileSidebarOpen ? "Hide panel" : "Open panel"}
-          </button>
-        {/if}
-
-        {#if shareFeedback}
-          <span class="share-feedback">{shareFeedback}</span>
-        {/if}
       </div>
     </header>
 
@@ -1484,17 +1476,13 @@
 
     <aside class="overlay-card radar-left-panel">
       <div class="panel-stack">
-        {#if !onboardingDismissed}
-          <OnboardingPanel onDismiss={dismissOnboarding} />
-        {/if}
-
         <TrafficBoardPanel
           flights={leaderboardFlights}
           selectedIcao24={selectedIcao24}
           viewport={mapViewport}
-          title="Priority traffic"
-          subtitle="Fast moving flights"
-          maxRows={6}
+          title="Most tracked flights"
+          subtitle="Live board"
+          maxRows={5}
           onSelectFlight={selectWatchedFlight}
         />
 
@@ -1960,13 +1948,13 @@
 
     <nav class="overlay-card bottom-dock" aria-label="Quick radar actions">
       <button class:active={inspectorTab === "details"} class="dock-button" type="button" on:click={() => openInspectorTab("details")}>
-        Aircraft
+        Settings
       </button>
       <button class:active={inspectorTab === "filters"} class="dock-button" type="button" on:click={() => openInspectorTab("filters")}>
         Filters
       </button>
       <button class:active={inspectorTab === "traffic"} class="dock-button" type="button" on:click={() => openInspectorTab("traffic")}>
-        Traffic
+        Widgets
       </button>
       <button class:active={inspectorTab === "watchlist"} class="dock-button" type="button" on:click={() => openInspectorTab("watchlist")}>
         Watchlist
@@ -2025,20 +2013,38 @@
   }
 
   .radar-topbar {
-    top: 1rem;
+    top: 0.95rem;
     left: 1rem;
     right: 1rem;
-    display: grid;
-    grid-template-columns: auto minmax(280px, 1fr) auto;
-    gap: 0.9rem;
+    display: flex;
     align-items: start;
+    justify-content: center;
+    gap: 0.9rem;
   }
 
-  .brand-block {
+  .center-bar {
+    display: grid;
+    grid-template-columns: auto minmax(260px, 1fr) auto;
+    align-items: center;
+    gap: 0.9rem;
+    width: min(840px, calc(100vw - 42rem));
+    min-width: 520px;
+    padding: 0.7rem 0.9rem;
+  }
+
+  .topbar-side {
+    position: absolute;
+    top: 0;
+    right: 0;
+    display: grid;
+    gap: 0.6rem;
+    justify-items: end;
+  }
+
+  .brand-inline {
     display: flex;
     align-items: center;
-    gap: 0.85rem;
-    padding: 0.9rem 1rem;
+    gap: 0.7rem;
   }
 
   .brand-mark {
@@ -2063,6 +2069,15 @@
     color: #f6f8fb;
   }
 
+  .brand-copy span {
+    display: block;
+    margin-top: 0.08rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: #aeb9c7;
+  }
+
   .section-kicker {
     margin: 0 0 0.22rem;
     font-size: 0.7rem;
@@ -2072,16 +2087,14 @@
     color: #f5b908;
   }
 
-  .search-block {
-    display: grid;
-    gap: 0.5rem;
-    padding: 0.85rem 1rem;
+  .search-field {
+    position: relative;
   }
 
   .search-field input {
     width: 100%;
     border: 0;
-    padding: 0;
+    padding: 0.28rem 0;
     font: inherit;
     font-size: 0.98rem;
     color: #f6f8fb;
@@ -2093,18 +2106,10 @@
     color: rgba(225, 231, 241, 0.58);
   }
 
-  .search-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.8rem;
-    font-size: 0.78rem;
-    color: #aeb9c7;
-  }
-
   .topbar-actions {
     display: flex;
     flex-wrap: wrap;
-    justify-content: flex-end;
+    justify-content: flex-start;
     gap: 0.75rem;
     align-items: center;
   }
@@ -2114,6 +2119,10 @@
     gap: 0.9rem;
     align-items: center;
     padding: 0.72rem 0.95rem;
+  }
+
+  .status-strip.compact {
+    min-width: 20rem;
   }
 
   .status-copy {
@@ -2134,14 +2143,20 @@
     color: #aeb9c7;
   }
 
-  .theme-switcher {
-    display: inline-grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+  .map-view-chip {
+    display: inline-flex;
+    align-items: center;
     gap: 0.35rem;
-    padding: 0.35rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.68rem 0.9rem;
+    font: inherit;
+    font-weight: 700;
+    color: #f6f8fb;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
   }
 
-  .theme-switcher button,
   .topbar-action,
   .tool-chip,
   .dock-button,
@@ -2165,7 +2180,6 @@
       transform 160ms ease;
   }
 
-  .theme-switcher button.active,
   .tool-chip.accent,
   .topbar-action.accent,
   .hero-action.primary,
@@ -2183,7 +2197,7 @@
   }
 
   .floating-messages {
-    top: 5.7rem;
+    top: 5.25rem;
     left: 50%;
     transform: translateX(-50%);
     display: grid;
@@ -2217,9 +2231,9 @@
 
   .radar-left-panel,
   .radar-right-panel {
-    top: 6.8rem;
+    top: 6.1rem;
     bottom: 5.8rem;
-    width: min(24rem, calc(100vw - 2rem));
+    width: min(21rem, calc(100vw - 2rem));
     padding: 1rem;
     overflow: hidden;
   }
@@ -2230,9 +2244,12 @@
 
   .radar-right-panel {
     right: 1rem;
+    width: min(20rem, calc(100vw - 2rem));
     display: grid;
     grid-template-rows: auto auto auto minmax(0, 1fr);
     gap: 0.9rem;
+    background:
+      linear-gradient(180deg, rgba(20, 21, 24, 0.97) 0%, rgba(11, 12, 15, 0.97) 100%);
   }
 
   .panel-stack,
@@ -2508,7 +2525,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    width: min(52rem, calc(100vw - 2rem));
+    width: min(34rem, calc(100vw - 2rem));
     padding: 0.5rem;
     justify-content: center;
   }
@@ -2535,11 +2552,12 @@
 
   @media (max-width: 1200px) {
     .radar-topbar {
-      grid-template-columns: 1fr;
+      justify-content: flex-start;
     }
 
-    .topbar-actions {
-      justify-content: flex-start;
+    .center-bar {
+      width: calc(100vw - 23rem);
+      min-width: 0;
     }
   }
 
@@ -2548,8 +2566,14 @@
       display: none;
     }
 
+    .topbar-side {
+      position: static;
+      justify-items: stretch;
+      width: 100%;
+    }
+
     .radar-right-panel {
-      top: 5.6rem;
+      top: 5.3rem;
       right: 0.75rem;
       bottom: 5.7rem;
       left: 0.75rem;
@@ -2594,12 +2618,17 @@
       left: 0.75rem;
       right: 0.75rem;
       gap: 0.65rem;
+      display: grid;
     }
 
-    .brand-block,
-    .search-block,
+    .center-bar,
     .status-strip {
       padding: 0.75rem 0.85rem;
+    }
+
+    .center-bar {
+      grid-template-columns: 1fr;
+      width: auto;
     }
 
     .status-strip {

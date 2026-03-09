@@ -452,9 +452,11 @@
         Full
       {/if}
     </button>
-  </div>
+</div>
 
   <div bind:this={container} class="map-root"></div>
+  <div class="map-tint" aria-hidden="true"></div>
+  <div class="map-vignette" aria-hidden="true"></div>
 </div>
 
 <style>
@@ -472,6 +474,26 @@
     width: 100%;
     height: 100%;
     min-height: 100vh;
+  }
+
+  .map-tint,
+  .map-vignette {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .map-tint {
+    background:
+      linear-gradient(180deg, rgba(33, 63, 44, 0.08) 0%, rgba(20, 34, 18, 0.16) 100%),
+      radial-gradient(circle at center, rgba(168, 197, 159, 0.06), transparent 55%);
+    mix-blend-mode: multiply;
+  }
+
+  .map-vignette {
+    background:
+      linear-gradient(180deg, rgba(7, 8, 10, 0.12) 0%, transparent 18%, transparent 82%, rgba(7, 8, 10, 0.18) 100%),
+      linear-gradient(90deg, rgba(7, 8, 10, 0.08) 0%, transparent 12%, transparent 88%, rgba(7, 8, 10, 0.1) 100%);
   }
 
   .map-action {

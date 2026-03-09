@@ -19,59 +19,6 @@
   export let onToggleWatch = () => {};
   export let onRetryDetails = () => {};
 
-  function buildMetricPath(points, getValue) {
-    if (points.length < 2) {
-      return "";
-    }
-
-    const chartWidth = 240;
-    const chartHeight = 68;
-    const values = points.map((point) => getValue(point));
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    const range = Math.max(1, maxValue - minValue);
-
-    return points
-      .map((point, index) => {
-        const x = (index / (points.length - 1)) * chartWidth;
-        const value = getValue(point);
-        const y = chartHeight - ((value - minValue) / range) * chartHeight;
-        return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
-      })
-      .join(" ");
-  }
-
-  function formatHistoryDuration(points) {
-    if (points.length < 2) {
-      return "Just now";
-    }
-
-    const durationMinutes = Math.max(
-      1,
-      Math.round((points[points.length - 1].timestamp - points[0].timestamp) / 60000)
-    );
-
-    if (durationMinutes < 60) {
-      return `${durationMinutes} min`;
-    }
-
-    const hours = Math.floor(durationMinutes / 60);
-    const minutes = durationMinutes % 60;
-    return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
-  }
-
-  function formatHistoryTimestamp(timestamp) {
-    if (!timestamp) {
-      return "No history";
-    }
-
-    return new Intl.DateTimeFormat("pl-PL", {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }).format(new Date(timestamp));
-  }
-
   function formatRelativeContact(lastContact) {
     if (lastContact === null || lastContact === undefined) {
       return "Unknown";
@@ -192,20 +139,12 @@
     return photo?.thumbnail_url ?? null;
   }
 
-  $: historySamples = trailPoints.slice(-24);
-  $: altitudeSamples = historySamples.filter((point) => point.altitude !== null && point.altitude !== undefined);
-  $: speedSamples = historySamples.filter((point) => point.velocity !== null && point.velocity !== undefined);
-  $: verticalRateSamples = historySamples.filter(
-    (point) => point.vertical_rate !== null && point.vertical_rate !== undefined
-  );
-  $: altitudePath = buildMetricPath(altitudeSamples, (point) => point.altitude ?? 0);
-  $: speedPath = buildMetricPath(speedSamples, (point) => point.velocity ?? 0);
-  $: verticalRatePath = buildMetricPath(verticalRateSamples, (point) => point.vertical_rate ?? 0);
-  $: trailStart = trailPoints[0] ?? null;
-  $: trailEnd = trailPoints[trailPoints.length - 1] ?? null;
   $: observedDistanceKm = calculateObservedDistanceKm(trailPoints);
-  $: averageObservedSpeed = speedSamples.length
-    ? Math.round(speedSamples.reduce((total, point) => total + point.velocity * 3.6, 0) / speedSamples.length)
+  $: averageObservedSpeed = trailPoints.length
+    ? Math.round(
+        trailPoints.reduce((total, point) => total + ((point.velocity ?? 0) * 3.6), 0) /
+          trailPoints.length
+      )
     : 0;
   $: photo = details?.photo ?? null;
   $: route = details?.route ?? null;
@@ -383,108 +322,17 @@
         <strong>{identity.typeCode ?? "Unknown"}</strong>
       </article>
       <article class="data-card">
-        <span>Country</span>
-        <strong>{identity.originCountry ?? "Unknown"}</strong>
-      </article>
-      <article class="data-card">
-        <span>Observed window</span>
-        <strong>{formatHistoryDuration(trailPoints)}</strong>
-      </article>
-      <article class="data-card">
         <span>Last contact</span>
         <strong>{formatRelativeContact(flight.last_contact)}</strong>
       </article>
       <article class="data-card">
-        <span>Observed distance</span>
-        <strong>{observedDistanceKm ? `${observedDistanceKm.toFixed(1)} km` : "No movement yet"}</strong>
+        <span>Live track</span>
+        <strong>{trailPoints.length ? `${trailPoints.length} pts / ${observedDistanceKm.toFixed(1)} km` : "Waiting for trail"}</strong>
       </article>
       <article class="data-card">
-        <span>Observed start</span>
-        <strong>{trailStart ? formatCoordinates(trailStart.latitude, trailStart.longitude) : "No trail yet"}</strong>
+        <span>Country</span>
+        <strong>{identity.originCountry ?? "Unknown"}</strong>
       </article>
-    </section>
-
-    <section class="history-panel">
-      <div class="section-header">
-        <div>
-          <strong>Live track</strong>
-          <p>{historySamples.length} recent samples for this aircraft</p>
-        </div>
-        <span class="section-badge">{formatHistoryDuration(historySamples)}</span>
-      </div>
-
-      {#if altitudeSamples.length > 1}
-        <div class="chart-grid">
-          <article class="metric-card">
-            <div class="metric-card-header">
-              <span>Altitude profile</span>
-              <strong>{formatAltitude(altitudeSamples[altitudeSamples.length - 1].altitude)}</strong>
-            </div>
-            <div class="history-chart">
-              <svg aria-hidden="true" viewBox="0 0 240 68">
-                <path d={altitudePath} stroke="#78c8ff" />
-              </svg>
-            </div>
-          </article>
-
-          <article class="metric-card">
-            <div class="metric-card-header">
-              <span>Speed profile</span>
-              <strong>{speedSamples.length ? formatSpeed(speedSamples[speedSamples.length - 1].velocity) : "Unknown"}</strong>
-            </div>
-            {#if speedSamples.length > 1}
-              <div class="history-chart">
-                <svg aria-hidden="true" viewBox="0 0 240 68">
-                  <path d={speedPath} stroke="#7df0b1" />
-                </svg>
-              </div>
-            {:else}
-              <p class="chart-empty">Waiting for more speed samples.</p>
-            {/if}
-          </article>
-
-          <article class="metric-card">
-            <div class="metric-card-header">
-              <span>Vertical profile</span>
-              <strong>
-                {verticalRateSamples.length
-                  ? formatVerticalRate(verticalRateSamples[verticalRateSamples.length - 1].vertical_rate)
-                  : "Unknown"}
-              </strong>
-            </div>
-            {#if verticalRateSamples.length > 1}
-              <div class="history-chart">
-                <svg aria-hidden="true" viewBox="0 0 240 68">
-                  <path d={verticalRatePath} stroke="#ffbf5d" />
-                </svg>
-              </div>
-            {:else}
-              <p class="chart-empty">Waiting for more climb rate samples.</p>
-            {/if}
-          </article>
-        </div>
-
-        <div class="history-meta">
-          <div>
-            <span class="history-label">Track start</span>
-            <strong class="history-value">
-              {trailStart ? formatHistoryTimestamp(trailStart.timestamp) : "Unknown"}
-            </strong>
-          </div>
-          <div>
-            <span class="history-label">Latest point</span>
-            <strong class="history-value">
-              {trailEnd ? formatHistoryTimestamp(trailEnd.timestamp) : "Unknown"}
-            </strong>
-          </div>
-          <div>
-            <span class="history-label">Current position</span>
-            <strong class="history-value">{formatCoordinates(flight.latitude, flight.longitude)}</strong>
-          </div>
-        </div>
-      {:else}
-        <p class="empty-copy">Waiting for enough live samples to draw a meaningful track profile.</p>
-      {/if}
     </section>
   {:else}
     <p class="empty-copy">Click an aircraft marker to open focused route and tracking details.</p>
@@ -547,10 +395,8 @@
 
   .hero-card,
   .route-panel,
-  .history-panel,
   .telemetry-card,
   .data-card,
-  .metric-card,
   .detail-warning {
     border: 1px solid var(--surface-border);
     border-radius: 18px;
@@ -700,8 +546,7 @@
   }
 
   .detail-warning,
-  .route-panel,
-  .history-panel {
+  .route-panel {
     display: grid;
     gap: 0.85rem;
     padding: 1rem;
@@ -744,9 +589,7 @@
   }
 
   .telemetry-grid,
-  .data-grid,
-  .chart-grid,
-  .history-meta {
+  .data-grid {
     display: grid;
     gap: 0.7rem;
   }
@@ -780,45 +623,10 @@
     color: var(--color-subtle);
   }
 
-  .metric-card {
-    display: grid;
-    gap: 0.55rem;
-    padding: 0.85rem;
-  }
-
-  .metric-card-header strong {
-    font-size: 0.92rem;
-    color: var(--color-text);
-  }
-
-  .history-chart {
-    border-radius: 14px;
-    padding: 0.55rem;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
-  }
-
-  .history-chart svg {
-    display: block;
-    width: 100%;
-    height: auto;
-  }
-
-  .history-chart path {
-    fill: none;
-    stroke-width: 3;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-
-  .history-meta {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   @media (max-width: 720px) {
     .panel-heading,
     .hero-headline,
-    .section-header,
-    .metric-card-header {
+    .section-header {
       display: grid;
     }
 
@@ -827,8 +635,7 @@
     .telemetry-grid,
     .data-grid,
     .data-grid.compact,
-    .hero-meta,
-    .history-meta {
+    .hero-meta {
       grid-template-columns: 1fr;
     }
 

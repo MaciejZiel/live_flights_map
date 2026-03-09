@@ -137,6 +137,8 @@ class ADSBLolRouteClient:
                 airport.get("countryiso2"),
                 uppercase=True,
             ),
+            "latitude": ADSBLolRouteClient._normalize_float(airport.get("lat")),
+            "longitude": ADSBLolRouteClient._normalize_float(airport.get("lon")),
         }
 
     @staticmethod
@@ -147,3 +149,12 @@ class ADSBLolRouteClient:
         if not cleaned:
             return None
         return cleaned.upper() if uppercase else cleaned
+
+    @staticmethod
+    def _normalize_float(value: object) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None

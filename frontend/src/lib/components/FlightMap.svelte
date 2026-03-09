@@ -8,6 +8,7 @@
 
   export let flights = [];
   export let selectedIcao24 = null;
+  export let selectedRouteAirports = [];
   export let followAircraft = false;
   export let mapStyle = "standard";
   export let trailPoints = [];
@@ -26,10 +27,12 @@
   let aircraftLayer;
   let trailLayer;
   let motionVectorLayer;
+  let routeLayer;
   const markerRegistry = new Map();
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
+  let lastRouteFocusKey = null;
   const viewPresets = {
     poland: [
       [49.0, 14.0],
@@ -322,6 +325,83 @@
     ]).addTo(map);
   }
 
+  function getSelectedRouteLatLngs() {
+    return (selectedRouteAirports ?? [])
+      .filter(
+        (airport) =>
+          Number.isFinite(airport?.latitude) &&
+          Number.isFinite(airport?.longitude)
+      )
+      .map((airport) => [airport.latitude, airport.longitude]);
+  }
+
+  function syncRouteLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (routeLayer) {
+      map.removeLayer(routeLayer);
+      routeLayer = null;
+    }
+
+    const routeLatLngs = getSelectedRouteLatLngs();
+    if (routeLatLngs.length < 2) {
+      return;
+    }
+
+    const routePoints = [
+      L.polyline(routeLatLngs, {
+        color: "#ffd34f",
+        weight: 3,
+        opacity: 0.92,
+      }),
+      ...routeLatLngs.map((latLng, index) =>
+        L.circleMarker(latLng, {
+          radius: 5,
+          weight: 2,
+          color: index === 0 ? "#7dd3fc" : "#f97316",
+          fillColor: "#111827",
+          fillOpacity: 1,
+        })
+      ),
+    ];
+
+    routeLayer = L.layerGroup(routePoints).addTo(map);
+  }
+
+  function focusSelectedRoute() {
+    if (!map || !selectedIcao24 || followAircraft) {
+      return;
+    }
+
+    const routeLatLngs = getSelectedRouteLatLngs();
+    if (routeLatLngs.length < 2) {
+      return;
+    }
+
+    const routeKey = `${selectedIcao24}:${routeLatLngs
+      .map(([latitude, longitude]) => `${latitude.toFixed(3)},${longitude.toFixed(3)}`)
+      .join("|")}`;
+    if (routeKey === lastRouteFocusKey) {
+      return;
+    }
+
+    lastRouteFocusKey = routeKey;
+    const bounds = L.latLngBounds(routeLatLngs);
+    const selectedFlight = flights.find((flight) => flight.icao24 === selectedIcao24);
+    if (selectedFlight) {
+      bounds.extend([selectedFlight.latitude, selectedFlight.longitude]);
+    }
+
+    map.fitBounds(bounds, {
+      padding: [72, 72],
+      maxZoom: 7,
+      animate: true,
+      duration: 0.8,
+    });
+  }
+
   onMount(() => {
     const initialCenter = initialViewport?.center ?? [52.2297, 21.0122];
     const initialZoom = initialViewport?.zoom ?? 7.1;
@@ -365,6 +445,7 @@
       activeMapStyle = null;
       trailLayer = null;
       motionVectorLayer = null;
+      routeLayer = null;
       markerRegistry.clear();
     };
   });
@@ -407,7 +488,12 @@
 
   $: syncTrailLayer();
   $: syncMotionVectorLayer();
+  $: syncRouteLayer();
+  $: focusSelectedRoute();
 
+  $: if (!selectedIcao24) {
+    lastRouteFocusKey = null;
+  }
   $: centerOnSelectedAircraft();
 </script>
 

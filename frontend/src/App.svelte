@@ -2,15 +2,7 @@
   import { onMount } from "svelte";
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
-  import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
-  import SavedViewsPanel from "./lib/components/SavedViewsPanel.svelte";
-  import AlertPanel from "./lib/components/AlertPanel.svelte";
-  import LegendPanel from "./lib/components/LegendPanel.svelte";
-  import MonitoringSessionsPanel from "./lib/components/MonitoringSessionsPanel.svelte";
-  import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
-  import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
-  import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { fetchFlightDetails } from "./lib/api/flights.js";
   import { flightsStore } from "./lib/stores/flights.js";
@@ -1511,6 +1503,7 @@
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
+  $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
   $: if (!selectedFlightDetailsKey) {
     lastSelectedFlightDetailsKey = null;
     selectedFlightDetails = null;
@@ -1581,6 +1574,7 @@
       <FlightMap
         flights={renderedFlights}
         selectedIcao24={selectedIcao24}
+        selectedRouteAirports={selectedRouteAirports}
         followAircraft={followAircraft}
         mapStyle={mapStyle}
         trailPoints={selectedFlightTrail}
@@ -1703,62 +1697,16 @@
           {/if}
         </section>
 
-        <section class="widget-card">
+        <section class="widget-card compact">
           <div class="widget-header">
             <div class="widget-heading">
-              <strong>Traffic hotspots</strong>
-              <span class="live-pill">LIVE</span>
+              <strong>How to use</strong>
+              <span class="live-pill">FOCUS</span>
             </div>
-            <span class="widget-toggle">⌃</span>
           </div>
-
-          {#if countryActivity.length}
-            <div class="mini-stat-list">
-              {#each countryActivity as item}
-                <div>
-                  <span>{item.country}</span>
-                  <strong>{item.count}</strong>
-                  <small>{item.averageSpeed} km/h · {item.ground} ground</small>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <p class="widget-empty">Traffic activity appears here after the first snapshot.</p>
-          {/if}
-
-          <button class="widget-footer-button" type="button" on:click={() => openInspectorTab("traffic")}>
-            Open traffic list
-          </button>
-        </section>
-
-        <section class="widget-card compact collapsed">
-          <div class="widget-header">
-            <div class="widget-heading">
-              <strong>Bookmarks</strong>
-              <span class="widget-ghost">{leftBookmarks.length || leftWatchPreview.length}</span>
-            </div>
-            <span class="widget-toggle">⌃</span>
-          </div>
-
-          {#if leftBookmarks.length}
-            <div class="widget-chip-list">
-              {#each leftBookmarks as view}
-                <button class="bookmark-chip" type="button" on:click={() => loadSavedView(view.id)}>
-                  {view.name}
-                </button>
-              {/each}
-            </div>
-          {:else if leftWatchPreview.length}
-            <div class="widget-chip-list">
-              {#each leftWatchPreview as entry}
-                <button class="bookmark-chip" type="button" on:click={() => selectWatchedFlight(entry.icao24)}>
-                  {entry.flight?.callsign ?? entry.icao24}
-                </button>
-              {/each}
-            </div>
-          {:else}
-            <p class="widget-empty">Save a view or add aircraft to watchlist.</p>
-          {/if}
+          <p class="widget-empty">
+            Click any aircraft on the map. The right panel will show its photo, route and live details.
+          </p>
         </section>
       </div>
     </aside>
@@ -1788,420 +1736,46 @@
         </button>
       </div>
 
-      {#if !selectedFlight && inspectorTab === "details" && !isMobileViewport}
-        <div class="feed-rail">
-          <section class="feed-hero">
-            <div class="feed-hero-media">
-              <div class="feed-plane-mark">✈</div>
-            </div>
-            <div class="feed-hero-copy">
-              <strong>{leadFeedFlight ? leadFeedFlight.callsign ?? leadFeedFlight.icao24 : `Traffic around ${mapCenterLabel}`}</strong>
-              <p>
-                {leadFeedFlight
-                  ? `${leadFeedFlight.origin_country ?? "Unknown country"} · ${formatAltitude(leadFeedFlight.altitude)} · ${formatSpeed(leadFeedFlight.velocity)}`
-                  : `${visibleTrackedCount} tracked aircraft in the active radar view.`}
-              </p>
-            </div>
-          </section>
-
-          <article class="promo-card">
-            <div>
-              <strong>Open live traffic list</strong>
-              <p>Jump into the densest flights, then narrow the map with fast filters.</p>
-            </div>
-            <button class="promo-action" type="button" on:click={() => openInspectorTab("traffic")}>
-              Open list
-            </button>
-          </article>
-
-          <article class="feed-card emphasis">
-            <div class="feed-card-icon">◎</div>
-            <div>
-              <strong>Use radar filters</strong>
-              <p>Sort flights by speed, altitude and recent movement to clean up the map.</p>
-            </div>
-          </article>
-
-          <article class="feed-card">
-            <div class="feed-card-icon">▶</div>
-            <div>
-              <strong>Playback session history</strong>
-              <p>Replay captured snapshots and jump back to live traffic in one click.</p>
-            </div>
-          </article>
-
-          <article class="feed-card">
-            <div class="feed-card-icon">★</div>
-            <div>
-              <strong>Saved views and watchlist</strong>
-              <p>Pin aircraft, keep workspaces, and reopen the same radar setup later.</p>
-            </div>
-          </article>
-
-          <article class="feed-card">
-            <div class="feed-card-icon">!</div>
-            <div>
-              <strong>Alert matching</strong>
-              <p>Create callsign or ICAO alerts and let the panel keep a short event log.</p>
-            </div>
-          </article>
-        </div>
-      {:else}
-        <div class="inspector-header">
-          <div class="inspector-title">
-            <p class="section-kicker">{selectedFlight ? "Selected aircraft" : "Traffic inspector"}</p>
-            <h2>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : "No flight selected"}</h2>
-            <p class="inspector-subtitle">
-              {selectedFlight
-                ? `${selectedFlight.origin_country ?? "Unknown country"} · operator ${selectedOperatorCode}`
-                : "Choose an aircraft marker or use the tabs below to manage the radar."}
-            </p>
-          </div>
-          {#if isMobileViewport}
-            <button class="mobile-sidebar-close" type="button" on:click={closeMobileSidebar}>Close</button>
-          {/if}
-        </div>
-
+      <div class="inspector-scroll">
         {#if selectedFlight}
-          <section class="flight-hero">
-            <div class="flight-hero-header">
+          <FlightDetailsPanel
+            flight={selectedFlight}
+            details={selectedFlightDetails}
+            detailsStatus={selectedFlightDetailsStatus}
+            detailsError={selectedFlightDetailsError}
+            followAircraft={followAircraft}
+            trailPoints={selectedFlightTrail}
+            isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
+            onToggleFollow={toggleFollowAircraft}
+            onToggleWatch={toggleSelectedFlightWatchlist}
+            onRetryDetails={retrySelectedFlightDetails}
+          />
+        {:else}
+          <section class="panel inspector-panel">
+            <div class="card-header">
               <div>
-                <span class="hero-tag">{selectedFlight.on_ground ? "Ground" : "Airborne"}</span>
-                <strong>{selectedFlight.callsign ?? selectedFlight.icao24}</strong>
+                <p class="section-kicker">Flight details</p>
+                <h2>Select an aircraft</h2>
               </div>
-              <div class="hero-actions">
-                <button class:active={followAircraft} class="hero-action" type="button" on:click={toggleFollowAircraft}>
-                  {followAircraft ? "Following" : "Follow"}
-                </button>
-                <button
-                  class:active={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
-                  class="hero-action primary"
-                  type="button"
-                  on:click={toggleSelectedFlightWatchlist}
-                >
-                  {selectedFlight && watchlist.includes(selectedFlight.icao24) ? "Watching" : "Watch"}
-                </button>
-              </div>
+              <span class="card-badge">{visibleTrackedCount}</span>
             </div>
-
-            <div class="hero-metrics">
-              <article class="hero-metric">
-                <span>Altitude</span>
-                <strong>{formatAltitude(selectedFlight.altitude)}</strong>
-              </article>
-              <article class="hero-metric">
-                <span>Speed</span>
-                <strong>{formatSpeed(selectedFlight.velocity)}</strong>
-              </article>
-              <article class="hero-metric">
-                <span>Heading</span>
-                <strong>{formatHeading(selectedFlight.true_track)}</strong>
-              </article>
-              <article class="hero-metric">
-                <span>ICAO24</span>
-                <strong>{selectedFlight.icao24}</strong>
-              </article>
-            </div>
+            <p class="inspector-subtitle">
+              Click any aircraft marker on the map. This panel will switch to the selected flight and show its route, photo and live telemetry.
+            </p>
           </section>
-        {/if}
 
-        <div class="inspector-tabs" role="tablist" aria-label="Radar inspector">
-          <button class:active={inspectorTab === "details"} class="inspector-tab" type="button" on:click={() => openInspectorTab("details")}>
-            Aircraft
-          </button>
-          <button class:active={inspectorTab === "filters"} class="inspector-tab" type="button" on:click={() => openInspectorTab("filters")}>
-            Filters
-          </button>
-          <button class:active={inspectorTab === "traffic"} class="inspector-tab" type="button" on:click={() => openInspectorTab("traffic")}>
-            Traffic
-          </button>
-          <button class:active={inspectorTab === "watchlist"} class="inspector-tab" type="button" on:click={() => openInspectorTab("watchlist")}>
-            Watchlist
-          </button>
-          <button class:active={inspectorTab === "replay"} class="inspector-tab" type="button" on:click={() => openInspectorTab("replay")}>
-            Playback
-          </button>
-          <button class:active={inspectorTab === "views"} class="inspector-tab" type="button" on:click={() => openInspectorTab("views")}>
-            Views
-          </button>
-          <button class:active={inspectorTab === "alerts"} class="inspector-tab" type="button" on:click={() => openInspectorTab("alerts")}>
-            Alerts
-          </button>
-          <button class:active={inspectorTab === "help"} class="inspector-tab" type="button" on:click={() => openInspectorTab("help")}>
-            Help
-          </button>
-        </div>
-
-        <div class="inspector-scroll">
-          {#if inspectorTab === "details"}
-            <FlightDetailsPanel
-              flight={selectedFlight}
-              details={selectedFlightDetails}
-              detailsStatus={selectedFlightDetailsStatus}
-              detailsError={selectedFlightDetailsError}
-              followAircraft={followAircraft}
-              trailPoints={selectedFlightTrail}
-              isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
-              onToggleFollow={toggleFollowAircraft}
-              onToggleWatch={toggleSelectedFlightWatchlist}
-              onRetryDetails={retrySelectedFlightDetails}
-            />
-        {:else if inspectorTab === "traffic"}
           <TrafficBoardPanel
             flights={sortedFlights}
             selectedIcao24={selectedIcao24}
             viewport={mapViewport}
             title="Traffic list"
             subtitle="Current radar traffic"
-            maxRows={24}
+            maxRows={12}
             onSelectFlight={selectWatchedFlight}
           />
-        {:else if inspectorTab === "filters"}
-          <section class="panel inspector-panel">
-            <div class="card-header">
-              <div>
-                <p class="section-kicker">Search and filters</p>
-                <h2>Traffic shaping</h2>
-              </div>
-              <span class="card-badge">{activeFilterCount}</span>
-            </div>
-
-            <label class="field">
-              <span>Search query</span>
-              <input
-                bind:value={filters.query}
-                type="text"
-                placeholder="callsign, ICAO24, country, operator"
-              />
-            </label>
-
-            <div class="filter-cluster">
-              <div class="cluster-header">
-                <strong>Quick presets</strong>
-                <span>One click traffic shaping</span>
-              </div>
-              <div class="chip-list filter-chip-list">
-                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("reset")}>All traffic</button>
-                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast movers</button>
-                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
-                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("recent")}>Recent only</button>
-                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("ground")}>Include ground</button>
-              </div>
-            </div>
-
-            {#if activeFilterTokens.length}
-              <div class="filter-cluster">
-                <div class="cluster-header">
-                  <strong>Active filters</strong>
-                  <span>{activeFilterTokens.length} active</span>
-                </div>
-                <div class="active-filter-list">
-                  {#each activeFilterTokens as token}
-                    <button class="active-filter-chip" type="button" on:click={() => clearFilterToken(token.key)}>
-                      {token.label} ×
-                    </button>
-                  {/each}
-                </div>
-              </div>
-            {/if}
-
-            {#if topOperatorSuggestions.length || topCountrySuggestions.length}
-              <div class="filter-cluster">
-                <div class="cluster-header">
-                  <strong>Live suggestions</strong>
-                  <span>Built from current traffic</span>
-                </div>
-
-                {#if topOperatorSuggestions.length}
-                  <div class="suggestion-group">
-                    <span class="suggestion-label">Operators</span>
-                    <div class="active-filter-list">
-                      {#each topOperatorSuggestions as operator}
-                        <button class="suggestion-chip" type="button" on:click={() => (filters = { ...filters, operator })}>
-                          {operator}
-                        </button>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-
-                {#if topCountrySuggestions.length}
-                  <div class="suggestion-group">
-                    <span class="suggestion-label">Countries</span>
-                    <div class="active-filter-list">
-                      {#each topCountrySuggestions as country}
-                        <button class="suggestion-chip" type="button" on:click={() => (filters = { ...filters, country })}>
-                          {country}
-                        </button>
-                      {/each}
-                    </div>
-                  </div>
-                {/if}
-              </div>
-            {/if}
-
-            <label class="field">
-              <span>Sort by</span>
-              <select bind:value={sortBy}>
-                <option value="altitude_desc">Altitude</option>
-                <option value="speed_desc">Speed</option>
-                <option value="distance_asc">Distance from map center</option>
-                <option value="last_contact_desc">Last update</option>
-              </select>
-            </label>
-
-            <label class="field">
-              <span>Min altitude (m)</span>
-              <input bind:value={filters.minAltitude} type="number" min="0" step="100" />
-            </label>
-
-            <label class="field">
-              <span>Min speed (km/h)</span>
-              <input bind:value={filters.minSpeed} type="number" min="0" step="10" />
-            </label>
-
-            <label class="field">
-              <span>Country</span>
-              <input bind:value={filters.country} type="text" placeholder="Poland, Germany, Turkey" />
-            </label>
-
-            <label class="field">
-              <span>Operator code</span>
-              <input bind:value={filters.operator} type="text" placeholder="LOT, RYR, WZZ" />
-            </label>
-
-            <label class="field">
-              <span>Heading</span>
-              <select bind:value={filters.headingBand}>
-                <option value="any">Any direction</option>
-                <option value="north">Northbound</option>
-                <option value="east">Eastbound</option>
-                <option value="south">Southbound</option>
-                <option value="west">Westbound</option>
-              </select>
-            </label>
-
-            <label class="checkbox-field">
-              <input bind:checked={filters.hideGroundTraffic} type="checkbox" />
-              <span>Hide ground traffic</span>
-            </label>
-
-            <label class="field">
-              <span>Recent activity</span>
-              <select bind:value={filters.recentActivity}>
-                <option value="any">Any time</option>
-                <option value="30s">Last 30 seconds</option>
-                <option value="2m">Last 2 minutes</option>
-                <option value="5m">Last 5 minutes</option>
-                <option value="15m">Last 15 minutes</option>
-              </select>
-            </label>
-
-            <div class="filter-actions">
-              <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>
-
-              <div class="preset-save-row">
-                <input
-                  bind:value={presetName}
-                  type="text"
-                  placeholder="preset name"
-                  on:keydown={(event) => event.key === "Enter" && saveCurrentPreset()}
-                />
-                <button class="secondary-button" type="button" on:click={saveCurrentPreset}>Save preset</button>
-              </div>
-
-              {#if filterPresets.length}
-                <div class="preset-list">
-                  {#each filterPresets as preset}
-                    <div class="preset-item">
-                      <button class="secondary-button preset-load" type="button" on:click={() => applyFilterPreset(preset)}>
-                        {preset.name}
-                      </button>
-                      <button class="preset-delete" type="button" on:click={() => deleteFilterPreset(preset.name)}>
-                        Remove
-                      </button>
-                    </div>
-                  {/each}
-                </div>
-              {/if}
-            </div>
-          </section>
-        {:else if inspectorTab === "watchlist"}
-          <WatchlistPanel
-            entries={watchedFlightEntries}
-            selectedIcao24={selectedIcao24}
-            watchModeEnabled={watchModeEnabled}
-            onToggleWatchMode={toggleWatchMode}
-            onSelectFlight={selectWatchedFlight}
-            onRemoveFlight={removeFromWatchlist}
-          />
-
-          <ComparisonPanel flights={comparisonFlights} selectedIcao24={selectedIcao24} onSelectFlight={selectWatchedFlight} />
-        {:else if inspectorTab === "replay"}
-          <ReplayTimeline
-            snapshots={replaySourceSnapshots}
-            activeSnapshot={activeReplaySnapshot}
-            activeIndex={replaySnapshotIndex}
-            isPlaying={replayPlaybackActive}
-            canStepBackward={canStepReplayBackward}
-            canStepForward={canStepReplayForward}
-            onSelectIndex={selectReplaySnapshot}
-            onReturnToLive={returnToLiveReplay}
-            onStepBackward={() => stepReplay(-1)}
-            onStepForward={() => stepReplay(1)}
-            onTogglePlayback={toggleReplayPlayback}
-          />
-
-          <MonitoringSessionsPanel
-            sessions={monitoringSessions}
-            activeSessionId={activeMonitoringSessionId}
-            onSaveSession={saveCurrentMonitoringSession}
-            onLoadSession={loadMonitoringSession}
-            onDeleteSession={deleteMonitoringSession}
-          />
-        {:else if inspectorTab === "views"}
-          <SavedViewsPanel
-            views={savedViews}
-            activeViewId={activeSavedViewId}
-            currentName={savedViewName}
-            onNameChange={(value) => (savedViewName = value)}
-            onSaveView={saveCurrentView}
-            onLoadView={loadSavedView}
-            onDeleteView={deleteSavedView}
-          />
-        {:else if inspectorTab === "alerts"}
-          <AlertPanel
-            rules={alertRules}
-            events={alertEvents}
-            onAddRule={addAlertRule}
-            onRemoveRule={removeAlertRule}
-            onClearEvents={clearAlertEvents}
-          />
-        {:else}
-          <LegendPanel />
-          <ShortcutsPanel />
         {/if}
-        </div>
-      {/if}
+      </div>
     </aside>
-
-    <nav class="overlay-card bottom-dock" aria-label="Quick radar actions">
-      <button class:active={inspectorTab === "help"} class="dock-button" type="button" on:click={() => openInspectorTab("help")}>
-        Settings
-      </button>
-      <button class:active={mapStyle === "dark" || mapStyle === "satellite"} class="dock-button" type="button" on:click={cycleMapStyle}>
-        Layers
-      </button>
-      <button class:active={inspectorTab === "filters"} class="dock-button" type="button" on:click={() => openInspectorTab("filters")}>
-        Filters
-      </button>
-      <button class:active={inspectorTab === "traffic"} class="dock-button" type="button" on:click={() => openInspectorTab("traffic")}>
-        Traffic
-      </button>
-      <button class:active={inspectorTab === "replay"} class="dock-button" type="button" on:click={() => openInspectorTab("replay")}>
-        Playback
-      </button>
-    </nav>
   </section>
 </div>
 

@@ -11,6 +11,7 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 
 - `GET /api/flights`
 - pobiera świeży snapshot z OpenSky przy każdym wywołaniu
+- ma krótki cache per `bbox`, retry na timeout i fallback do ostatniego snapshotu przy błędach upstreamu
 - filtruje odpowiedź do pól:
   - `icao24`
   - `callsign`
@@ -100,6 +101,9 @@ Wpisz dane do istniejącego `.env`:
 ```env
 OPENSKY_USERNAME=
 OPENSKY_PASSWORD=
+OPENSKY_RETRY_COUNT=1
+OPENSKY_CACHE_TTL=8
+OPENSKY_COOLDOWN_SECONDS=25
 ```
 
 Obecna integracja zakłada standardowe dane logowania OpenSky (`username` + `password`), nie osobny token API.

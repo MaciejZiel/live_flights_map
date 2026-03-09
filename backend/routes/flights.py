@@ -1,6 +1,6 @@
 from flask import Blueprint, current_app, jsonify, request
 
-from backend.services.opensky import OpenSkyClient, OpenSkyError
+from backend.services.opensky import OpenSkyError
 
 api = Blueprint("api", __name__)
 
@@ -53,15 +53,10 @@ def list_flights():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    client = OpenSkyClient(
-        base_url=current_app.config["OPENSKY_BASE_URL"],
-        username=current_app.config["OPENSKY_USERNAME"],
-        password=current_app.config["OPENSKY_PASSWORD"],
-        timeout=current_app.config["OPENSKY_TIMEOUT"],
-    )
+    service = current_app.extensions["flight_snapshot_service"]
 
     try:
-        flights_payload = client.fetch_flights(bbox=bbox)
+        flights_payload = service.get_flights(bbox=bbox)
     except OpenSkyError as exc:
         return jsonify({"error": str(exc)}), 502
 

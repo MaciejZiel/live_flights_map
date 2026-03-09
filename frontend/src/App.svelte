@@ -111,6 +111,8 @@
           Live sync...
         {:else if state.status === "error"}
           Upstream error
+        {:else if state.source === "cache"}
+          Cached
         {:else if state.status === "success"}
           Live
         {:else}
@@ -124,6 +126,10 @@
 
   {#if state.error}
     <div class="error-banner">{state.error}</div>
+  {/if}
+
+  {#if state.warning}
+    <div class="warning-banner">{state.warning}</div>
   {/if}
 
   <main class="layout">
@@ -240,6 +246,13 @@
     border-radius: 14px;
     background: rgba(183, 57, 57, 0.12);
     color: #852020;
+  }
+
+  .warning-banner {
+    padding: 0.9rem 1rem;
+    border-radius: 14px;
+    background: rgba(196, 106, 23, 0.14);
+    color: #91510e;
   }
 
   .layout {

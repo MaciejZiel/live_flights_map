@@ -12,6 +12,9 @@ const initialState = {
   fetchedAt: null,
   count: 0,
   bbox: null,
+  source: "live",
+  warning: null,
+  stale: false,
 };
 
 function normalizeBbox(bbox) {
@@ -65,12 +68,16 @@ function createFlightsStore() {
         fetchedAt: payload.fetched_at ?? null,
         count: payload.count ?? 0,
         bbox: payload.bbox ?? null,
+        source: payload.meta?.source ?? "live",
+        warning: payload.meta?.warning ?? null,
+        stale: payload.meta?.stale ?? false,
       });
     } catch (error) {
       update((state) => ({
         ...state,
         status: "error",
         error: error instanceof Error ? error.message : "Unknown error.",
+        warning: null,
       }));
     }
   }

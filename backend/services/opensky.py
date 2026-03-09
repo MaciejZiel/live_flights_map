@@ -10,6 +10,10 @@ class OpenSkyError(Exception):
     pass
 
 
+class OpenSkyRateLimitError(OpenSkyError):
+    pass
+
+
 @dataclass(slots=True)
 class FlightState:
     icao24: str
@@ -31,36 +35,17 @@ class OpenSkyClient:
         username: str | None,
         password: str | None,
         timeout: float,
+        max_retries: int,
     ) -> None:
         self.base_url = base_url
         self.timeout = timeout
+        self.max_retries = max(max_retries, 0)
         self.session = requests.Session()
         if username and password:
             self.session.auth = (username, password)
 
     def fetch_flights(self, bbox: dict[str, float]) -> dict[str, object]:
-        try:
-            response = self.session.get(
-                self.base_url,
-                params=bbox,
-                timeout=self.timeout,
-            )
-            response.raise_for_status()
-        except requests.HTTPError as exc:
-            status_code = exc.response.status_code if exc.response is not None else None
-            if status_code == 401:
-                message = "OpenSky rejected the credentials."
-            elif status_code == 403:
-                message = "OpenSky denied access for this request."
-            elif status_code == 429:
-                message = "OpenSky rate limit exceeded."
-            else:
-                message = f"OpenSky returned HTTP {status_code}."
-            raise OpenSkyError(message) from exc
-        except requests.ConnectionError as exc:
-            raise OpenSkyError("Could not reach OpenSky from the current environment.") from exc
-        except requests.RequestException as exc:
-            raise OpenSkyError("Unable to fetch data from OpenSky.") from exc
+        response = self._request_snapshot(bbox)
 
         payload = response.json()
         states = payload.get("states") or []
@@ -71,6 +56,44 @@ class OpenSkyClient:
             "count": len(flights),
             "flights": flights,
         }
+
+    def _request_snapshot(self, bbox: dict[str, float]) -> requests.Response:
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.session.get(
+                    self.base_url,
+                    params=bbox,
+                    timeout=self.timeout,
+                )
+                response.raise_for_status()
+                return response
+            except requests.Timeout as exc:
+                if attempt < self.max_retries:
+                    continue
+                raise OpenSkyError("OpenSky request timed out.") from exc
+            except requests.HTTPError as exc:
+                status_code = (
+                    exc.response.status_code if exc.response is not None else None
+                )
+                if status_code == 401:
+                    message = "OpenSky rejected the credentials."
+                elif status_code == 403:
+                    message = "OpenSky denied access for this request."
+                elif status_code == 429:
+                    raise OpenSkyRateLimitError("OpenSky rate limit exceeded.") from exc
+                else:
+                    message = f"OpenSky returned HTTP {status_code}."
+                raise OpenSkyError(message) from exc
+            except requests.ConnectionError as exc:
+                if attempt < self.max_retries:
+                    continue
+                raise OpenSkyError(
+                    "Could not reach OpenSky from the current environment."
+                ) from exc
+            except requests.RequestException as exc:
+                raise OpenSkyError("Unable to fetch data from OpenSky.") from exc
+
+        raise OpenSkyError("Unable to fetch data from OpenSky.")
 
     def _normalize_states(self, states: list[list[object]]) -> list[FlightState]:
         normalized: list[FlightState] = []

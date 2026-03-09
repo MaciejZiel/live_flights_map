@@ -48,6 +48,46 @@
     return `${durationMinutes} min`;
   }
 
+  function downloadHistory(content, extension, mimeType) {
+    if (typeof document === "undefined" || !flight || trailPoints.length === 0) {
+      return;
+    }
+
+    const link = document.createElement("a");
+    const blob = new Blob([content], { type: mimeType });
+    const callsign = (flight.callsign ?? flight.icao24 ?? "flight").replace(/\s+/g, "-").toLowerCase();
+
+    const downloadUrl = URL.createObjectURL(blob);
+    link.href = downloadUrl;
+    link.download = `${callsign}-history.${extension}`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 0);
+  }
+
+  function exportHistoryAsJson() {
+    downloadHistory(JSON.stringify(trailPoints, null, 2), "json", "application/json");
+  }
+
+  function exportHistoryAsCsv() {
+    const rows = [
+      ["timestamp", "latitude", "longitude", "altitude", "velocity", "vertical_rate"],
+      ...trailPoints.map((point) => [
+        new Date(point.timestamp).toISOString(),
+        point.latitude,
+        point.longitude,
+        point.altitude ?? "",
+        point.velocity ?? "",
+        point.vertical_rate ?? "",
+      ]),
+    ];
+
+    const csv = rows
+      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+
+    downloadHistory(csv, "csv", "text/csv;charset=utf-8");
+  }
+
   $: historySamples = trailPoints.slice(-24);
   $: altitudeSamples = historySamples.filter((point) => point.altitude !== null && point.altitude !== undefined);
   $: speedSamples = historySamples.filter((point) => point.velocity !== null && point.velocity !== undefined);
@@ -117,6 +157,27 @@
       <div class="history-header">
         <strong>Session history</strong>
         <span>{historySamples.length} samples</span>
+      </div>
+
+      <div class="history-actions">
+        <button
+          class="history-action"
+          type="button"
+          title="Export the selected flight history as JSON"
+          disabled={!trailPoints.length}
+          on:click={exportHistoryAsJson}
+        >
+          Export JSON
+        </button>
+        <button
+          class="history-action"
+          type="button"
+          title="Export the selected flight history as CSV"
+          disabled={!trailPoints.length}
+          on:click={exportHistoryAsCsv}
+        >
+          Export CSV
+        </button>
       </div>
 
       {#if altitudeSamples.length > 1}
@@ -286,6 +347,28 @@
   .history-header span {
     font-size: 0.82rem;
     color: var(--color-muted);
+  }
+
+  .history-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+  }
+
+  .history-action {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.68rem 0.82rem;
+    font: inherit;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .history-action:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   .history-chart {

@@ -45,7 +45,6 @@
 
 - Regional traffic stats: flight count, average altitude, popular routes.
 - Day-over-day and week-over-week traffic comparison.
-- Export flight history to CSV or JSON.
 - Saved and replayable monitoring sessions.
 
 ## UX and Accessibility

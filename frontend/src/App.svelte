@@ -1,6 +1,7 @@
 <script>
   import { onMount } from "svelte";
 
+  import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
 
@@ -16,6 +17,13 @@
   const unsubscribe = flightsStore.subscribe((value) => {
     state = value;
   });
+
+  let filters = {
+    query: "",
+    minAltitude: "",
+    hideGroundTraffic: true,
+  };
+  let selectedIcao24 = null;
 
   onMount(() => {
     flightsStore.start();
@@ -41,6 +49,43 @@
   function handleBoundsChange(event) {
     flightsStore.setBbox(event.detail.bbox);
   }
+
+  function handleFlightSelect(event) {
+    selectedIcao24 = event.detail.flight.icao24;
+  }
+
+  function resetFilters() {
+    filters = {
+      query: "",
+      minAltitude: "",
+      hideGroundTraffic: true,
+    };
+  }
+
+  $: normalizedQuery = filters.query.trim().toLowerCase();
+  $: minimumAltitude = Number(filters.minAltitude);
+  $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
+  $: filteredFlights = state.flights.filter((flight) => {
+    const matchesQuery =
+      !normalizedQuery ||
+      flight.icao24.includes(normalizedQuery) ||
+      (flight.callsign ?? "").toLowerCase().includes(normalizedQuery) ||
+      (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery);
+
+    const matchesAltitude =
+      !hasMinimumAltitude ||
+      (flight.altitude !== null && flight.altitude !== undefined && flight.altitude >= minimumAltitude);
+
+    const matchesGroundFilter = !filters.hideGroundTraffic || !flight.on_ground;
+
+    return matchesQuery && matchesAltitude && matchesGroundFilter;
+  });
+  $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
+    selectedIcao24 = null;
+  }
+  $: selectedFlight = selectedIcao24
+    ? filteredFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
+    : null;
 </script>
 
 <svelte:head>
@@ -72,7 +117,7 @@
           Idle
         {/if}
       </div>
-      <p>{state.count} aircraft</p>
+      <p>{filteredFlights.length} shown / {state.count} tracked</p>
       <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
     </div>
   </header>
@@ -96,20 +141,36 @@
       </section>
 
       <section class="panel">
-        <h2>Refresh cycle</h2>
-        <p>Frontend polls backend every 12 seconds.</p>
-        <p>Backend fetches a fresh OpenSky snapshot for each request.</p>
+        <h2>Filters</h2>
+        <label class="field">
+          <span>Search</span>
+          <input
+            bind:value={filters.query}
+            type="text"
+            placeholder="callsign, ICAO24, country"
+          />
+        </label>
+        <label class="field">
+          <span>Min altitude (m)</span>
+          <input bind:value={filters.minAltitude} type="number" min="0" step="100" />
+        </label>
+        <label class="checkbox-field">
+          <input bind:checked={filters.hideGroundTraffic} type="checkbox" />
+          <span>Hide ground traffic</span>
+        </label>
+        <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>
       </section>
 
-      <section class="panel">
-        <h2>Legend</h2>
-        <p>Aircraft icons rotate using `true_track` from OpenSky.</p>
-        <p>Click any aircraft to inspect callsign, ICAO24 and altitude.</p>
-      </section>
+      <FlightDetailsPanel flight={selectedFlight} />
     </aside>
 
     <section class="map-card">
-      <FlightMap flights={state.flights} on:boundschange={handleBoundsChange} />
+      <FlightMap
+        flights={filteredFlights}
+        selectedIcao24={selectedIcao24}
+        on:boundschange={handleBoundsChange}
+        on:select={handleFlightSelect}
+      />
     </section>
   </main>
 </div>
@@ -209,6 +270,47 @@
   .panel h2 {
     margin: 0 0 0.8rem;
     font-size: 1rem;
+  }
+
+  .field,
+  .checkbox-field {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .field span,
+  .checkbox-field span {
+    font-size: 0.83rem;
+    font-weight: 600;
+    color: #49657f;
+  }
+
+  .field input {
+    border: 1px solid rgba(73, 105, 135, 0.2);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .checkbox-field {
+    grid-template-columns: auto 1fr;
+    align-items: center;
+  }
+
+  .reset-button {
+    border: 0;
+    border-radius: 12px;
+    padding: 0.8rem 0.95rem;
+    font: inherit;
+    font-weight: 700;
+    color: #f4f9ff;
+    background: linear-gradient(135deg, #12395d 0%, #375f86 100%);
+    cursor: pointer;
+  }
+
+  .reset-button:hover {
+    filter: brightness(1.04);
   }
 
   .panel p {

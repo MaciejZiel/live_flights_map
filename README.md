@@ -25,6 +25,9 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 - odpytuje backend co 12 sekund
 - wysyła aktualny bounding box mapy po przesunięciu lub zoomie
 - renderuje samoloty jako markery Leaflet
+- animuje pozycje markerów pomiędzy kolejnymi snapshotami
+- pozwala filtrować loty po callsign, ICAO24, kraju i minimalnej wysokości
+- pokazuje panel szczegółów zaznaczonego samolotu
 - obraca ikonę na podstawie `true_track`
 - usuwa markery nieobecne w nowej odpowiedzi i aktualizuje istniejące
 

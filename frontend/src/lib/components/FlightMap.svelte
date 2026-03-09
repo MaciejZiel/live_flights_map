@@ -6,6 +6,7 @@
   import { syncAircraftMarkers } from "../map/aircraftMarkers.js";
 
   export let flights = [];
+  export let selectedIcao24 = null;
 
   const dispatch = createEventDispatcher();
   let container;
@@ -54,7 +55,9 @@
   });
 
   $: if (aircraftLayer) {
-    syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
+    syncAircraftMarkers(aircraftLayer, markerRegistry, flights, selectedIcao24, (flight) => {
+      dispatch("select", { flight });
+    });
   }
 </script>
 

@@ -14,10 +14,14 @@ class OpenSkyError(Exception):
 class FlightState:
     icao24: str
     callsign: str | None
+    origin_country: str | None
     longitude: float
     latitude: float
     true_track: float | None
     altitude: float | None
+    velocity: float | None
+    vertical_rate: float | None
+    on_ground: bool
 
 
 class OpenSkyClient:
@@ -79,7 +83,10 @@ class OpenSkyClient:
             longitude = self._as_float(state[5])
             latitude = self._as_float(state[6])
             altitude = self._as_float(state[7]) or self._as_float(state[13])
+            velocity = self._as_float(state[9])
             true_track = self._as_float(state[10])
+            vertical_rate = self._as_float(state[11])
+            on_ground = self._as_bool(state[8], default=False)
 
             if not icao24 or longitude is None or latitude is None:
                 continue
@@ -88,10 +95,14 @@ class OpenSkyClient:
                 FlightState(
                     icao24=icao24,
                     callsign=self._clean_callsign(state[1]),
+                    origin_country=self._clean_callsign(state[2]),
                     longitude=longitude,
                     latitude=latitude,
                     true_track=true_track,
                     altitude=altitude,
+                    velocity=velocity,
+                    vertical_rate=vertical_rate,
+                    on_ground=on_ground,
                 )
             )
 
@@ -119,3 +130,9 @@ class OpenSkyClient:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _as_bool(value: object, default: bool) -> bool:
+        if isinstance(value, bool):
+            return value
+        return default

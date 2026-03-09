@@ -1,4 +1,4 @@
-const STORAGE_KEY = "live-flights-map.preferences";
+const STORAGE_KEY = "live-flights-map.preferences.v2";
 
 export function loadUserPreferences() {
   if (typeof window === "undefined") {

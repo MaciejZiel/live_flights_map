@@ -9,7 +9,7 @@
   export let flights = [];
   export let selectedIcao24 = null;
   export let followAircraft = false;
-  export let mapStyle = "aviation";
+  export let mapStyle = "standard";
   export let trailPoints = [];
   export let watchedIcao24s = [];
   export let watchModeEnabled = false;
@@ -324,7 +324,7 @@
 
   onMount(() => {
     const initialCenter = initialViewport?.center ?? [52.2297, 21.0122];
-    const initialZoom = initialViewport?.zoom ?? 7.7;
+    const initialZoom = initialViewport?.zoom ?? 7.1;
 
     map = L.map(container, {
       zoomControl: false,
@@ -443,9 +443,9 @@
 
   .map-tint {
     background:
-      linear-gradient(180deg, rgba(27, 44, 32, 0.18) 0%, rgba(16, 23, 14, 0.28) 100%),
-      radial-gradient(circle at center, rgba(135, 167, 118, 0.11), transparent 55%);
-    mix-blend-mode: multiply;
+      linear-gradient(180deg, rgba(44, 73, 49, 0.12) 0%, rgba(24, 39, 22, 0.22) 100%),
+      radial-gradient(circle at center, rgba(127, 160, 117, 0.08), transparent 58%);
+    mix-blend-mode: soft-light;
   }
 
   .map-vignette {

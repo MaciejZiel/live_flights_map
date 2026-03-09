@@ -52,10 +52,10 @@
   };
   let selectedIcao24 = null;
   let followAircraft = false;
-  let mapStyle = "aviation";
+  let mapStyle = "standard";
   let mapViewport = {
     center: [52.2297, 21.0122],
-    zoom: 7.7,
+    zoom: 7.1,
   };
   let preferencesReady = false;
   let searchInput;
@@ -1346,7 +1346,7 @@
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
     : "52.23, 21.01";
-  $: zoomLabel = Number.isFinite(mapViewport?.zoom) ? mapViewport.zoom.toFixed(1) : "7.7";
+  $: zoomLabel = Number.isFinite(mapViewport?.zoom) ? mapViewport.zoom.toFixed(1) : "7.1";
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: canStepReplayBackward =
     replaySourceSnapshots.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);

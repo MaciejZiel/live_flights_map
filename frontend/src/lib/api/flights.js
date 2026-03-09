@@ -1,7 +1,7 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
-function buildFlightsUrl(bbox) {
-  const url = new URL(`${API_BASE_URL}/api/flights`, window.location.origin);
+function buildApiUrl(pathname, bbox) {
+  const url = new URL(`${API_BASE_URL}${pathname}`, window.location.origin);
 
   if (bbox) {
     url.searchParams.set("lamin", bbox.lamin.toFixed(4));
@@ -15,6 +15,14 @@ function buildFlightsUrl(bbox) {
   }
 
   return url.toString();
+}
+
+function buildFlightsUrl(bbox) {
+  return buildApiUrl("/api/flights", bbox);
+}
+
+export function buildFlightsStreamUrl(bbox) {
+  return buildApiUrl("/api/flights/stream", bbox);
 }
 
 export async function fetchFlights(bbox) {

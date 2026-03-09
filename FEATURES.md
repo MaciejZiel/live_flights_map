@@ -60,7 +60,6 @@
 
 ## Data Quality and Performance
 
-- WebSocket or SSE updates instead of polling only.
 - Progressive loading based on zoom level.
 - Unified retry and error-handling policy.
 - Performance monitoring and error logging.

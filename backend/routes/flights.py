@@ -1,8 +1,15 @@
-from flask import Blueprint, current_app, jsonify, request
+import json
+from time import sleep
+
+from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
 from backend.services.opensky import OpenSkyError
 
 api = Blueprint("api", __name__)
+
+
+def _build_sse_event(event_name: str, payload: dict[str, object]) -> str:
+    return f"event: {event_name}\ndata: {json.dumps(payload)}\n\n"
 
 
 def _parse_bbox():
@@ -61,3 +68,33 @@ def list_flights():
         return jsonify({"error": str(exc)}), 502
 
     return jsonify(flights_payload)
+
+
+@api.get("/flights/stream")
+def stream_flights():
+    try:
+        bbox = _parse_bbox()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    service = current_app.extensions["flight_snapshot_service"]
+    interval_seconds = current_app.config["FLIGHT_STREAM_INTERVAL_SECONDS"]
+
+    @stream_with_context
+    def generate():
+        yield "retry: 5000\n\n"
+
+        while True:
+            try:
+                flights_payload = service.get_flights(bbox=bbox)
+                yield _build_sse_event("snapshot", flights_payload)
+            except OpenSkyError as exc:
+                yield _build_sse_event("upstream_error", {"error": str(exc)})
+
+            sleep(interval_seconds)
+
+    response = Response(generate(), mimetype="text/event-stream")
+    response.headers["Cache-Control"] = "no-cache"
+    response.headers["Connection"] = "keep-alive"
+    response.headers["X-Accel-Buffering"] = "no"
+    return response

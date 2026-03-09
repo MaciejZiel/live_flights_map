@@ -10,8 +10,10 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 ### Backend
 
 - `GET /api/flights`
+- `GET /api/flights/stream` (SSE transport)
 - pobiera świeży snapshot z OpenSky przy każdym wywołaniu
 - ma krótki cache per `bbox`, retry na timeout i fallback do ostatniego snapshotu przy błędach upstreamu
+- dla frontendu wspiera SSE z fallbackiem do zwykłego pollingu
 - filtruje odpowiedź do pól:
   - `icao24`
   - `callsign`
@@ -24,6 +26,7 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 ### Frontend
 
 - odpytuje backend co 12 sekund
+- preferuje transport SSE i przełącza się na polling przy zerwaniu streamu
 - wysyła aktualny bounding box mapy po przesunięciu lub zoomie
 - renderuje samoloty jako markery Leaflet
 - animuje pozycje markerów pomiędzy kolejnymi snapshotami
@@ -68,6 +71,12 @@ API:
 http://127.0.0.1:5000/api/flights
 ```
 
+Stream SSE:
+
+```text
+http://127.0.0.1:5000/api/flights/stream
+```
+
 Przykład z własnym bounding boxem:
 
 ```text
@@ -104,6 +113,7 @@ OPENSKY_PASSWORD=
 OPENSKY_RETRY_COUNT=1
 OPENSKY_CACHE_TTL=8
 OPENSKY_COOLDOWN_SECONDS=25
+FLIGHT_STREAM_INTERVAL_SECONDS=12
 ```
 
 Obecna integracja zakłada standardowe dane logowania OpenSky (`username` + `password`), nie osobny token API.

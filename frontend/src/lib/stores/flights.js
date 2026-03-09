@@ -1,10 +1,11 @@
 import { writable } from "svelte/store";
 
-import { fetchFlights } from "../api/flights.js";
+import { buildFlightsStreamUrl, fetchFlights } from "../api/flights.js";
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 12000);
 const BBOX_PRECISION = 4;
 const BBOX_DEBOUNCE_MS = Number(import.meta.env.VITE_BBOX_DEBOUNCE_MS ?? 350);
+const USE_SSE = import.meta.env.VITE_USE_SSE !== "false";
 
 const initialState = {
   status: "idle",
@@ -17,6 +18,7 @@ const initialState = {
   warning: null,
   stale: false,
   reason: "live",
+  transport: USE_SSE ? "sse" : "polling",
 };
 
 function normalizeBbox(bbox) {
@@ -54,28 +56,36 @@ function createFlightsStore() {
   let poller = null;
   let currentBbox = null;
   let bboxRefreshTimeout = null;
+  let eventSource = null;
+  let streamClosedManually = false;
 
-  async function refresh() {
+  function applyPayload(payload, transport) {
+    set({
+      status: "success",
+      flights: payload.flights ?? [],
+      error: null,
+      fetchedAt: payload.fetched_at ?? null,
+      count: payload.count ?? 0,
+      bbox: payload.bbox ?? null,
+      source: payload.meta?.source ?? "live",
+      warning: payload.meta?.warning ?? null,
+      stale: payload.meta?.stale ?? false,
+      reason: payload.meta?.reason ?? "live",
+      transport,
+    });
+  }
+
+  async function refresh(transport = "polling") {
     update((state) => ({
       ...state,
       status: state.flights.length ? "refreshing" : "loading",
       error: null,
+      transport,
     }));
 
     try {
       const payload = await fetchFlights(currentBbox);
-      set({
-        status: "success",
-        flights: payload.flights ?? [],
-        error: null,
-        fetchedAt: payload.fetched_at ?? null,
-        count: payload.count ?? 0,
-        bbox: payload.bbox ?? null,
-        source: payload.meta?.source ?? "live",
-        warning: payload.meta?.warning ?? null,
-        stale: payload.meta?.stale ?? false,
-        reason: payload.meta?.reason ?? "live",
-      });
+      applyPayload(payload, transport);
     } catch (error) {
       update((state) => ({
         ...state,
@@ -83,8 +93,112 @@ function createFlightsStore() {
         error: error instanceof Error ? error.message : "Unknown error.",
         warning: null,
         reason: "error",
+        transport,
       }));
     }
+  }
+
+  function stopPolling() {
+    if (!poller) {
+      return;
+    }
+
+    window.clearInterval(poller);
+    poller = null;
+  }
+
+  function startPolling() {
+    if (poller) {
+      return;
+    }
+
+    closeStream();
+    refresh("polling");
+    poller = window.setInterval(() => refresh("polling"), REFRESH_INTERVAL_MS);
+  }
+
+  function closeStream() {
+    if (!eventSource) {
+      return;
+    }
+
+    streamClosedManually = true;
+    eventSource.close();
+    eventSource = null;
+  }
+
+  function connectStream() {
+    if (!USE_SSE || typeof window === "undefined" || typeof window.EventSource === "undefined") {
+      startPolling();
+      return;
+    }
+
+    stopPolling();
+    closeStream();
+
+    update((state) => ({
+      ...state,
+      status: state.flights.length ? "refreshing" : "loading",
+      error: null,
+      transport: "sse",
+    }));
+
+    streamClosedManually = false;
+    eventSource = new window.EventSource(buildFlightsStreamUrl(currentBbox));
+
+    eventSource.addEventListener("snapshot", (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        applyPayload(payload, "sse");
+      } catch {
+        update((state) => ({
+          ...state,
+          status: "error",
+          error: "Received an invalid SSE payload.",
+          reason: "error",
+          transport: "sse",
+        }));
+      }
+    });
+
+    eventSource.addEventListener("upstream_error", (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        update((state) => ({
+          ...state,
+          status: "error",
+          error: payload.error ?? "Live stream error.",
+          warning: null,
+          reason: "error",
+          transport: "sse",
+        }));
+      } catch {
+        update((state) => ({
+          ...state,
+          status: "error",
+          error: "Live stream error.",
+          warning: null,
+          reason: "error",
+          transport: "sse",
+        }));
+      }
+    });
+
+    eventSource.onerror = () => {
+      if (streamClosedManually) {
+        streamClosedManually = false;
+        return;
+      }
+
+      closeStream();
+      update((state) => ({
+        ...state,
+        warning:
+          state.warning ?? "Live stream disconnected. Falling back to interval polling.",
+        transport: "polling",
+      }));
+      startPolling();
+    };
   }
 
   function setBbox(nextBbox) {
@@ -106,32 +220,39 @@ function createFlightsStore() {
 
       bboxRefreshTimeout = window.setTimeout(() => {
         bboxRefreshTimeout = null;
-        refresh();
+        refresh("polling");
+      }, BBOX_DEBOUNCE_MS);
+      return;
+    }
+
+    if (eventSource) {
+      if (bboxRefreshTimeout) {
+        window.clearTimeout(bboxRefreshTimeout);
+      }
+
+      bboxRefreshTimeout = window.setTimeout(() => {
+        bboxRefreshTimeout = null;
+        connectStream();
       }, BBOX_DEBOUNCE_MS);
     }
   }
 
   function start() {
-    if (poller) {
+    if (poller || eventSource) {
       return;
     }
 
-    refresh();
-    poller = window.setInterval(refresh, REFRESH_INTERVAL_MS);
+    connectStream();
   }
 
   function stop() {
-    if (!poller) {
-      return;
-    }
-
     if (bboxRefreshTimeout) {
       window.clearTimeout(bboxRefreshTimeout);
       bboxRefreshTimeout = null;
     }
 
-    window.clearInterval(poller);
-    poller = null;
+    closeStream();
+    stopPolling();
   }
 
   return {

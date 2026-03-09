@@ -422,7 +422,7 @@
             Dark
           </button>
         </div>
-        <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
+      <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
           {#if state.status === "loading"}
             Syncing...
           {:else if state.status === "refreshing"}
@@ -440,6 +440,7 @@
           {/if}
         </div>
         <p>{filteredFlights.length} shown / {state.count} tracked</p>
+        <p>Transport: {state.transport === "sse" ? "SSE" : "Polling"}</p>
         <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
         <p>Freshness: {getFreshnessLabel(state.fetchedAt)}</p>
         <p>Confidence: {getConfidenceLabel(state)}</p>

@@ -22,6 +22,9 @@ class Config:
     OPENSKY_RETRY_COUNT = int(os.getenv("OPENSKY_RETRY_COUNT", "1"))
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "8"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "25"))
+    FLIGHT_STREAM_INTERVAL_SECONDS = float(
+        os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "12")
+    )
 
     MAP_DEFAULT_LAMIN = float(os.getenv("MAP_DEFAULT_LAMIN", "49.0"))
     MAP_DEFAULT_LAMAX = float(os.getenv("MAP_DEFAULT_LAMAX", "55.1"))

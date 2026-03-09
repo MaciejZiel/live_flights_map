@@ -10,6 +10,7 @@
   export let selectedIcao24 = null;
   export let followAircraft = false;
   export let mapStyle = "standard";
+  export let initialViewport = null;
 
   const dispatch = createEventDispatcher();
   let shell;
@@ -145,6 +146,14 @@
         lomax: bounds.getEast(),
       },
     });
+
+    const center = map.getCenter();
+    dispatch("viewportchange", {
+      viewport: {
+        center: [center.lat, center.lng],
+        zoom: map.getZoom(),
+      },
+    });
   }
 
   function centerOnSelectedAircraft() {
@@ -197,11 +206,14 @@
   }
 
   onMount(() => {
+    const initialCenter = initialViewport?.center ?? [52.15, 19.4];
+    const initialZoom = initialViewport?.zoom ?? 6;
+
     map = L.map(container, {
       zoomControl: true,
       minZoom: 4,
       preferCanvas: true,
-    }).setView([52.15, 19.4], 6);
+    }).setView(initialCenter, initialZoom);
 
     setBasemap(mapStyle);
 

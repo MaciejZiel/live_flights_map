@@ -4,6 +4,7 @@
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
+  import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
 
   let state = {
     status: "idle",
@@ -26,8 +27,21 @@
   let selectedIcao24 = null;
   let followAircraft = false;
   let mapStyle = "standard";
+  let mapViewport = null;
+  let preferencesReady = false;
 
   onMount(() => {
+    const savedPreferences = loadUserPreferences();
+    if (savedPreferences) {
+      filters = {
+        ...filters,
+        ...savedPreferences.filters,
+      };
+      mapStyle = savedPreferences.mapStyle ?? mapStyle;
+      mapViewport = savedPreferences.mapViewport ?? mapViewport;
+    }
+
+    preferencesReady = true;
     flightsStore.start();
 
     return () => {
@@ -54,6 +68,10 @@
 
   function handleFlightSelect(event) {
     selectedIcao24 = event.detail.flight.icao24;
+  }
+
+  function handleViewportChange(event) {
+    mapViewport = event.detail.viewport;
   }
 
   function toggleFollowAircraft() {
@@ -99,6 +117,13 @@
     : null;
   $: if (!selectedFlight) {
     followAircraft = false;
+  }
+  $: if (preferencesReady) {
+    saveUserPreferences({
+      filters,
+      mapStyle,
+      mapViewport,
+    });
   }
 </script>
 
@@ -212,7 +237,9 @@
         selectedIcao24={selectedIcao24}
         followAircraft={followAircraft}
         mapStyle={mapStyle}
+        initialViewport={mapViewport}
         on:boundschange={handleBoundsChange}
+        on:viewportchange={handleViewportChange}
         on:select={handleFlightSelect}
       />
     </section>

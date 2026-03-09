@@ -64,7 +64,6 @@
 - Light and dark themes.
 - Keyboard shortcuts.
 - Tooltips and onboarding for new users.
-- Persisted last view, zoom, and filters.
 - Multi-language interface.
 - Clear `live`, `cached`, `error`, and `rate limited` states.
 - Icon and symbol legend.

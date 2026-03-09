@@ -1504,6 +1504,12 @@
     : { notes: "", tags: [] };
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
+  $: mapStyleLabel = {
+    standard: "Map",
+    dark: "Dark",
+    satellite: "Satellite",
+    aviation: "Aero",
+  }[mapStyle] ?? "Map";
   $: if (!selectedFlightDetailsKey) {
     lastSelectedFlightDetailsKey = null;
     selectedFlightDetails = null;
@@ -1727,6 +1733,13 @@
         {/if}
       </div>
     </aside>
+
+    <nav aria-label="Quick map controls" class="overlay-card bottom-dock">
+      <button class="dock-button" type="button" on:click={() => triggerViewPreset("poland")}>Poland</button>
+      <button class="dock-button" type="button" on:click={() => triggerViewPreset("europe")}>Europe</button>
+      <button class="dock-button" type="button" on:click={cycleMapStyle}>{mapStyleLabel}</button>
+      <button class="dock-button" type="button" on:click={triggerFullscreenToggle}>Fullscreen</button>
+    </nav>
   </section>
 </div>
 
@@ -1766,6 +1779,7 @@
   .radar-topbar,
   .radar-left-panel,
   .radar-right-panel,
+  .bottom-dock,
   .floating-messages {
     position: absolute;
     z-index: 1100;
@@ -2174,6 +2188,40 @@
     cursor: pointer;
   }
 
+  .bottom-dock {
+    left: 50%;
+    bottom: 0.95rem;
+    transform: translateX(-50%);
+    display: inline-flex;
+    gap: 0.32rem;
+    padding: 0.34rem;
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(25, 27, 31, 0.97) 0%, rgba(12, 14, 18, 0.97) 100%);
+  }
+
+  .dock-button {
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 13px;
+    padding: 0.66rem 0.88rem;
+    font: inherit;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #eef2f6;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition:
+      transform 160ms ease,
+      border-color 160ms ease,
+      background 160ms ease;
+  }
+
+  .dock-button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 211, 79, 0.24);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
   .sidebar-backdrop {
     display: none;
   }
@@ -2199,6 +2247,17 @@
   @media (max-width: 960px) {
     .radar-left-panel {
       display: none;
+    }
+
+    .bottom-dock {
+      bottom: 0.75rem;
+      width: calc(100vw - 1.5rem);
+      justify-content: center;
+    }
+
+    .dock-button {
+      flex: 1 1 0;
+      padding-inline: 0.5rem;
     }
 
     .radar-right-panel {
@@ -2249,6 +2308,11 @@
     .center-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
+    }
+
+    .bottom-dock {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
 </style>

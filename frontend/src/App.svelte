@@ -1272,6 +1272,9 @@
       : null,
   ].filter(Boolean);
   $: activeAlertEvents = alertEvents.slice(0, 4);
+  $: compactLeaderboardFlights = leaderboardFlights.slice(0, 3);
+  $: leftBookmarks = savedViews.slice(0, 3);
+  $: leftWatchPreview = watchedFlightEntries.slice(0, 3);
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
     : "52.15, 19.40";
@@ -1476,131 +1479,74 @@
 
     <aside class="overlay-card radar-left-panel">
       <div class="panel-stack">
-        <TrafficBoardPanel
-          flights={leaderboardFlights}
-          selectedIcao24={selectedIcao24}
-          viewport={mapViewport}
-          title="Most tracked flights"
-          subtitle="Live board"
-          maxRows={5}
-          onSelectFlight={selectWatchedFlight}
-        />
-
-        <section class="hud-card">
-          <div class="card-header">
-            <div>
-              <p class="section-kicker">Overview</p>
-              <h2>Radar snapshot</h2>
-            </div>
-            <span class="card-badge">{zoomLabel}x</span>
+        <section class="widget-card">
+          <div class="widget-header">
+            <strong>Most tracked flights</strong>
+            <span class="live-pill">LIVE</span>
           </div>
 
-          <div class="stat-grid">
-            <article class="stat-card">
-              <span>Tracked</span>
-              <strong>{formatCompactCount(visibleTrackedCount)}</strong>
-            </article>
-            <article class="stat-card">
-              <span>Airborne</span>
-              <strong>{airborneCount}</strong>
-            </article>
-            <article class="stat-card">
-              <span>Ground</span>
-              <strong>{groundCount}</strong>
-            </article>
-            <article class="stat-card">
-              <span>Avg speed</span>
-              <strong>{averageSpeedKmh} km/h</strong>
-            </article>
-          </div>
-
-          <div class="snapshot-meta">
-            <span>Center</span>
-            <strong>{mapCenterLabel}</strong>
-          </div>
-          <div class="snapshot-meta">
-            <span>Mode</span>
-            <strong>{activeMonitoringSession ? "Saved session" : activeReplaySnapshot ? "Replay" : "Live"}</strong>
-          </div>
-          <div class="snapshot-meta">
-            <span>Progressive cap</span>
-            <strong>{displayLimit ? displayLimit : "Off"}</strong>
-          </div>
-        </section>
-
-        <section class="hud-card">
-          <div class="card-header">
-            <div>
-              <p class="section-kicker">Radar tools</p>
-              <h2>Basemap and focus</h2>
-            </div>
-          </div>
-
-          <div class="segmented-control">
-            <button class:active={mapStyle === "standard"} type="button" on:click={() => (mapStyle = "standard")}>
-              Radar
-            </button>
-            <button class:active={mapStyle === "satellite"} type="button" on:click={() => (mapStyle = "satellite")}>
-              Sat
-            </button>
-            <button class:active={mapStyle === "dark"} type="button" on:click={() => (mapStyle = "dark")}>
-              Dark
-            </button>
-            <button class:active={mapStyle === "aviation"} type="button" on:click={() => (mapStyle = "aviation")}>
-              IFR
-            </button>
-          </div>
-
-          <div class="chip-list">
-            <button class="tool-chip" type="button" on:click={() => triggerViewPreset("poland")}>Poland</button>
-            <button class="tool-chip" type="button" on:click={() => triggerViewPreset("europe")}>Europe</button>
-            <button class="tool-chip" type="button" on:click={() => triggerViewPreset("world")}>World</button>
-            <button class="tool-chip accent" type="button" on:click={triggerFullscreenToggle}>Fullscreen</button>
-          </div>
-        </section>
-
-        <section class="hud-card">
-          <div class="card-header">
-            <div>
-              <p class="section-kicker">Presets</p>
-              <h2>Saved filters</h2>
-            </div>
-            <span class="card-badge">{activeFilterCount}</span>
-          </div>
-
-          {#if filterPresets.length}
-            <div class="chip-list">
-              {#each filterPresets.slice(0, 6) as preset}
-                <button class="tool-chip" type="button" on:click={() => applyFilterPreset(preset)}>
-                  {preset.name}
+          {#if compactLeaderboardFlights.length}
+            <div class="widget-list">
+              {#each compactLeaderboardFlights as flight, index}
+                <button class="widget-row" type="button" on:click={() => selectWatchedFlight(flight.icao24)}>
+                  <span class="widget-rank">{index + 1}.</span>
+                  <span class="widget-main">
+                    <strong>{flight.callsign ?? flight.icao24}</strong>
+                    <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
+                  </span>
+                  <span class="widget-highlight">{formatSpeed(flight.velocity).replace(" km/h", "")}</span>
                 </button>
               {/each}
             </div>
           {:else}
-            <p class="empty-copy">Save a filter set from the inspector to reuse it quickly.</p>
+            <p class="widget-empty">Waiting for flights in the active map view.</p>
           {/if}
         </section>
 
-        {#if activeAlertEvents.length}
-          <section class="hud-card">
-            <div class="card-header">
-              <div>
-                <p class="section-kicker">Recent alerts</p>
-                <h2>Activity log</h2>
-              </div>
-              <span class="card-badge">{activeAlertEvents.length}</span>
-            </div>
+        <section class="widget-card">
+          <div class="widget-header">
+            <strong>Radar overview</strong>
+            <span class="widget-ghost">{zoomLabel}x</span>
+          </div>
 
-            <div class="event-snippets">
-              {#each activeAlertEvents as event}
-                <article class="event-snippet">
-                  <strong>{event.message}</strong>
-                  <span>{formatTimestamp(event.timestamp)}</span>
-                </article>
+          <div class="mini-stat-list">
+            <div><span>Tracked</span><strong>{formatCompactCount(visibleTrackedCount)}</strong></div>
+            <div><span>Airborne</span><strong>{airborneCount}</strong></div>
+            <div><span>Ground</span><strong>{groundCount}</strong></div>
+            <div><span>Avg speed</span><strong>{averageSpeedKmh}</strong></div>
+          </div>
+
+          <button class="widget-footer-button" type="button" on:click={() => openInspectorTab("filters")}>
+            Open filters
+          </button>
+        </section>
+
+        <section class="widget-card compact">
+          <div class="widget-header">
+            <strong>Bookmarks</strong>
+            <span class="widget-ghost">{leftBookmarks.length}</span>
+          </div>
+
+          {#if leftBookmarks.length}
+            <div class="widget-chip-list">
+              {#each leftBookmarks as view}
+                <button class="bookmark-chip" type="button" on:click={() => loadSavedView(view.id)}>
+                  {view.name}
+                </button>
               {/each}
             </div>
-          </section>
-        {/if}
+          {:else if leftWatchPreview.length}
+            <div class="widget-chip-list">
+              {#each leftWatchPreview as entry}
+                <button class="bookmark-chip" type="button" on:click={() => selectWatchedFlight(entry.icao24)}>
+                  {entry.flight?.callsign ?? entry.icao24}
+                </button>
+              {/each}
+            </div>
+          {:else}
+            <p class="widget-empty">Save a view or add aircraft to watchlist.</p>
+          {/if}
+        </section>
       </div>
     </aside>
 
@@ -1609,105 +1555,150 @@
     {/if}
 
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
-      <div class="inspector-header">
-        <div class="inspector-title">
-          <p class="section-kicker">{selectedFlight ? "Selected aircraft" : "Traffic inspector"}</p>
-          <h2>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : "No flight selected"}</h2>
-          <p class="inspector-subtitle">
-            {selectedFlight
-              ? `${selectedFlight.origin_country ?? "Unknown country"} · operator ${selectedOperatorCode}`
-              : "Choose an aircraft marker or use the tabs below to manage the radar."}
-          </p>
-        </div>
-        {#if isMobileViewport}
-          <button class="mobile-sidebar-close" type="button" on:click={closeMobileSidebar}>Close</button>
-        {/if}
-      </div>
+      {#if !selectedFlight && inspectorTab === "details" && !isMobileViewport}
+        <div class="feed-rail">
+          <section class="feed-hero">
+            <div class="feed-hero-media">
+              <div class="feed-plane-mark">✈</div>
+            </div>
+            <div class="feed-hero-copy">
+              <strong>Traffic around {mapCenterLabel}</strong>
+              <p>{visibleTrackedCount} tracked aircraft in the active radar view.</p>
+            </div>
+          </section>
 
-      {#if selectedFlight}
-        <section class="flight-hero">
-          <div class="flight-hero-header">
+          <article class="feed-card emphasis">
+            <div class="feed-card-icon">◎</div>
             <div>
-              <span class="hero-tag">{selectedFlight.on_ground ? "Ground" : "Airborne"}</span>
-              <strong>{selectedFlight.callsign ?? selectedFlight.icao24}</strong>
+              <strong>Use radar filters</strong>
+              <p>Sort flights by speed, altitude and recent movement to clean up the map.</p>
             </div>
-            <div class="hero-actions">
-              <button class:active={followAircraft} class="hero-action" type="button" on:click={toggleFollowAircraft}>
-                {followAircraft ? "Following" : "Follow"}
-              </button>
-              <button
-                class:active={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
-                class="hero-action primary"
-                type="button"
-                on:click={toggleSelectedFlightWatchlist}
-              >
-                {selectedFlight && watchlist.includes(selectedFlight.icao24) ? "Watching" : "Watch"}
-              </button>
+          </article>
+
+          <article class="feed-card">
+            <div class="feed-card-icon">▶</div>
+            <div>
+              <strong>Playback session history</strong>
+              <p>Replay captured snapshots and jump back to live traffic in one click.</p>
             </div>
+          </article>
+
+          <article class="feed-card">
+            <div class="feed-card-icon">★</div>
+            <div>
+              <strong>Saved views and watchlist</strong>
+              <p>Pin aircraft, keep workspaces, and reopen the same radar setup later.</p>
+            </div>
+          </article>
+
+          <article class="feed-card">
+            <div class="feed-card-icon">!</div>
+            <div>
+              <strong>Alert matching</strong>
+              <p>Create callsign or ICAO alerts and let the panel keep a short event log.</p>
+            </div>
+          </article>
+        </div>
+      {:else}
+        <div class="inspector-header">
+          <div class="inspector-title">
+            <p class="section-kicker">{selectedFlight ? "Selected aircraft" : "Traffic inspector"}</p>
+            <h2>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : "No flight selected"}</h2>
+            <p class="inspector-subtitle">
+              {selectedFlight
+                ? `${selectedFlight.origin_country ?? "Unknown country"} · operator ${selectedOperatorCode}`
+                : "Choose an aircraft marker or use the tabs below to manage the radar."}
+            </p>
           </div>
+          {#if isMobileViewport}
+            <button class="mobile-sidebar-close" type="button" on:click={closeMobileSidebar}>Close</button>
+          {/if}
+        </div>
 
-          <div class="hero-metrics">
-            <article class="hero-metric">
-              <span>Altitude</span>
-              <strong>{formatAltitude(selectedFlight.altitude)}</strong>
-            </article>
-            <article class="hero-metric">
-              <span>Speed</span>
-              <strong>{formatSpeed(selectedFlight.velocity)}</strong>
-            </article>
-            <article class="hero-metric">
-              <span>Heading</span>
-              <strong>{formatHeading(selectedFlight.true_track)}</strong>
-            </article>
-            <article class="hero-metric">
-              <span>ICAO24</span>
-              <strong>{selectedFlight.icao24}</strong>
-            </article>
-          </div>
-        </section>
-      {/if}
+        {#if selectedFlight}
+          <section class="flight-hero">
+            <div class="flight-hero-header">
+              <div>
+                <span class="hero-tag">{selectedFlight.on_ground ? "Ground" : "Airborne"}</span>
+                <strong>{selectedFlight.callsign ?? selectedFlight.icao24}</strong>
+              </div>
+              <div class="hero-actions">
+                <button class:active={followAircraft} class="hero-action" type="button" on:click={toggleFollowAircraft}>
+                  {followAircraft ? "Following" : "Follow"}
+                </button>
+                <button
+                  class:active={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
+                  class="hero-action primary"
+                  type="button"
+                  on:click={toggleSelectedFlightWatchlist}
+                >
+                  {selectedFlight && watchlist.includes(selectedFlight.icao24) ? "Watching" : "Watch"}
+                </button>
+              </div>
+            </div>
 
-      <div class="inspector-tabs" role="tablist" aria-label="Radar inspector">
-        <button class:active={inspectorTab === "details"} class="inspector-tab" type="button" on:click={() => openInspectorTab("details")}>
-          Aircraft
-        </button>
-        <button class:active={inspectorTab === "filters"} class="inspector-tab" type="button" on:click={() => openInspectorTab("filters")}>
-          Filters
-        </button>
-        <button class:active={inspectorTab === "traffic"} class="inspector-tab" type="button" on:click={() => openInspectorTab("traffic")}>
-          Traffic
-        </button>
-        <button class:active={inspectorTab === "watchlist"} class="inspector-tab" type="button" on:click={() => openInspectorTab("watchlist")}>
-          Watchlist
-        </button>
-        <button class:active={inspectorTab === "replay"} class="inspector-tab" type="button" on:click={() => openInspectorTab("replay")}>
-          Playback
-        </button>
-        <button class:active={inspectorTab === "views"} class="inspector-tab" type="button" on:click={() => openInspectorTab("views")}>
-          Views
-        </button>
-        <button class:active={inspectorTab === "alerts"} class="inspector-tab" type="button" on:click={() => openInspectorTab("alerts")}>
-          Alerts
-        </button>
-        <button class:active={inspectorTab === "help"} class="inspector-tab" type="button" on:click={() => openInspectorTab("help")}>
-          Help
-        </button>
-      </div>
+            <div class="hero-metrics">
+              <article class="hero-metric">
+                <span>Altitude</span>
+                <strong>{formatAltitude(selectedFlight.altitude)}</strong>
+              </article>
+              <article class="hero-metric">
+                <span>Speed</span>
+                <strong>{formatSpeed(selectedFlight.velocity)}</strong>
+              </article>
+              <article class="hero-metric">
+                <span>Heading</span>
+                <strong>{formatHeading(selectedFlight.true_track)}</strong>
+              </article>
+              <article class="hero-metric">
+                <span>ICAO24</span>
+                <strong>{selectedFlight.icao24}</strong>
+              </article>
+            </div>
+          </section>
+        {/if}
 
-      <div class="inspector-scroll">
-        {#if inspectorTab === "details"}
-          <FlightDetailsPanel
-            flight={selectedFlight}
-            followAircraft={followAircraft}
-            trailPoints={selectedFlightTrail}
-            isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
-            annotation={selectedFlightAnnotation}
-            onToggleFollow={toggleFollowAircraft}
-            onToggleWatch={toggleSelectedFlightWatchlist}
-            onUpdateNotes={updateSelectedFlightNotes}
-            onAddTag={addSelectedFlightTag}
-            onRemoveTag={removeSelectedFlightTag}
-          />
+        <div class="inspector-tabs" role="tablist" aria-label="Radar inspector">
+          <button class:active={inspectorTab === "details"} class="inspector-tab" type="button" on:click={() => openInspectorTab("details")}>
+            Aircraft
+          </button>
+          <button class:active={inspectorTab === "filters"} class="inspector-tab" type="button" on:click={() => openInspectorTab("filters")}>
+            Filters
+          </button>
+          <button class:active={inspectorTab === "traffic"} class="inspector-tab" type="button" on:click={() => openInspectorTab("traffic")}>
+            Traffic
+          </button>
+          <button class:active={inspectorTab === "watchlist"} class="inspector-tab" type="button" on:click={() => openInspectorTab("watchlist")}>
+            Watchlist
+          </button>
+          <button class:active={inspectorTab === "replay"} class="inspector-tab" type="button" on:click={() => openInspectorTab("replay")}>
+            Playback
+          </button>
+          <button class:active={inspectorTab === "views"} class="inspector-tab" type="button" on:click={() => openInspectorTab("views")}>
+            Views
+          </button>
+          <button class:active={inspectorTab === "alerts"} class="inspector-tab" type="button" on:click={() => openInspectorTab("alerts")}>
+            Alerts
+          </button>
+          <button class:active={inspectorTab === "help"} class="inspector-tab" type="button" on:click={() => openInspectorTab("help")}>
+            Help
+          </button>
+        </div>
+
+        <div class="inspector-scroll">
+          {#if inspectorTab === "details"}
+            <FlightDetailsPanel
+              flight={selectedFlight}
+              followAircraft={followAircraft}
+              trailPoints={selectedFlightTrail}
+              isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
+              annotation={selectedFlightAnnotation}
+              onToggleFollow={toggleFollowAircraft}
+              onToggleWatch={toggleSelectedFlightWatchlist}
+              onUpdateNotes={updateSelectedFlightNotes}
+              onAddTag={addSelectedFlightTag}
+              onRemoveTag={removeSelectedFlightTag}
+            />
         {:else if inspectorTab === "traffic"}
           <TrafficBoardPanel
             flights={sortedFlights}
@@ -1943,7 +1934,8 @@
           <LegendPanel />
           <ShortcutsPanel />
         {/if}
-      </div>
+        </div>
+      {/if}
     </aside>
 
     <nav class="overlay-card bottom-dock" aria-label="Quick radar actions">
@@ -1991,8 +1983,7 @@
     inset: 0;
   }
 
-  .overlay-card,
-  .hud-card {
+  .overlay-card {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 22px;
     background:
@@ -2137,8 +2128,7 @@
 
   .status-copy span,
   .share-feedback,
-  .inspector-subtitle,
-  .empty-copy {
+  .inspector-subtitle {
     font-size: 0.78rem;
     color: #aeb9c7;
   }
@@ -2164,8 +2154,7 @@
   .hero-action,
   .reset-button,
   .secondary-button,
-  .preset-delete,
-  .segmented-control button {
+  .preset-delete {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
     padding: 0.68rem 0.9rem;
@@ -2180,11 +2169,9 @@
       transform 160ms ease;
   }
 
-  .tool-chip.accent,
   .topbar-action.accent,
   .hero-action.primary,
   .reset-button,
-  .segmented-control button.active,
   .dock-button.active {
     color: #171a1f;
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
@@ -2261,7 +2248,6 @@
     padding-right: 0.15rem;
   }
 
-  .hud-card,
   .inspector-panel,
   .flight-hero {
     padding: 1rem;
@@ -2289,34 +2275,208 @@
     background: #ffd34f;
   }
 
-  .event-snippets {
+  .widget-card {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.95rem;
+    border-radius: 20px;
+    background:
+      linear-gradient(180deg, rgba(44, 46, 50, 0.96) 0%, rgba(30, 32, 36, 0.96) 100%);
+    box-shadow:
+      0 18px 34px rgba(0, 0, 0, 0.28),
+      inset 3px 0 0 #f5b908;
+  }
+
+  .widget-card.compact {
+    padding-block: 0.85rem;
+  }
+
+  .widget-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: center;
+  }
+
+  .widget-header strong,
+  .widget-main strong,
+  .feed-hero-copy strong,
+  .feed-card strong {
+    color: #f6f8fb;
+  }
+
+  .live-pill,
+  .widget-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.25rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+  }
+
+  .live-pill {
+    color: #171a1f;
+    background: #f5b908;
+  }
+
+  .widget-ghost {
+    color: #aeb9c7;
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .widget-list,
+  .widget-chip-list,
+  .feed-rail {
     display: grid;
     gap: 0.6rem;
   }
 
-  .snapshot-meta,
-  .event-snippet {
+  .widget-row {
     display: grid;
-    gap: 0.14rem;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.6rem;
+    align-items: center;
+    width: 100%;
+    padding: 0.8rem 0.7rem;
+    border: 0;
+    border-radius: 14px;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.04);
+    text-align: left;
+    cursor: pointer;
   }
 
-  .snapshot-meta strong,
-  .event-snippet strong,
+  .widget-rank {
+    color: #d9dde4;
+    font-weight: 800;
+    font-size: 0.9rem;
+  }
+
+  .widget-main {
+    display: grid;
+    gap: 0.15rem;
+  }
+
+  .widget-main span,
+  .widget-empty,
+  .feed-hero-copy p,
+  .feed-card p {
+    font-size: 0.78rem;
+    color: #aeb9c7;
+  }
+
+  .widget-highlight {
+    font-size: 1rem;
+    font-weight: 900;
+    color: #f5b908;
+  }
+
+  .mini-stat-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .mini-stat-list div {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: center;
+    padding: 0.68rem 0.7rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .mini-stat-list span {
+    font-size: 0.8rem;
+    color: #aeb9c7;
+  }
+
+  .mini-stat-list strong {
+    color: #f6f8fb;
+  }
+
+  .widget-footer-button,
+  .bookmark-chip {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 0.72rem 0.82rem;
+    font: inherit;
+    font-weight: 700;
+    color: #f6f8fb;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+  }
+
+  .feed-rail {
+    align-content: start;
+    min-height: 0;
+    overflow-y: auto;
+    padding-right: 0.1rem;
+  }
+
+  .feed-hero,
+  .feed-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.8rem;
+    padding: 0.95rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .feed-hero {
+    grid-template-columns: 1fr;
+    overflow: hidden;
+    background:
+      linear-gradient(180deg, rgba(61, 70, 79, 0.96) 0%, rgba(33, 37, 42, 0.96) 100%);
+  }
+
+  .feed-hero-media {
+    display: grid;
+    place-items: center;
+    min-height: 8.5rem;
+    border-radius: 16px;
+    background:
+      linear-gradient(135deg, rgba(167, 179, 191, 0.18), rgba(54, 61, 68, 0.1)),
+      radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.16), transparent 32%);
+  }
+
+  .feed-plane-mark {
+    font-size: 4rem;
+    color: rgba(245, 248, 252, 0.85);
+    transform: rotate(-8deg);
+  }
+
+  .feed-card.emphasis {
+    border: 1px solid rgba(245, 185, 8, 0.22);
+  }
+
+  .feed-card-icon {
+    display: grid;
+    place-items: center;
+    width: 2.2rem;
+    height: 2.2rem;
+    border-radius: 999px;
+    font-size: 1rem;
+    font-weight: 800;
+    color: #d9dde4;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .hero-metric strong {
     color: #f6f8fb;
   }
 
-  .snapshot-meta span,
-  .event-snippet span,
   .hero-metric span,
-  .stat-card span,
   .field span,
   .checkbox-field span {
     color: #aeb9c7;
     font-size: 0.78rem;
   }
 
-  .stat-grid,
   .hero-metrics {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2324,7 +2484,6 @@
     margin-bottom: 0.8rem;
   }
 
-  .stat-card,
   .hero-metric {
     display: grid;
     gap: 0.2rem;
@@ -2333,13 +2492,6 @@
     background: rgba(255, 255, 255, 0.04);
   }
 
-  .snapshot-meta {
-    padding-top: 0.55rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
-    margin-top: 0.55rem;
-  }
-
-  .segmented-control,
   .chip-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2604,10 +2756,8 @@
     }
 
     .inspector-tabs,
-    .segmented-control,
     .chip-list,
-    .hero-metrics,
-    .stat-grid {
+    .hero-metrics {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }

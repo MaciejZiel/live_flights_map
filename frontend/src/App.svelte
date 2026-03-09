@@ -37,6 +37,10 @@
       second: "2-digit",
     }).format(new Date(value));
   }
+
+  function handleBoundsChange(event) {
+    flightsStore.setBbox(event.detail.bbox);
+  }
 </script>
 
 <svelte:head>
@@ -83,8 +87,8 @@
         <h2>Tracking area</h2>
         {#if state.bbox}
           <p>
-            lat {state.bbox.lamin} to {state.bbox.lamax}<br />
-            lon {state.bbox.lomin} to {state.bbox.lomax}
+            lat {state.bbox.lamin.toFixed(2)} to {state.bbox.lamax.toFixed(2)}<br />
+            lon {state.bbox.lomin.toFixed(2)} to {state.bbox.lomax.toFixed(2)}
           </p>
         {:else}
           <p>Using backend defaults until the first response arrives.</p>
@@ -105,7 +109,7 @@
     </aside>
 
     <section class="map-card">
-      <FlightMap flights={state.flights} />
+      <FlightMap flights={state.flights} on:boundschange={handleBoundsChange} />
     </section>
   </main>
 </div>

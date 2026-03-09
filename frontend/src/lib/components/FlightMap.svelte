@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from "svelte";
+  import { createEventDispatcher, onMount } from "svelte";
 
   import L from "leaflet";
 
@@ -7,10 +7,27 @@
 
   export let flights = [];
 
+  const dispatch = createEventDispatcher();
   let container;
   let map;
   let aircraftLayer;
   const markerRegistry = new Map();
+
+  function emitBounds() {
+    if (!map) {
+      return;
+    }
+
+    const bounds = map.getBounds();
+    dispatch("boundschange", {
+      bbox: {
+        lamin: bounds.getSouth(),
+        lamax: bounds.getNorth(),
+        lomin: bounds.getWest(),
+        lomax: bounds.getEast(),
+      },
+    });
+  }
 
   onMount(() => {
     map = L.map(container, {
@@ -26,8 +43,11 @@
 
     aircraftLayer = L.layerGroup().addTo(map);
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
+    map.on("moveend zoomend", emitBounds);
+    emitBounds();
 
     return () => {
+      map.off("moveend zoomend", emitBounds);
       map.remove();
       markerRegistry.clear();
     };

@@ -23,6 +23,7 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 ### Frontend
 
 - odpytuje backend co 12 sekund
+- wysyła aktualny bounding box mapy po przesunięciu lub zoomie
 - renderuje samoloty jako markery Leaflet
 - obraca ikonę na podstawie `true_track`
 - usuwa markery nieobecne w nowej odpowiedzi i aktualizuje istniejące

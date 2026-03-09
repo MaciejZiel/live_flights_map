@@ -20,6 +20,20 @@
   let aircraftLayer;
   const markerRegistry = new Map();
   let isFullscreen = false;
+  const viewPresets = {
+    poland: [
+      [49.0, 14.0],
+      [55.1, 24.5],
+    ],
+    europe: [
+      [35.0, -11.0],
+      [71.0, 35.0],
+    ],
+    world: [
+      [-60.0, -170.0],
+      [78.0, 170.0],
+    ],
+  };
 
   function getCurrentAiracId(dateValue = new Date()) {
     const currentDate = new Date(dateValue);
@@ -170,6 +184,18 @@
     await shell.requestFullscreen();
   }
 
+  function applyViewPreset(presetKey) {
+    if (!map || !viewPresets[presetKey]) {
+      return;
+    }
+
+    map.fitBounds(viewPresets[presetKey], {
+      padding: [24, 24],
+      animate: true,
+      duration: 1,
+    });
+  }
+
   onMount(() => {
     map = L.map(container, {
       zoomControl: true,
@@ -222,6 +248,19 @@
 </script>
 
 <div bind:this={shell} class:fullscreen={isFullscreen} class="map-shell">
+  <div class="map-toolbar">
+    <div class="preset-group">
+      <button class="map-action preset-button" type="button" on:click={() => applyViewPreset("poland")}>
+        Poland
+      </button>
+      <button class="map-action preset-button" type="button" on:click={() => applyViewPreset("europe")}>
+        Europe
+      </button>
+      <button class="map-action preset-button" type="button" on:click={() => applyViewPreset("world")}>
+        World
+      </button>
+    </div>
+
   <button class="map-action fullscreen-toggle" type="button" on:click={toggleFullscreen}>
     {#if isFullscreen}
       Exit fullscreen
@@ -229,6 +268,7 @@
       Fullscreen
     {/if}
   </button>
+  </div>
 
   <div bind:this={container} class="map-root"></div>
 </div>
@@ -253,10 +293,6 @@
   }
 
   .map-action {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    z-index: 700;
     border: 0;
     border-radius: 999px;
     padding: 0.72rem 0.95rem;
@@ -271,6 +307,38 @@
 
   .map-action:hover {
     background: rgba(18, 57, 93, 0.96);
+  }
+
+  .map-toolbar {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    right: 1rem;
+    z-index: 700;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    pointer-events: none;
+  }
+
+  .preset-group,
+  .fullscreen-toggle {
+    pointer-events: auto;
+  }
+
+  .preset-group {
+    display: flex;
+    gap: 0.55rem;
+    flex-wrap: wrap;
+  }
+
+  .preset-button {
+    background: rgba(255, 255, 255, 0.9);
+    color: #163958;
+  }
+
+  .preset-button:hover {
+    background: rgba(255, 255, 255, 0.98);
   }
 
   :global(.leaflet-container) {
@@ -317,6 +385,11 @@
   }
 
   @media (max-width: 960px) {
+    .map-toolbar {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
     .map-root {
       min-height: 60vh;
     }

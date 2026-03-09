@@ -6,7 +6,6 @@
 - Traffic heatmap for the selected region.
 - Aircraft trail for the last few minutes.
 - Predicted heading and motion vector.
-- Quick reset to Poland, Europe, or world view.
 
 ## Aircraft Details
 

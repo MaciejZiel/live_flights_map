@@ -2,10 +2,10 @@ import { writable } from "svelte/store";
 
 import { buildFlightsStreamUrl, fetchFlights } from "../api/flights.js";
 
-const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 12000);
+const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 30000);
 const BBOX_PRECISION = 4;
-const BBOX_DEBOUNCE_MS = Number(import.meta.env.VITE_BBOX_DEBOUNCE_MS ?? 350);
-const USE_SSE = import.meta.env.VITE_USE_SSE !== "false";
+const BBOX_DEBOUNCE_MS = Number(import.meta.env.VITE_BBOX_DEBOUNCE_MS ?? 900);
+const USE_SSE = import.meta.env.VITE_USE_SSE === "true";
 const SNAPSHOT_STORAGE_KEY = "live-flights-map.snapshot";
 
 const initialState = {

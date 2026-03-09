@@ -1518,7 +1518,7 @@
         <div class="error-banner">{state.error}</div>
       {/if}
 
-      {#if state.warning}
+      {#if state.warning && (!state.flights.length || !["rate_limit", "cooldown"].includes(state.reason))}
         <div class="warning-banner">{state.warning}</div>
       {/if}
 

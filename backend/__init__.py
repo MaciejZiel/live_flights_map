@@ -19,6 +19,7 @@ def create_app() -> Flask:
         ),
         cache_ttl=app.config["OPENSKY_CACHE_TTL"],
         cooldown_seconds=app.config["OPENSKY_COOLDOWN_SECONDS"],
+        cache_path=app.config["OPENSKY_CACHE_PATH"],
     )
     app.register_blueprint(api, url_prefix="/api")
 

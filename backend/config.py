@@ -1,4 +1,5 @@
 import os
+from tempfile import gettempdir
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -20,10 +21,14 @@ class Config:
     OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD")
     OPENSKY_TIMEOUT = float(os.getenv("OPENSKY_TIMEOUT", "10"))
     OPENSKY_RETRY_COUNT = int(os.getenv("OPENSKY_RETRY_COUNT", "1"))
-    OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "8"))
-    OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "25"))
+    OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
+    OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
+    OPENSKY_CACHE_PATH = os.getenv(
+        "OPENSKY_CACHE_PATH",
+        os.path.join(gettempdir(), "live-flights-map-opensky-cache.json"),
+    )
     FLIGHT_STREAM_INTERVAL_SECONDS = float(
-        os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "12")
+        os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "30")
     )
 
     MAP_DEFAULT_LAMIN = float(os.getenv("MAP_DEFAULT_LAMIN", "49.0"))

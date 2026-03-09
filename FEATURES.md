@@ -64,7 +64,6 @@
 
 ## Data Quality and Performance
 
-- Debounce and throttling on map moves.
 - WebSocket or SSE updates instead of polling only.
 - Progressive loading based on zoom level.
 - Unified retry and error-handling policy.

@@ -4,6 +4,7 @@ import { fetchFlights } from "../api/flights.js";
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 12000);
 const BBOX_PRECISION = 4;
+const BBOX_DEBOUNCE_MS = Number(import.meta.env.VITE_BBOX_DEBOUNCE_MS ?? 350);
 
 const initialState = {
   status: "idle",
@@ -52,6 +53,7 @@ function createFlightsStore() {
   const { subscribe, set, update } = writable(initialState);
   let poller = null;
   let currentBbox = null;
+  let bboxRefreshTimeout = null;
 
   async function refresh() {
     update((state) => ({
@@ -98,7 +100,14 @@ function createFlightsStore() {
     }));
 
     if (poller) {
-      refresh();
+      if (bboxRefreshTimeout) {
+        window.clearTimeout(bboxRefreshTimeout);
+      }
+
+      bboxRefreshTimeout = window.setTimeout(() => {
+        bboxRefreshTimeout = null;
+        refresh();
+      }, BBOX_DEBOUNCE_MS);
     }
   }
 
@@ -114,6 +123,11 @@ function createFlightsStore() {
   function stop() {
     if (!poller) {
       return;
+    }
+
+    if (bboxRefreshTimeout) {
+      window.clearTimeout(bboxRefreshTimeout);
+      bboxRefreshTimeout = null;
     }
 
     window.clearInterval(poller);

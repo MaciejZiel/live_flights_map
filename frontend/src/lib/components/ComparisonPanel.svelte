@@ -12,9 +12,12 @@
 </script>
 
 <section class="panel comparison-panel">
-  <div>
-    <p class="eyebrow">Comparison</p>
-    <h2>Side-by-side flights</h2>
+  <div class="comparison-header">
+    <div>
+      <p class="eyebrow">Comparison</p>
+      <h2>Side-by-side flights</h2>
+    </div>
+    <span class="count-pill">{flights.length}</span>
   </div>
 
   {#if flights.length > 1}
@@ -60,6 +63,13 @@
     gap: 0.9rem;
   }
 
+  .comparison-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: start;
+  }
+
   .eyebrow {
     margin: 0 0 0.2rem;
     text-transform: uppercase;
@@ -81,10 +91,10 @@
   .compare-card {
     display: grid;
     gap: 0.7rem;
-    padding: 0.9rem;
+    padding: 0.95rem;
     border: 1px solid var(--surface-border);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.035);
   }
 
   .compare-card.selected {
@@ -130,13 +140,26 @@
 
   .compare-action {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.72rem 0.82rem;
+    border-radius: 16px;
+    padding: 0.76rem 0.88rem;
     font: inherit;
     font-weight: 700;
     color: var(--button-secondary-text);
     background: var(--button-secondary-bg);
     cursor: pointer;
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   @media (max-width: 720px) {

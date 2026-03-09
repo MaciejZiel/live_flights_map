@@ -37,9 +37,12 @@
       <h2>Rules and history</h2>
     </div>
 
-    {#if events.length}
-      <button class="clear-button" type="button" on:click={onClearEvents}>Clear log</button>
-    {/if}
+    <div class="alert-header-actions">
+      <span class="count-pill">{rules.length}</span>
+      {#if events.length}
+        <button class="clear-button" type="button" on:click={onClearEvents}>Clear log</button>
+      {/if}
+    </div>
   </div>
 
   <div class="alert-form">
@@ -107,6 +110,13 @@
     align-items: start;
   }
 
+  .alert-header-actions {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
   .eyebrow {
     margin: 0 0 0.2rem;
     text-transform: uppercase;
@@ -142,8 +152,8 @@
   .clear-button,
   .remove-button {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.75rem 0.85rem;
+    border-radius: 16px;
+    padding: 0.78rem 0.9rem;
     font: inherit;
   }
 
@@ -176,10 +186,23 @@
 
   .rule-card,
   .event-card {
-    padding: 0.85rem;
+    padding: 0.9rem;
     border: 1px solid var(--surface-border);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   .event-card-header span {

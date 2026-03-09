@@ -9,9 +9,12 @@
 </script>
 
 <section class="panel saved-views-panel">
-  <div>
-    <p class="eyebrow">Workspace</p>
-    <h2>Saved views</h2>
+  <div class="views-header">
+    <div>
+      <p class="eyebrow">Workspace</p>
+      <h2>Saved views</h2>
+    </div>
+    <span class="count-pill">{views.length}</span>
   </div>
 
   <div class="save-row">
@@ -55,6 +58,13 @@
     gap: 0.9rem;
   }
 
+  .views-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: start;
+  }
+
   .eyebrow {
     margin: 0 0 0.2rem;
     text-transform: uppercase;
@@ -79,8 +89,8 @@
   .view-load,
   .view-delete {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.75rem 0.85rem;
+    border-radius: 16px;
+    padding: 0.78rem 0.9rem;
     font: inherit;
   }
 
@@ -114,10 +124,10 @@
     justify-content: space-between;
     gap: 0.8rem;
     align-items: start;
-    padding: 0.85rem;
+    padding: 0.9rem;
     border: 1px solid var(--surface-border);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.035);
   }
 
   .view-card.active {
@@ -128,6 +138,19 @@
     display: flex;
     gap: 0.55rem;
     flex-wrap: wrap;
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   @media (max-width: 720px) {

@@ -14,13 +14,16 @@
       <h2>Watchlist</h2>
     </div>
 
-    <button class:active={watchModeEnabled} class="watch-mode-button" type="button" on:click={onToggleWatchMode}>
-      {#if watchModeEnabled}
-        Watch mode on
-      {:else}
-        Watch mode off
-      {/if}
-    </button>
+    <div class="watchlist-header-actions">
+      <span class="count-pill">{entries.length}</span>
+      <button class:active={watchModeEnabled} class="watch-mode-button" type="button" on:click={onToggleWatchMode}>
+        {#if watchModeEnabled}
+          Watch mode on
+        {:else}
+          Watch mode off
+        {/if}
+      </button>
+    </div>
   </div>
 
   {#if entries.length}
@@ -61,6 +64,13 @@
     align-items: start;
   }
 
+  .watchlist-header-actions {
+    display: flex;
+    gap: 0.55rem;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
   .eyebrow {
     margin: 0 0 0.2rem;
     text-transform: uppercase;
@@ -78,8 +88,8 @@
   .watch-action,
   .watch-remove {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.7rem 0.82rem;
+    border-radius: 16px;
+    padding: 0.76rem 0.88rem;
     font: inherit;
     font-weight: 700;
     cursor: pointer;
@@ -110,10 +120,10 @@
   .watch-card {
     display: grid;
     gap: 0.6rem;
-    padding: 0.85rem;
+    padding: 0.9rem;
     border: 1px solid var(--surface-border);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.04);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.035);
   }
 
   .watch-card.selected {
@@ -141,6 +151,19 @@
     display: flex;
     gap: 0.55rem;
     flex-wrap: wrap;
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   @media (max-width: 720px) {

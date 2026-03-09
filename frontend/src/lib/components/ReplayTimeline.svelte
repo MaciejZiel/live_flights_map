@@ -33,9 +33,12 @@
       <h2>Replay timeline</h2>
     </div>
 
-    {#if activeSnapshot}
-      <button class="live-button" type="button" on:click={onReturnToLive}>Back to live</button>
-    {/if}
+    <div class="replay-header-actions">
+      <span class="count-pill">{snapshots.length}</span>
+      {#if activeSnapshot}
+        <button class="live-button" type="button" on:click={onReturnToLive}>Back to live</button>
+      {/if}
+    </div>
   </div>
 
   {#if snapshots.length < 2}
@@ -106,6 +109,14 @@
     gap: 1rem;
   }
 
+  .replay-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+    justify-content: flex-end;
+  }
+
   .eyebrow {
     margin: 0 0 0.2rem;
     text-transform: uppercase;
@@ -122,13 +133,26 @@
   .live-button {
     border: 1px solid var(--surface-border);
     border-radius: 999px;
-    padding: 0.45rem 0.75rem;
+    padding: 0.62rem 0.92rem;
     font: inherit;
     font-size: 0.8rem;
     font-weight: 700;
     color: var(--button-secondary-text);
     background: var(--button-secondary-bg);
     cursor: pointer;
+  }
+
+  .count-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    padding: 0.32rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   .timeline-field {
@@ -144,6 +168,7 @@
 
   .timeline-field input {
     width: 100%;
+    accent-color: #f5b908;
   }
 
   .timeline-meta {
@@ -166,8 +191,8 @@
 
   .control-button {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.72rem 0.8rem;
+    border-radius: 16px;
+    padding: 0.82rem 0.86rem;
     font: inherit;
     font-weight: 700;
     color: var(--button-secondary-text);

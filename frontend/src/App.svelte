@@ -69,6 +69,7 @@
   let shareFeedbackTimer = null;
   let watchlist = [];
   let watchModeEnabled = false;
+  let flightAnnotations = {};
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -85,6 +86,7 @@
       onboardingDismissed = savedPreferences.onboardingDismissed ?? onboardingDismissed;
       watchlist = savedPreferences.watchlist ?? watchlist;
       watchModeEnabled = savedPreferences.watchModeEnabled ?? watchModeEnabled;
+      flightAnnotations = savedPreferences.flightAnnotations ?? flightAnnotations;
     }
 
     applySharedStateFromUrl();
@@ -341,6 +343,55 @@
 
   function toggleWatchMode() {
     watchModeEnabled = !watchModeEnabled;
+  }
+
+  function updateSelectedFlightNotes(notes) {
+    if (!selectedFlight) {
+      return;
+    }
+
+    flightAnnotations = {
+      ...flightAnnotations,
+      [selectedFlight.icao24]: {
+        ...(flightAnnotations[selectedFlight.icao24] ?? { notes: "", tags: [] }),
+        notes,
+      },
+    };
+  }
+
+  function addSelectedFlightTag(tag) {
+    if (!selectedFlight) {
+      return;
+    }
+
+    const currentAnnotation = flightAnnotations[selectedFlight.icao24] ?? { notes: "", tags: [] };
+    const normalizedTag = tag.trim();
+    if (!normalizedTag) {
+      return;
+    }
+
+    flightAnnotations = {
+      ...flightAnnotations,
+      [selectedFlight.icao24]: {
+        ...currentAnnotation,
+        tags: [normalizedTag, ...currentAnnotation.tags.filter((value) => value !== normalizedTag)].slice(0, 8),
+      },
+    };
+  }
+
+  function removeSelectedFlightTag(tag) {
+    if (!selectedFlight) {
+      return;
+    }
+
+    const currentAnnotation = flightAnnotations[selectedFlight.icao24] ?? { notes: "", tags: [] };
+    flightAnnotations = {
+      ...flightAnnotations,
+      [selectedFlight.icao24]: {
+        ...currentAnnotation,
+        tags: currentAnnotation.tags.filter((value) => value !== tag),
+      },
+    };
   }
 
   function resetFilters() {
@@ -688,6 +739,9 @@
     ? sortedFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
     : null;
   $: selectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
+  $: selectedFlightAnnotation = selectedIcao24
+    ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
+    : { notes: "", tags: [] };
   $: if (!selectedFlight) {
     followAircraft = false;
   }
@@ -721,6 +775,7 @@
       onboardingDismissed,
       watchlist,
       watchModeEnabled,
+      flightAnnotations,
     });
   }
 </script>
@@ -1010,8 +1065,12 @@
         followAircraft={followAircraft}
         trailPoints={selectedFlightTrail}
         isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
+        annotation={selectedFlightAnnotation}
         onToggleFollow={toggleFollowAircraft}
         onToggleWatch={toggleSelectedFlightWatchlist}
+        onUpdateNotes={updateSelectedFlightNotes}
+        onAddTag={addSelectedFlightTag}
+        onRemoveTag={removeSelectedFlightTag}
       />
 
       <WatchlistPanel

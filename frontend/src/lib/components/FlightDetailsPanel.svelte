@@ -12,8 +12,17 @@
   export let followAircraft = false;
   export let trailPoints = [];
   export let isWatched = false;
+  export let annotation = {
+    notes: "",
+    tags: [],
+  };
   export let onToggleFollow = () => {};
   export let onToggleWatch = () => {};
+  export let onUpdateNotes = () => {};
+  export let onAddTag = () => {};
+  export let onRemoveTag = () => {};
+
+  let nextTag = "";
 
   function buildMetricPath(points, getValue) {
     if (points.length < 2) {
@@ -90,6 +99,16 @@
     downloadHistory(csv, "csv", "text/csv;charset=utf-8");
   }
 
+  function handleTagSubmit() {
+    const normalizedTag = nextTag.trim();
+    if (!normalizedTag) {
+      return;
+    }
+
+    onAddTag(normalizedTag);
+    nextTag = "";
+  }
+
   $: historySamples = trailPoints.slice(-24);
   $: altitudeSamples = historySamples.filter((point) => point.altitude !== null && point.altitude !== undefined);
   $: speedSamples = historySamples.filter((point) => point.velocity !== null && point.velocity !== undefined);
@@ -131,6 +150,45 @@
         Add to watchlist
       {/if}
     </button>
+
+    <section class="annotation-panel">
+      <div class="annotation-header">
+        <strong>Notes and tags</strong>
+      </div>
+
+      <label class="notes-field">
+        <span>Notes</span>
+        <textarea
+          rows="4"
+          placeholder="Add notes about this aircraft, route, or behaviour"
+          value={annotation.notes ?? ""}
+          on:input={(event) => onUpdateNotes(event.currentTarget.value)}
+        ></textarea>
+      </label>
+
+      <div class="tag-editor">
+        <label class="notes-field">
+          <span>Tags</span>
+          <input
+            bind:value={nextTag}
+            type="text"
+            placeholder="military, priority, medevac"
+            on:keydown={(event) => event.key === "Enter" && handleTagSubmit()}
+          />
+        </label>
+        <button class="tag-add-button" type="button" on:click={handleTagSubmit}>Add tag</button>
+      </div>
+
+      {#if annotation.tags?.length}
+        <div class="tag-list">
+          {#each annotation.tags as tag}
+            <button class="tag-chip" type="button" on:click={() => onRemoveTag(tag)}>
+              {tag} ×
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </section>
 
     <dl>
       <div>
@@ -469,6 +527,81 @@
 
   .history-value {
     font-size: 0.98rem;
+  }
+
+  .annotation-panel {
+    display: grid;
+    gap: 0.75rem;
+    padding-top: 0.2rem;
+    border-top: 1px solid var(--surface-border);
+  }
+
+  .annotation-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .notes-field {
+    display: grid;
+    gap: 0.4rem;
+  }
+
+  .notes-field span {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+
+  .notes-field textarea,
+  .notes-field input {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+    color: var(--color-text);
+    background: var(--surface-input-bg);
+  }
+
+  .notes-field textarea {
+    resize: vertical;
+  }
+
+  .tag-editor {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    align-items: end;
+  }
+
+  .tag-add-button {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.75rem 0.82rem;
+    font: inherit;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .tag-list {
+    display: flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
+  .tag-chip {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.42rem 0.7rem;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
+    cursor: pointer;
   }
 
   @media (max-width: 720px) {

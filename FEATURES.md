@@ -68,7 +68,6 @@
 - User roles: viewer, analyst, admin.
 - Alert history and audit trail.
 - Integrations with Discord, Slack, and Telegram.
-- Notes, comments, and tags for flights.
 
 ## Suggested Delivery Order
 

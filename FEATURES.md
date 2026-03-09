@@ -21,7 +21,6 @@
 - Filters for altitude, speed, heading, country, operator.
 - `Arrivals/departures for selected airport` filter.
 - Traffic type filter: passenger, cargo, private, helicopter.
-- Filter by recent activity window.
 
 ## Airports and Routes
 

@@ -31,6 +31,7 @@
     query: "",
     minAltitude: "",
     hideGroundTraffic: true,
+    recentActivity: "any",
   };
   let selectedIcao24 = null;
   let followAircraft = false;
@@ -113,6 +114,7 @@
       query: "",
       minAltitude: "",
       hideGroundTraffic: true,
+      recentActivity: "any",
     };
   }
 
@@ -285,8 +287,24 @@
       (flight.altitude !== null && flight.altitude !== undefined && flight.altitude >= minimumAltitude);
 
     const matchesGroundFilter = !filters.hideGroundTraffic || !flight.on_ground;
+    const recentActivityLimitSeconds =
+      filters.recentActivity === "30s"
+        ? 30
+        : filters.recentActivity === "2m"
+          ? 120
+          : filters.recentActivity === "5m"
+            ? 300
+            : filters.recentActivity === "15m"
+              ? 900
+              : null;
+    const matchesRecentActivity =
+      recentActivityLimitSeconds === null ||
+      (flight.last_contact !== null &&
+        flight.last_contact !== undefined &&
+        Math.max(0, Math.round((now - flight.last_contact * 1000) / 1000)) <=
+          recentActivityLimitSeconds);
 
-    return matchesQuery && matchesAltitude && matchesGroundFilter;
+    return matchesQuery && matchesAltitude && matchesGroundFilter && matchesRecentActivity;
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
   $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
@@ -417,6 +435,16 @@
         <label class="checkbox-field">
           <input bind:checked={filters.hideGroundTraffic} type="checkbox" />
           <span>Hide ground traffic</span>
+        </label>
+        <label class="field">
+          <span>Recent activity</span>
+          <select bind:value={filters.recentActivity}>
+            <option value="any">Any time</option>
+            <option value="30s">Last 30 seconds</option>
+            <option value="2m">Last 2 minutes</option>
+            <option value="5m">Last 5 minutes</option>
+            <option value="15m">Last 15 minutes</option>
+          </select>
         </label>
         <div class="filter-actions">
           <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>

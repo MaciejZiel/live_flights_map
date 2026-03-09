@@ -10,7 +10,6 @@
 - Callsign, ICAO24, registration, aircraft type, operator, origin country.
 - Origin and destination airports when available.
 - Estimated arrival time.
-- Position and altitude history for a selected flight.
 - Aircraft or airline image where available.
 - Flight category: passenger, cargo, private, military, medical.
 - Dedicated full flight details view.

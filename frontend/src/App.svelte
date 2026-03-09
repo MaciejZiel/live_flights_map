@@ -779,6 +779,7 @@
       <FlightDetailsPanel
         flight={selectedFlight}
         followAircraft={followAircraft}
+        trailPoints={selectedFlightTrail}
         onToggleFollow={toggleFollowAircraft}
       />
 

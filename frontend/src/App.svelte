@@ -1775,10 +1775,22 @@
     </aside>
 
     <nav aria-label="Quick map controls" class="overlay-card bottom-dock">
-      <button class="dock-button" type="button" on:click={() => triggerViewPreset("poland")}>Poland</button>
-      <button class="dock-button" type="button" on:click={() => triggerViewPreset("europe")}>Europe</button>
-      <button class="dock-button" type="button" on:click={cycleMapStyle}>{mapStyleLabel}</button>
-      <button class="dock-button" type="button" on:click={triggerFullscreenToggle}>Fullscreen</button>
+      <button class="dock-button" type="button" on:click={() => triggerViewPreset("poland")}>
+        <span class="dock-glyph dock-glyph-scope" aria-hidden="true"></span>
+        <span class="dock-label">Poland</span>
+      </button>
+      <button class="dock-button" type="button" on:click={() => triggerViewPreset("europe")}>
+        <span class="dock-glyph dock-glyph-grid" aria-hidden="true"></span>
+        <span class="dock-label">Europe</span>
+      </button>
+      <button class="dock-button" type="button" on:click={cycleMapStyle}>
+        <span class="dock-glyph dock-glyph-map" aria-hidden="true"></span>
+        <span class="dock-label">{mapStyleLabel}</span>
+      </button>
+      <button class="dock-button" type="button" on:click={triggerFullscreenToggle}>
+        <span class="dock-glyph dock-glyph-fullscreen" aria-hidden="true"></span>
+        <span class="dock-label">Fullscreen</span>
+      </button>
     </nav>
   </section>
 </div>
@@ -2333,18 +2345,21 @@
     transform: translateX(-50%);
     display: inline-flex;
     gap: 0.32rem;
-    padding: 0.34rem;
-    border-radius: 18px;
+    padding: 0.28rem;
+    border-radius: 20px;
     background:
       linear-gradient(180deg, rgba(25, 27, 31, 0.97) 0%, rgba(12, 14, 18, 0.97) 100%);
   }
 
   .dock-button {
+    display: grid;
+    justify-items: center;
+    gap: 0.3rem;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 13px;
-    padding: 0.66rem 0.88rem;
+    min-width: 4.8rem;
+    padding: 0.56rem 0.72rem 0.5rem;
     font: inherit;
-    font-size: 0.78rem;
     font-weight: 700;
     color: #eef2f6;
     background: rgba(255, 255, 255, 0.04);
@@ -2353,6 +2368,100 @@
       transform 160ms ease,
       border-color 160ms ease,
       background 160ms ease;
+  }
+
+  .dock-label {
+    font-size: 0.7rem;
+    line-height: 1;
+  }
+
+  .dock-glyph {
+    position: relative;
+    width: 1.15rem;
+    height: 1.15rem;
+    color: #dce4ee;
+  }
+
+  .dock-glyph-scope {
+    border: 2px solid currentColor;
+    border-radius: 999px;
+  }
+
+  .dock-glyph-scope::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0.3rem;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translate(-50%, -50%);
+  }
+
+  .dock-glyph-grid::before,
+  .dock-glyph-grid::after,
+  .dock-glyph-map::before,
+  .dock-glyph-map::after,
+  .dock-glyph-fullscreen::before,
+  .dock-glyph-fullscreen::after {
+    content: "";
+    position: absolute;
+  }
+
+  .dock-glyph-grid::before {
+    inset: 0.1rem;
+    border: 2px solid currentColor;
+    border-radius: 0.2rem;
+  }
+
+  .dock-glyph-grid::after {
+    top: 0.16rem;
+    bottom: 0.16rem;
+    left: 50%;
+    width: 2px;
+    background: currentColor;
+    transform: translateX(-50%);
+    box-shadow:
+      -0.28rem 0 0 currentColor,
+      0.28rem 0 0 currentColor;
+  }
+
+  .dock-glyph-map::before {
+    inset: 0.12rem 0.2rem;
+    border-top: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: skew(-18deg);
+  }
+
+  .dock-glyph-map::after {
+    top: 0.18rem;
+    bottom: 0.18rem;
+    left: 50%;
+    width: 2px;
+    background: currentColor;
+    transform: translateX(-50%) skew(-18deg);
+    box-shadow:
+      -0.28rem 0 0 currentColor,
+      0.28rem 0 0 currentColor;
+  }
+
+  .dock-glyph-fullscreen {
+    border-radius: 0.15rem;
+  }
+
+  .dock-glyph-fullscreen::before {
+    inset: 0;
+    border-top: 2px solid currentColor;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    border-left: 2px solid currentColor;
+    clip-path: polygon(
+      0 0, 34% 0, 34% 12%, 12% 12%, 12% 34%, 0 34%,
+      0 100%, 34% 100%, 34% 88%, 12% 88%, 12% 66%, 0 66%,
+      100% 66%, 88% 66%, 88% 88%, 66% 88%, 66% 100%, 100% 100%,
+      100% 34%, 66% 34%, 66% 12%, 88% 12%, 88% 34%, 100% 34%
+    );
   }
 
   .dock-button:hover {

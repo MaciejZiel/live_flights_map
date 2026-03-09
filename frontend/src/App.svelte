@@ -25,6 +25,7 @@
   };
   let selectedIcao24 = null;
   let followAircraft = false;
+  let mapStyle = "standard";
 
   onMount(() => {
     flightsStore.start();
@@ -148,6 +149,24 @@
   <main class="layout">
     <aside class="sidebar">
       <section class="panel">
+        <h2>Map style</h2>
+        <div class="segmented-control">
+          <button class:active={mapStyle === "standard"} type="button" on:click={() => (mapStyle = "standard")}>
+            Standard
+          </button>
+          <button class:active={mapStyle === "satellite"} type="button" on:click={() => (mapStyle = "satellite")}>
+            Satellite
+          </button>
+          <button class:active={mapStyle === "dark"} type="button" on:click={() => (mapStyle = "dark")}>
+            Dark
+          </button>
+          <button class:active={mapStyle === "aviation"} type="button" on:click={() => (mapStyle = "aviation")}>
+            Aviation
+          </button>
+        </div>
+      </section>
+
+      <section class="panel">
         <h2>Tracking area</h2>
         {#if state.bbox}
           <p>
@@ -192,6 +211,7 @@
         flights={filteredFlights}
         selectedIcao24={selectedIcao24}
         followAircraft={followAircraft}
+        mapStyle={mapStyle}
         on:boundschange={handleBoundsChange}
         on:select={handleFlightSelect}
       />
@@ -307,6 +327,28 @@
   .checkbox-field {
     display: grid;
     gap: 0.45rem;
+  }
+
+  .segmented-control {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .segmented-control button {
+    border: 1px solid rgba(73, 105, 135, 0.18);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+    font-weight: 700;
+    color: #244566;
+    background: rgba(255, 255, 255, 0.9);
+    cursor: pointer;
+  }
+
+  .segmented-control button.active {
+    color: #f4f9ff;
+    background: linear-gradient(135deg, #12395d 0%, #375f86 100%);
   }
 
   .field span,

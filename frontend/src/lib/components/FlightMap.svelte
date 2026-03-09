@@ -9,12 +9,111 @@
   export let flights = [];
   export let selectedIcao24 = null;
   export let followAircraft = false;
+  export let mapStyle = "standard";
 
   const dispatch = createEventDispatcher();
   let container;
   let map;
+  let activeBaseLayer;
+  let activeMapStyle = null;
   let aircraftLayer;
   const markerRegistry = new Map();
+
+  function getCurrentAiracId(dateValue = new Date()) {
+    const currentDate = new Date(dateValue);
+    const cycleDate = new Date(2003, 0, 23);
+    let currentYearCounter = 0;
+    let previousYearCounter = 0;
+    let targetYear = currentDate.getFullYear();
+
+    while (cycleDate.getTime() < currentDate.getTime()) {
+      if (cycleDate.getFullYear() === currentDate.getFullYear() - 1) {
+        previousYearCounter += 1;
+      }
+
+      if (cycleDate.getFullYear() === currentDate.getFullYear()) {
+        currentYearCounter += 1;
+      }
+
+      cycleDate.setDate(cycleDate.getDate() + 28);
+    }
+
+    if (currentYearCounter === 0) {
+      targetYear -= 1;
+      currentYearCounter = previousYearCounter;
+    }
+
+    return Number(`${String(targetYear).slice(2)}${String(currentYearCounter).padStart(2, "0")}`);
+  }
+
+  function createBasemapLayer(style) {
+    const currentAirac = getCurrentAiracId();
+    const commonOptions = {
+      crossOrigin: true,
+      maxZoom: 18,
+    };
+
+    if (style === "satellite") {
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          ...commonOptions,
+          attribution: "Tiles &copy; Esri",
+        }
+      );
+    }
+
+    if (style === "dark") {
+      return L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+        ...commonOptions,
+        subdomains: "abcd",
+        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+      });
+    }
+
+    if (style === "aviation") {
+      const aviationBase = L.tileLayer(
+        `https://nwy-tiles-api.prod.newaydata.com/tiles/{z}/{x}/{y}.jpg?path=${currentAirac}/base/latest`,
+        {
+          ...commonOptions,
+          maxZoom: 13,
+          attribution:
+            "&copy; open flightmaps association, OpenStreetMap contributors, NASA elevation data",
+        }
+      );
+      const aviationOverlay = L.tileLayer(
+        `https://nwy-tiles-api.prod.newaydata.com/tiles/{z}/{x}/{y}.png?path=${currentAirac}/aero/latest`,
+        {
+          ...commonOptions,
+          maxZoom: 13,
+          opacity: 0.95,
+          attribution:
+            "&copy; open flightmaps association, OpenStreetMap contributors, NASA elevation data",
+        }
+      );
+
+      return L.layerGroup([aviationBase, aviationOverlay]);
+    }
+
+    return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      ...commonOptions,
+      attribution: "&copy; OpenStreetMap contributors",
+    });
+  }
+
+  function setBasemap(style) {
+    if (!map || activeMapStyle === style) {
+      return;
+    }
+
+    if (activeBaseLayer) {
+      map.removeLayer(activeBaseLayer);
+    }
+
+    activeBaseLayer = createBasemapLayer(style);
+    activeBaseLayer.addTo(map);
+    activeMapStyle = style;
+  }
 
   function emitBounds() {
     if (!map) {
@@ -55,10 +154,7 @@
       preferCanvas: true,
     }).setView([52.15, 19.4], 6);
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-      attribution: "&copy; OpenStreetMap contributors",
-    }).addTo(map);
+    setBasemap(mapStyle);
 
     aircraftLayer = L.markerClusterGroup({
       spiderfyOnMaxZoom: true,
@@ -81,6 +177,8 @@
     return () => {
       map.off("moveend zoomend", emitBounds);
       map.remove();
+      activeBaseLayer = null;
+      activeMapStyle = null;
       markerRegistry.clear();
     };
   });
@@ -89,6 +187,10 @@
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights, selectedIcao24, (flight) => {
       dispatch("select", { flight });
     });
+  }
+
+  $: if (map) {
+    setBasemap(mapStyle);
   }
 
   $: centerOnSelectedAircraft();

@@ -2,7 +2,6 @@
 
 ## Map and Movement
 
-- Multiple basemap styles: standard, satellite, dark, aviation.
 - Additional layers: country borders, FIRs, airports, ATS routes.
 - Traffic heatmap for the selected region.
 - Aircraft trail for the last few minutes.

@@ -43,6 +43,8 @@
   let now = Date.now();
   let flightHistory = new Map();
   let lastHistoryFetchKey = null;
+  let filterPresets = [];
+  let presetName = "";
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -53,6 +55,7 @@
       };
       mapStyle = savedPreferences.mapStyle ?? mapStyle;
       mapViewport = savedPreferences.mapViewport ?? mapViewport;
+      filterPresets = savedPreferences.filterPresets ?? filterPresets;
     }
 
     preferencesReady = true;
@@ -109,6 +112,35 @@
       minAltitude: "",
       hideGroundTraffic: true,
     };
+  }
+
+  function saveCurrentPreset() {
+    const normalizedName = presetName.trim();
+    if (!normalizedName) {
+      return;
+    }
+
+    const nextPreset = {
+      name: normalizedName,
+      filters: { ...filters },
+    };
+
+    filterPresets = [
+      nextPreset,
+      ...filterPresets.filter((preset) => preset.name !== normalizedName),
+    ].slice(0, 8);
+    presetName = "";
+  }
+
+  function applyFilterPreset(preset) {
+    filters = {
+      ...filters,
+      ...preset.filters,
+    };
+  }
+
+  function deleteFilterPreset(name) {
+    filterPresets = filterPresets.filter((preset) => preset.name !== name);
   }
 
   function triggerViewPreset(presetKey) {
@@ -225,6 +257,7 @@
       filters,
       mapStyle,
       mapViewport,
+      filterPresets,
     });
   }
 </script>
@@ -328,7 +361,34 @@
           <input bind:checked={filters.hideGroundTraffic} type="checkbox" />
           <span>Hide ground traffic</span>
         </label>
-        <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>
+        <div class="filter-actions">
+          <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>
+          <div class="preset-save-row">
+            <input
+              bind:value={presetName}
+              type="text"
+              placeholder="preset name"
+              on:keydown={(event) => event.key === "Enter" && saveCurrentPreset()}
+            />
+            <button class="secondary-button" type="button" on:click={saveCurrentPreset}>
+              Save preset
+            </button>
+          </div>
+          {#if filterPresets.length}
+            <div class="preset-list">
+              {#each filterPresets as preset}
+                <div class="preset-item">
+                  <button class="secondary-button preset-load" type="button" on:click={() => applyFilterPreset(preset)}>
+                    {preset.name}
+                  </button>
+                  <button class="preset-delete" type="button" on:click={() => deleteFilterPreset(preset.name)}>
+                    Remove
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </section>
 
       <FlightDetailsPanel
@@ -506,6 +566,25 @@
     background: rgba(255, 255, 255, 0.9);
   }
 
+  .filter-actions {
+    display: grid;
+    gap: 0.8rem;
+  }
+
+  .preset-save-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+  }
+
+  .preset-save-row input {
+    border: 1px solid rgba(73, 105, 135, 0.2);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
   .checkbox-field {
     grid-template-columns: auto 1fr;
     align-items: center;
@@ -524,6 +603,41 @@
 
   .reset-button:hover {
     filter: brightness(1.04);
+  }
+
+  .secondary-button,
+  .preset-delete {
+    border: 1px solid rgba(73, 105, 135, 0.18);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .secondary-button {
+    color: #1f4466;
+    background: rgba(255, 255, 255, 0.92);
+  }
+
+  .preset-delete {
+    color: #8f3c2a;
+    background: rgba(255, 244, 241, 0.94);
+  }
+
+  .preset-list {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .preset-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.55rem;
+  }
+
+  .preset-load {
+    text-align: left;
   }
 
   .panel p {

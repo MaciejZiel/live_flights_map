@@ -34,6 +34,7 @@
   let searchInput;
   let fullscreenRequestId = 0;
   let viewPresetRequest = null;
+  let now = Date.now();
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -49,9 +50,13 @@
     preferencesReady = true;
     flightsStore.start();
     window.addEventListener("keydown", handleKeyboardShortcut);
+    const freshnessTimer = window.setInterval(() => {
+      now = Date.now();
+    }, 1000);
 
     return () => {
       window.removeEventListener("keydown", handleKeyboardShortcut);
+      window.clearInterval(freshnessTimer);
       unsubscribe();
       flightsStore.stop();
     };
@@ -154,6 +159,31 @@
     event.preventDefault();
   }
 
+  function getFreshnessLabel(value) {
+    if (!value) {
+      return "waiting";
+    }
+
+    const ageSeconds = Math.max(0, Math.round((now - new Date(value).getTime()) / 1000));
+    return `${ageSeconds}s old`;
+  }
+
+  function getConfidenceLabel(stateValue) {
+    if (stateValue.status === "error") {
+      return "Unavailable";
+    }
+
+    if (stateValue.reason === "rate_limit" || stateValue.reason === "cooldown") {
+      return "Reduced";
+    }
+
+    if (stateValue.source === "cache" || stateValue.stale) {
+      return "Guarded";
+    }
+
+    return "High";
+  }
+
   $: normalizedQuery = filters.query.trim().toLowerCase();
   $: minimumAltitude = Number(filters.minAltitude);
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
@@ -225,6 +255,8 @@
       </div>
       <p>{filteredFlights.length} shown / {state.count} tracked</p>
       <p>Last update: {formatTimestamp(state.fetchedAt)}</p>
+      <p>Freshness: {getFreshnessLabel(state.fetchedAt)}</p>
+      <p>Confidence: {getConfidenceLabel(state)}</p>
     </div>
   </header>
 

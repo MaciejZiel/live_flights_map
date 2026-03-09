@@ -75,7 +75,6 @@
 - Performance monitoring and error logging.
 - Automated backend and frontend tests.
 - Support for multiple data providers, not only OpenSky.
-- Data freshness and confidence indicators.
 
 ## Pro and Collaboration Features
 

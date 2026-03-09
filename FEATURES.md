@@ -61,7 +61,6 @@
 
 ## Pro and Collaboration Features
 
-- Side-by-side comparison for multiple flights.
 - Custom dashboards and saved views.
 - Public or private user API.
 - Embeddable map widget.

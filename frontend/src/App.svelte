@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
+  import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
   import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
@@ -673,6 +674,10 @@
       isLive: Boolean(flight),
     };
   });
+  $: comparisonFlights = watchedFlightEntries
+    .filter((entry) => entry.flight)
+    .map((entry) => entry.flight)
+    .slice(0, 4);
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: canStepReplayBackward = snapshotHistory.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
   $: canStepReplayForward = snapshotHistory.length > 1 && replaySnapshotIndex !== -1;
@@ -1016,6 +1021,12 @@
         onToggleWatchMode={toggleWatchMode}
         onSelectFlight={selectWatchedFlight}
         onRemoveFlight={removeFromWatchlist}
+      />
+
+      <ComparisonPanel
+        flights={comparisonFlights}
+        selectedIcao24={selectedIcao24}
+        onSelectFlight={selectWatchedFlight}
       />
 
       <LegendPanel />

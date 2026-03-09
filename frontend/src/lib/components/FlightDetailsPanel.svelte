@@ -13,23 +13,23 @@
   export let trailPoints = [];
   export let onToggleFollow = () => {};
 
-  function buildAltitudePath(points) {
+  function buildMetricPath(points, getValue) {
     if (points.length < 2) {
       return "";
     }
 
     const chartWidth = 240;
     const chartHeight = 68;
-    const altitudes = points.map((point) => point.altitude ?? 0);
-    const minAltitude = Math.min(...altitudes);
-    const maxAltitude = Math.max(...altitudes);
-    const altitudeRange = Math.max(1, maxAltitude - minAltitude);
+    const values = points.map((point) => getValue(point));
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    const range = Math.max(1, maxValue - minValue);
 
     return points
       .map((point, index) => {
         const x = (index / (points.length - 1)) * chartWidth;
-        const altitude = point.altitude ?? minAltitude;
-        const y = chartHeight - ((altitude - minAltitude) / altitudeRange) * chartHeight;
+        const value = getValue(point);
+        const y = chartHeight - ((value - minValue) / range) * chartHeight;
         return `${index === 0 ? "M" : "L"} ${x.toFixed(1)} ${y.toFixed(1)}`;
       })
       .join(" ");
@@ -50,7 +50,13 @@
 
   $: historySamples = trailPoints.slice(-24);
   $: altitudeSamples = historySamples.filter((point) => point.altitude !== null && point.altitude !== undefined);
-  $: altitudePath = buildAltitudePath(altitudeSamples);
+  $: speedSamples = historySamples.filter((point) => point.velocity !== null && point.velocity !== undefined);
+  $: verticalRateSamples = historySamples.filter(
+    (point) => point.vertical_rate !== null && point.vertical_rate !== undefined
+  );
+  $: altitudePath = buildMetricPath(altitudeSamples, (point) => point.altitude ?? 0);
+  $: speedPath = buildMetricPath(speedSamples, (point) => point.velocity ?? 0);
+  $: verticalRatePath = buildMetricPath(verticalRateSamples, (point) => point.vertical_rate ?? 0);
 </script>
 
 <section class="panel details-panel">
@@ -114,10 +120,62 @@
       </div>
 
       {#if altitudeSamples.length > 1}
-        <div class="history-chart">
-          <svg viewBox="0 0 240 68" aria-hidden="true">
-            <path d={altitudePath} />
-          </svg>
+        <div class="chart-grid">
+          <article class="metric-card">
+            <div class="metric-card-header">
+              <span>Altitude</span>
+              <strong>{formatAltitude(altitudeSamples[altitudeSamples.length - 1].altitude)}</strong>
+            </div>
+            <div class="history-chart">
+              <svg viewBox="0 0 240 68" aria-hidden="true">
+                <path d={altitudePath} stroke="#4bb7f5" />
+              </svg>
+            </div>
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-card-header">
+              <span>Speed</span>
+              <strong>
+                {#if speedSamples.length}
+                  {formatSpeed(speedSamples[speedSamples.length - 1].velocity)}
+                {:else}
+                  unknown
+                {/if}
+              </strong>
+            </div>
+            {#if speedSamples.length > 1}
+              <div class="history-chart">
+                <svg viewBox="0 0 240 68" aria-hidden="true">
+                  <path d={speedPath} stroke="#54c087" />
+                </svg>
+              </div>
+            {:else}
+              <p class="chart-empty">Waiting for enough speed samples.</p>
+            {/if}
+          </article>
+
+          <article class="metric-card">
+            <div class="metric-card-header">
+              <span>Vertical rate</span>
+              <strong>
+                {#if verticalRateSamples.length}
+                  {formatVerticalRate(verticalRateSamples[verticalRateSamples.length - 1].vertical_rate)}
+                {:else}
+                  unknown
+                {/if}
+              </strong>
+            </div>
+            {#if verticalRateSamples.length > 1}
+              <div class="history-chart">
+                <svg viewBox="0 0 240 68" aria-hidden="true">
+                  <path d={verticalRatePath} stroke="#f29d4b" />
+                </svg>
+              </div>
+            {:else}
+              <p class="chart-empty">Waiting for enough vertical-rate samples.</p>
+            {/if}
+          </article>
         </div>
 
         <div class="history-meta">
@@ -244,10 +302,41 @@
 
   .history-chart path {
     fill: none;
-    stroke: #4bb7f5;
     stroke-width: 3;
     stroke-linecap: round;
     stroke-linejoin: round;
+  }
+
+  .chart-grid {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .metric-card {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .metric-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .metric-card-header span {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--color-muted);
+  }
+
+  .metric-card-header strong {
+    font-size: 0.9rem;
+  }
+
+  .chart-empty {
+    font-size: 0.86rem;
+    color: var(--color-muted);
   }
 
   .history-meta {

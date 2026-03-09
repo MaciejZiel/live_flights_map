@@ -43,7 +43,6 @@
 
 ## History and Analytics
 
-- Charts for altitude, speed, and vertical rate.
 - Regional traffic stats: flight count, average altitude, popular routes.
 - Day-over-day and week-over-week traffic comparison.
 - Export flight history to CSV or JSON.

@@ -11,6 +11,8 @@ export function updateFlightHistory(history, flights, fetchedAt) {
       latitude: flight.latitude,
       longitude: flight.longitude,
       altitude: flight.altitude,
+      velocity: flight.velocity,
+      vertical_rate: flight.vertical_rate,
       timestamp: snapshotTimestamp,
     };
 

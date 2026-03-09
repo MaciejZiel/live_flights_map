@@ -80,25 +80,45 @@
       return 0;
     }
 
-    const earthRadiusKm = 6371;
-    const toRadians = (value) => (value * Math.PI) / 180;
     let distance = 0;
 
     for (let index = 1; index < points.length; index += 1) {
       const previous = points[index - 1];
       const current = points[index];
-      const deltaLatitude = toRadians(current.latitude - previous.latitude);
-      const deltaLongitude = toRadians(current.longitude - previous.longitude);
-      const startLatitude = toRadians(previous.latitude);
-      const endLatitude = toRadians(current.latitude);
-      const haversine =
-        Math.sin(deltaLatitude / 2) ** 2 +
-        Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(deltaLongitude / 2) ** 2;
-
-      distance += 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+      distance += calculateGreatCircleDistanceKm(
+        previous.latitude,
+        previous.longitude,
+        current.latitude,
+        current.longitude
+      );
     }
 
     return distance;
+  }
+
+  function calculateGreatCircleDistanceKm(startLatitude, startLongitude, endLatitude, endLongitude) {
+    if (
+      !Number.isFinite(startLatitude) ||
+      !Number.isFinite(startLongitude) ||
+      !Number.isFinite(endLatitude) ||
+      !Number.isFinite(endLongitude)
+    ) {
+      return 0;
+    }
+
+    const earthRadiusKm = 6371;
+    const toRadians = (value) => (value * Math.PI) / 180;
+    const deltaLatitude = toRadians(endLatitude - startLatitude);
+    const deltaLongitude = toRadians(endLongitude - startLongitude);
+    const normalizedStartLatitude = toRadians(startLatitude);
+    const normalizedEndLatitude = toRadians(endLatitude);
+    const haversine =
+      Math.sin(deltaLatitude / 2) ** 2 +
+      Math.cos(normalizedStartLatitude) *
+        Math.cos(normalizedEndLatitude) *
+        Math.sin(deltaLongitude / 2) ** 2;
+
+    return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
   }
 
   function formatAirportCode(airport) {
@@ -137,6 +157,46 @@
     return photo?.thumbnail_url ?? null;
   }
 
+  function calculateRouteProgress(routeData, flightData) {
+    const origin = routeData?.origin;
+    const destination = routeData?.destination;
+    if (
+      !Number.isFinite(origin?.latitude) ||
+      !Number.isFinite(origin?.longitude) ||
+      !Number.isFinite(destination?.latitude) ||
+      !Number.isFinite(destination?.longitude) ||
+      !Number.isFinite(flightData?.latitude) ||
+      !Number.isFinite(flightData?.longitude)
+    ) {
+      return null;
+    }
+
+    const totalKm = calculateGreatCircleDistanceKm(
+      origin.latitude,
+      origin.longitude,
+      destination.latitude,
+      destination.longitude
+    );
+    if (!totalKm) {
+      return null;
+    }
+
+    const coveredKm = calculateGreatCircleDistanceKm(
+      origin.latitude,
+      origin.longitude,
+      flightData.latitude,
+      flightData.longitude
+    );
+    const percentage = Math.max(0, Math.min(100, Math.round((coveredKm / totalKm) * 100)));
+
+    return {
+      coveredKm: Math.round(coveredKm),
+      remainingKm: Math.max(0, Math.round(totalKm - coveredKm)),
+      percentage,
+      totalKm: Math.round(totalKm),
+    };
+  }
+
   $: observedDistanceKm = calculateObservedDistanceKm(trailPoints);
   $: averageObservedSpeed = trailPoints.length
     ? Math.round(
@@ -162,6 +222,7 @@
   $: routeWarning = route?.plausible === false ? "Route is not fully verified yet." : null;
   $: detailWarning = detailsError ?? details?.meta?.warning ?? routeWarning ?? null;
   $: photoUrl = resolvePhotoUrl(photo);
+  $: routeProgress = calculateRouteProgress(route, flight);
   $: routeStatusText = route?.plausible === false
     ? "Route unverified"
     : route
@@ -251,6 +312,26 @@
           <span>{route?.iata_codes ?? route?.airport_codes ?? "Route lookup pending"}</span>
           <strong>{routeStops.length ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}` : routeStatusText}</strong>
         </div>
+
+        {#if routeProgress}
+          <div class="route-progress">
+            <div class="route-progress-header">
+              <span>{formatAirportCode(route?.origin)}</span>
+              <strong>{routeProgress.percentage}%</strong>
+              <span>{formatAirportCode(route?.destination)}</span>
+            </div>
+
+            <div aria-hidden="true" class="route-progress-bar">
+              <span class="route-progress-fill" style={`width: ${routeProgress.percentage}%`}></span>
+              <span class="route-progress-marker" style={`left: calc(${routeProgress.percentage}% - 0.5rem)`}></span>
+            </div>
+
+            <div class="route-progress-meta">
+              <span>{routeProgress.coveredKm} km covered</span>
+              <span>{routeProgress.remainingKm} km left</span>
+            </div>
+          </div>
+        {/if}
 
         <div class="identity-actions">
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
@@ -578,6 +659,66 @@
   .route-summary strong {
     color: #f8de88;
     font-size: 0.8rem;
+  }
+
+  .route-progress {
+    display: grid;
+    gap: 0.42rem;
+    padding: 0.72rem 0.76rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .route-progress-header,
+  .route-progress-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.65rem;
+    align-items: center;
+  }
+
+  .route-progress-header span,
+  .route-progress-meta span {
+    font-size: 0.72rem;
+    color: rgba(190, 203, 217, 0.72);
+  }
+
+  .route-progress-header span {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+  }
+
+  .route-progress-header strong {
+    color: #f8de88;
+    font-size: 0.82rem;
+  }
+
+  .route-progress-bar {
+    position: relative;
+    height: 0.42rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
+    overflow: hidden;
+  }
+
+  .route-progress-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(120, 200, 255, 0.7), rgba(245, 185, 8, 0.95));
+  }
+
+  .route-progress-marker {
+    position: absolute;
+    top: 50%;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    border: 2px solid rgba(20, 23, 28, 0.98);
+    background: #ffd34f;
+    box-shadow: 0 0 0 3px rgba(255, 211, 79, 0.18);
+    transform: translateY(-50%);
   }
 
   .route-strip {

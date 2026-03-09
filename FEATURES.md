@@ -17,7 +17,6 @@
 ## Search and Filtering
 
 - Search by callsign, ICAO24, registration, airline, aircraft type.
-- Filters for altitude, speed, heading, country, operator.
 - `Arrivals/departures for selected airport` filter.
 - Traffic type filter: passenger, cargo, private, helicopter.
 

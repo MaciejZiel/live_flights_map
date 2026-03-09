@@ -41,6 +41,10 @@
   let filters = {
     query: "",
     minAltitude: "",
+    minSpeed: "",
+    country: "",
+    operator: "",
+    headingBand: "any",
     hideGroundTraffic: true,
     recentActivity: "any",
   };
@@ -184,6 +188,10 @@
     const zoom = Number(params.get("z"));
     const sharedQuery = params.get("q");
     const sharedMinAltitude = params.get("minAlt");
+    const sharedMinSpeed = params.get("minSpeed");
+    const sharedCountry = params.get("country");
+    const sharedOperator = params.get("operator");
+    const sharedHeadingBand = params.get("heading");
     const sharedRecentActivity = params.get("recent");
     const sharedSort = params.get("sort");
     const sharedTheme = params.get("theme");
@@ -204,6 +212,22 @@
 
     if (sharedMinAltitude !== null) {
       nextFilters.minAltitude = sharedMinAltitude;
+    }
+
+    if (sharedMinSpeed !== null) {
+      nextFilters.minSpeed = sharedMinSpeed;
+    }
+
+    if (sharedCountry !== null) {
+      nextFilters.country = sharedCountry;
+    }
+
+    if (sharedOperator !== null) {
+      nextFilters.operator = sharedOperator;
+    }
+
+    if (["any", "north", "east", "south", "west"].includes(sharedHeadingBand)) {
+      nextFilters.headingBand = sharedHeadingBand;
     }
 
     if (["any", "30s", "2m", "5m", "15m"].includes(sharedRecentActivity)) {
@@ -251,6 +275,30 @@
       params.set("minAlt", filters.minAltitude);
     } else {
       params.delete("minAlt");
+    }
+
+    if (filters.minSpeed !== "") {
+      params.set("minSpeed", filters.minSpeed);
+    } else {
+      params.delete("minSpeed");
+    }
+
+    if (filters.country.trim()) {
+      params.set("country", filters.country.trim());
+    } else {
+      params.delete("country");
+    }
+
+    if (filters.operator.trim()) {
+      params.set("operator", filters.operator.trim());
+    } else {
+      params.delete("operator");
+    }
+
+    if (filters.headingBand !== "any") {
+      params.set("heading", filters.headingBand);
+    } else {
+      params.delete("heading");
     }
 
     if (filters.recentActivity !== "any") {
@@ -509,6 +557,10 @@
     filters = {
       query: "",
       minAltitude: "",
+      minSpeed: "",
+      country: "",
+      operator: "",
+      headingBand: "any",
       hideGroundTraffic: true,
       recentActivity: "any",
     };
@@ -795,6 +847,36 @@
     return "High";
   }
 
+  function deriveOperatorCode(flight) {
+    const rawCallsign = (flight.callsign ?? "").trim().toUpperCase();
+    const match = rawCallsign.match(/^[A-Z]{3}/);
+    return match ? match[0] : "";
+  }
+
+  function matchesHeadingBand(track, band) {
+    if (band === "any" || track === null || track === undefined) {
+      return true;
+    }
+
+    if (band === "north") {
+      return track >= 315 || track < 45;
+    }
+
+    if (band === "east") {
+      return track >= 45 && track < 135;
+    }
+
+    if (band === "south") {
+      return track >= 135 && track < 225;
+    }
+
+    if (band === "west") {
+      return track >= 225 && track < 315;
+    }
+
+    return true;
+  }
+
   function calculateDistanceKm(latitude, longitude, viewport) {
     const center = viewport?.center ?? [52.15, 19.4];
     const toRadians = (value) => (value * Math.PI) / 180;
@@ -842,6 +924,10 @@
   $: normalizedQuery = filters.query.trim().toLowerCase();
   $: minimumAltitude = Number(filters.minAltitude);
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
+  $: minimumSpeed = Number(filters.minSpeed);
+  $: hasMinimumSpeed = Number.isFinite(minimumSpeed) && filters.minSpeed !== "";
+  $: normalizedCountryFilter = filters.country.trim().toLowerCase();
+  $: normalizedOperatorFilter = filters.operator.trim().toLowerCase();
   $: activeMonitoringSession =
     monitoringSessions.find((session) => session.id === activeMonitoringSessionId) ?? null;
   $: replaySourceSnapshots = activeMonitoringSession?.snapshots ?? snapshotHistory;
@@ -852,15 +938,32 @@
     replaySnapshotIndex >= 0 ? replaySourceSnapshots[replaySnapshotIndex] ?? null : null;
   $: replayFlights = activeReplaySnapshot?.flights ?? state.flights;
   $: filteredFlights = replayFlights.filter((flight) => {
+    const operatorCode = deriveOperatorCode(flight).toLowerCase();
     const matchesQuery =
       !normalizedQuery ||
       flight.icao24.includes(normalizedQuery) ||
       (flight.callsign ?? "").toLowerCase().includes(normalizedQuery) ||
-      (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery);
+      (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery) ||
+      operatorCode.includes(normalizedQuery);
 
     const matchesAltitude =
       !hasMinimumAltitude ||
       (flight.altitude !== null && flight.altitude !== undefined && flight.altitude >= minimumAltitude);
+
+    const matchesSpeed =
+      !hasMinimumSpeed ||
+      (flight.velocity !== null &&
+        flight.velocity !== undefined &&
+        flight.velocity * 3.6 >= minimumSpeed);
+
+    const matchesCountry =
+      !normalizedCountryFilter ||
+      (flight.origin_country ?? "").toLowerCase().includes(normalizedCountryFilter);
+
+    const matchesOperator =
+      !normalizedOperatorFilter || operatorCode.includes(normalizedOperatorFilter);
+
+    const matchesHeading = matchesHeadingBand(flight.true_track, filters.headingBand);
 
     const matchesGroundFilter = !filters.hideGroundTraffic || !flight.on_ground;
     const recentActivityLimitSeconds =
@@ -880,7 +983,16 @@
         Math.max(0, Math.round((now - flight.last_contact * 1000) / 1000)) <=
           recentActivityLimitSeconds);
 
-    return matchesQuery && matchesAltitude && matchesGroundFilter && matchesRecentActivity;
+    return (
+      matchesQuery &&
+      matchesAltitude &&
+      matchesSpeed &&
+      matchesCountry &&
+      matchesOperator &&
+      matchesHeading &&
+      matchesGroundFilter &&
+      matchesRecentActivity
+    );
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
   $: watchedFlightEntries = watchlist.map((icao24) => {
@@ -1179,8 +1291,8 @@
             bind:this={searchInput}
             bind:value={filters.query}
             type="text"
-            placeholder="callsign, ICAO24, country"
-            title="Search by callsign, ICAO24, or origin country"
+            placeholder="callsign, ICAO24, country, operator"
+            title="Search by callsign, ICAO24, origin country, or operator code"
           />
         </label>
         <label class="field">
@@ -1192,6 +1304,44 @@
             step="100"
             title="Show only aircraft above this altitude"
           />
+        </label>
+        <label class="field">
+          <span>Min speed (km/h)</span>
+          <input
+            bind:value={filters.minSpeed}
+            type="number"
+            min="0"
+            step="10"
+            title="Show only aircraft above this speed"
+          />
+        </label>
+        <label class="field">
+          <span>Country</span>
+          <input
+            bind:value={filters.country}
+            type="text"
+            placeholder="Poland, Germany, Turkey"
+            title="Filter by origin country"
+          />
+        </label>
+        <label class="field">
+          <span>Operator code</span>
+          <input
+            bind:value={filters.operator}
+            type="text"
+            placeholder="LOT, RYR, WZZ"
+            title="Filter by the operator code from the callsign prefix"
+          />
+        </label>
+        <label class="field">
+          <span>Heading</span>
+          <select bind:value={filters.headingBand} title="Filter by the current heading quadrant">
+            <option value="any">Any direction</option>
+            <option value="north">Northbound</option>
+            <option value="east">Eastbound</option>
+            <option value="south">Southbound</option>
+            <option value="west">Westbound</option>
+          </select>
         </label>
         <label class="checkbox-field">
           <input

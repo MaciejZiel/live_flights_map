@@ -45,6 +45,7 @@
   let lastHistoryFetchKey = null;
   let filterPresets = [];
   let presetName = "";
+  let sortBy = "altitude_desc";
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -56,6 +57,7 @@
       mapStyle = savedPreferences.mapStyle ?? mapStyle;
       mapViewport = savedPreferences.mapViewport ?? mapViewport;
       filterPresets = savedPreferences.filterPresets ?? filterPresets;
+      sortBy = savedPreferences.sortBy ?? sortBy;
     }
 
     preferencesReady = true;
@@ -224,6 +226,50 @@
     return "High";
   }
 
+  function calculateDistanceKm(latitude, longitude, viewport) {
+    const center = viewport?.center ?? [52.15, 19.4];
+    const toRadians = (value) => (value * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const deltaLatitude = toRadians(latitude - center[0]);
+    const deltaLongitude = toRadians(longitude - center[1]);
+    const startLatitude = toRadians(center[0]);
+    const endLatitude = toRadians(latitude);
+    const haversine =
+      Math.sin(deltaLatitude / 2) ** 2 +
+      Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+
+    return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+  }
+
+  function sortFlights(flights, mode, viewport) {
+    const sortedFlights = [...flights];
+
+    sortedFlights.sort((left, right) => {
+      if (mode === "altitude_desc") {
+        return (right.altitude ?? -Infinity) - (left.altitude ?? -Infinity);
+      }
+
+      if (mode === "speed_desc") {
+        return (right.velocity ?? -Infinity) - (left.velocity ?? -Infinity);
+      }
+
+      if (mode === "distance_asc") {
+        return (
+          calculateDistanceKm(left.latitude, left.longitude, viewport) -
+          calculateDistanceKm(right.latitude, right.longitude, viewport)
+        );
+      }
+
+      if (mode === "last_contact_desc") {
+        return (right.last_contact ?? -Infinity) - (left.last_contact ?? -Infinity);
+      }
+
+      return 0;
+    });
+
+    return sortedFlights;
+  }
+
   $: normalizedQuery = filters.query.trim().toLowerCase();
   $: minimumAltitude = Number(filters.minAltitude);
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
@@ -242,11 +288,12 @@
 
     return matchesQuery && matchesAltitude && matchesGroundFilter;
   });
+  $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
   $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
     selectedIcao24 = null;
   }
   $: selectedFlight = selectedIcao24
-    ? filteredFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
+    ? sortedFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
     : null;
   $: selectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
   $: if (!selectedFlight) {
@@ -258,6 +305,7 @@
       mapStyle,
       mapViewport,
       filterPresets,
+      sortBy,
     });
   }
 </script>
@@ -345,6 +393,15 @@
       <section class="panel">
         <h2>Filters</h2>
         <label class="field">
+          <span>Sort by</span>
+          <select bind:value={sortBy}>
+            <option value="altitude_desc">Altitude</option>
+            <option value="speed_desc">Speed</option>
+            <option value="distance_asc">Distance from map center</option>
+            <option value="last_contact_desc">Last update</option>
+          </select>
+        </label>
+        <label class="field">
           <span>Search</span>
           <input
             bind:this={searchInput}
@@ -403,7 +460,7 @@
 
     <section class="map-card">
       <FlightMap
-        flights={filteredFlights}
+        flights={sortedFlights}
         selectedIcao24={selectedIcao24}
         followAircraft={followAircraft}
         mapStyle={mapStyle}
@@ -559,6 +616,14 @@
   }
 
   .field input {
+    border: 1px solid rgba(73, 105, 135, 0.2);
+    border-radius: 12px;
+    padding: 0.75rem 0.85rem;
+    font: inherit;
+    background: rgba(255, 255, 255, 0.9);
+  }
+
+  .field select {
     border: 1px solid rgba(73, 105, 135, 0.2);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;

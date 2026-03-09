@@ -21,6 +21,7 @@ class FlightState:
     origin_country: str | None
     longitude: float
     latitude: float
+    last_contact: int | None
     true_track: float | None
     altitude: float | None
     velocity: float | None
@@ -105,6 +106,7 @@ class OpenSkyClient:
             icao24 = self._as_str(state[0])
             longitude = self._as_float(state[5])
             latitude = self._as_float(state[6])
+            last_contact = self._as_int(state[4])
             altitude = self._as_float(state[7]) or self._as_float(state[13])
             velocity = self._as_float(state[9])
             true_track = self._as_float(state[10])
@@ -121,6 +123,7 @@ class OpenSkyClient:
                     origin_country=self._clean_callsign(state[2]),
                     longitude=longitude,
                     latitude=latitude,
+                    last_contact=last_contact,
                     true_track=true_track,
                     altitude=altitude,
                     velocity=velocity,
@@ -159,3 +162,12 @@ class OpenSkyClient:
         if isinstance(value, bool):
             return value
         return default
+
+    @staticmethod
+    def _as_int(value: object) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None

@@ -12,12 +12,14 @@
   export let mapStyle = "standard";
 
   const dispatch = createEventDispatcher();
+  let shell;
   let container;
   let map;
   let activeBaseLayer;
   let activeMapStyle = null;
   let aircraftLayer;
   const markerRegistry = new Map();
+  let isFullscreen = false;
 
   function getCurrentAiracId(dateValue = new Date()) {
     const currentDate = new Date(dateValue);
@@ -147,6 +149,27 @@
     });
   }
 
+  function syncFullscreenState() {
+    isFullscreen = document.fullscreenElement === shell;
+
+    if (map) {
+      map.invalidateSize();
+    }
+  }
+
+  async function toggleFullscreen() {
+    if (!shell) {
+      return;
+    }
+
+    if (document.fullscreenElement === shell) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    await shell.requestFullscreen();
+  }
+
   onMount(() => {
     map = L.map(container, {
       zoomControl: true,
@@ -172,10 +195,12 @@
     }).addTo(map);
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
     map.on("moveend zoomend", emitBounds);
+    document.addEventListener("fullscreenchange", syncFullscreenState);
     emitBounds();
 
     return () => {
       map.off("moveend zoomend", emitBounds);
+      document.removeEventListener("fullscreenchange", syncFullscreenState);
       map.remove();
       activeBaseLayer = null;
       activeMapStyle = null;
@@ -196,13 +221,56 @@
   $: centerOnSelectedAircraft();
 </script>
 
-<div bind:this={container} class="map-root"></div>
+<div bind:this={shell} class:fullscreen={isFullscreen} class="map-shell">
+  <button class="map-action fullscreen-toggle" type="button" on:click={toggleFullscreen}>
+    {#if isFullscreen}
+      Exit fullscreen
+    {:else}
+      Fullscreen
+    {/if}
+  </button>
+
+  <div bind:this={container} class="map-root"></div>
+</div>
 
 <style>
+  .map-shell {
+    position: relative;
+    width: 100%;
+    height: 100%;
+  }
+
+  .map-shell.fullscreen {
+    background:
+      radial-gradient(circle at top, rgba(20, 59, 94, 0.34), transparent 32%),
+      linear-gradient(180deg, #082037 0%, #102d4b 100%);
+  }
+
   .map-root {
     width: 100%;
     height: 100%;
     min-height: 72vh;
+  }
+
+  .map-action {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    z-index: 700;
+    border: 0;
+    border-radius: 999px;
+    padding: 0.72rem 0.95rem;
+    font: inherit;
+    font-weight: 700;
+    color: #f4f9ff;
+    background: rgba(18, 57, 93, 0.88);
+    box-shadow: 0 10px 20px rgba(18, 57, 93, 0.18);
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+  }
+
+  .map-action:hover {
+    background: rgba(18, 57, 93, 0.96);
   }
 
   :global(.leaflet-container) {

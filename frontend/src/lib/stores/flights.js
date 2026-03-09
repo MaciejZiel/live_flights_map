@@ -6,6 +6,7 @@ const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 1
 const BBOX_PRECISION = 4;
 const BBOX_DEBOUNCE_MS = Number(import.meta.env.VITE_BBOX_DEBOUNCE_MS ?? 350);
 const USE_SSE = import.meta.env.VITE_USE_SSE !== "false";
+const SNAPSHOT_STORAGE_KEY = "live-flights-map.snapshot";
 
 const initialState = {
   status: "idle",
@@ -51,6 +52,31 @@ function sameBbox(left, right) {
   );
 }
 
+function loadStoredSnapshot() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(SNAPSHOT_STORAGE_KEY);
+    return rawValue ? JSON.parse(rawValue) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredSnapshot(payload) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(payload));
+  } catch {
+    // Ignore storage write failures and keep the live store functional.
+  }
+}
+
 function createFlightsStore() {
   const { subscribe, set, update } = writable(initialState);
   let poller = null;
@@ -58,8 +84,26 @@ function createFlightsStore() {
   let bboxRefreshTimeout = null;
   let eventSource = null;
   let streamClosedManually = false;
+  const storedSnapshot = loadStoredSnapshot();
+
+  if (storedSnapshot?.flights?.length) {
+    set({
+      status: "success",
+      flights: storedSnapshot.flights ?? [],
+      error: null,
+      fetchedAt: storedSnapshot.fetched_at ?? null,
+      count: storedSnapshot.count ?? 0,
+      bbox: storedSnapshot.bbox ?? null,
+      source: storedSnapshot.meta?.source ?? "cache",
+      warning: "Showing the last locally cached snapshot while live data reconnects.",
+      stale: true,
+      reason: "local_cache",
+      transport: USE_SSE ? "sse" : "polling",
+    });
+  }
 
   function applyPayload(payload, transport) {
+    saveStoredSnapshot(payload);
     set({
       status: "success",
       flights: payload.flights ?? [],
@@ -89,10 +133,16 @@ function createFlightsStore() {
     } catch (error) {
       update((state) => ({
         ...state,
-        status: "error",
-        error: error instanceof Error ? error.message : "Unknown error.",
-        warning: null,
-        reason: "error",
+        status: state.flights.length ? "success" : "error",
+        error: state.flights.length ? null : error instanceof Error ? error.message : "Unknown error.",
+        warning: state.flights.length
+          ? error instanceof Error
+            ? `${error.message} Showing the most recent cached snapshot.`
+            : "Showing the most recent cached snapshot."
+          : null,
+        stale: state.flights.length ? true : state.stale,
+        source: state.flights.length ? "cache" : state.source,
+        reason: state.flights.length ? "local_cache" : "error",
         transport,
       }));
     }
@@ -166,19 +216,27 @@ function createFlightsStore() {
         const payload = JSON.parse(event.data);
         update((state) => ({
           ...state,
-          status: "error",
-          error: payload.error ?? "Live stream error.",
-          warning: null,
-          reason: "error",
+          status: state.flights.length ? "success" : "error",
+          error: state.flights.length ? null : payload.error ?? "Live stream error.",
+          warning: state.flights.length
+            ? `${payload.error ?? "Live stream error."} Showing the most recent cached snapshot.`
+            : null,
+          stale: state.flights.length ? true : state.stale,
+          source: state.flights.length ? "cache" : state.source,
+          reason: state.flights.length ? "local_cache" : "error",
           transport: "sse",
         }));
       } catch {
         update((state) => ({
           ...state,
-          status: "error",
-          error: "Live stream error.",
-          warning: null,
-          reason: "error",
+          status: state.flights.length ? "success" : "error",
+          error: state.flights.length ? null : "Live stream error.",
+          warning: state.flights.length
+            ? "Live stream error. Showing the most recent cached snapshot."
+            : null,
+          stale: state.flights.length ? true : state.stale,
+          source: state.flights.length ? "cache" : state.source,
+          reason: state.flights.length ? "local_cache" : "error",
           transport: "sse",
         }));
       }

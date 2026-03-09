@@ -47,10 +47,8 @@ class FlightSnapshotService:
         if cooldown_until > now:
             if cache_entry:
                 retry_after = max(1, int(cooldown_until - now))
-                return self._with_meta(
+                return self._build_stale_response(
                     cache_entry.payload,
-                    source="cache",
-                    stale=True,
                     reason="cooldown",
                     warning=f"Using cached snapshot while OpenSky cools down ({retry_after}s left).",
                 )
@@ -63,10 +61,8 @@ class FlightSnapshotService:
                 self._cooldown_until[cache_key] = monotonic() + self.cooldown_seconds
 
             if cache_entry:
-                return self._with_meta(
+                return self._build_stale_response(
                     cache_entry.payload,
-                    source="cache",
-                    stale=True,
                     reason="rate_limit",
                     warning="OpenSky rate limit exceeded. Showing the last cached snapshot.",
                 )
@@ -74,10 +70,8 @@ class FlightSnapshotService:
             raise exc
         except OpenSkyError as exc:
             if cache_entry:
-                return self._with_meta(
+                return self._build_stale_response(
                     cache_entry.payload,
-                    source="cache",
-                    stale=True,
                     reason="upstream_error",
                     warning=f"{exc} Showing the last cached snapshot.",
                 )
@@ -91,6 +85,20 @@ class FlightSnapshotService:
             self._cooldown_until.pop(cache_key, None)
 
         return self._with_meta(payload, source="live", stale=False, reason="live")
+
+    @staticmethod
+    def _build_stale_response(
+        payload: dict[str, object],
+        reason: str,
+        warning: str,
+    ) -> dict[str, object]:
+        return FlightSnapshotService._with_meta(
+            payload,
+            source="cache",
+            stale=True,
+            reason=reason,
+            warning=warning,
+        )
 
     @staticmethod
     def _cache_key(bbox: dict[str, float]) -> tuple[float, float, float, float]:

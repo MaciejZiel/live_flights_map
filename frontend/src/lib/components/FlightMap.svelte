@@ -309,9 +309,9 @@
           projectedPoint,
         ],
         {
-          color: "#4bb7f5",
-          weight: 3,
-          opacity: 0.9,
+          color: "#79cfff",
+          weight: 2.5,
+          opacity: 0.92,
           dashArray: "10 8",
         }
       ),
@@ -325,14 +325,21 @@
     ]).addTo(map);
   }
 
-  function getSelectedRouteLatLngs() {
+  function getSelectedRouteAirports() {
     return (selectedRouteAirports ?? [])
       .filter(
         (airport) =>
           Number.isFinite(airport?.latitude) &&
           Number.isFinite(airport?.longitude)
-      )
-      .map((airport) => [airport.latitude, airport.longitude]);
+      );
+  }
+
+  function getAirportLabel(airport, fallback) {
+    return airport?.iata ?? airport?.icao ?? airport?.location ?? fallback;
+  }
+
+  function getSelectedRouteLatLngs() {
+    return getSelectedRouteAirports().map((airport) => [airport.latitude, airport.longitude]);
   }
 
   function syncRouteLayer() {
@@ -345,7 +352,8 @@
       routeLayer = null;
     }
 
-    const routeLatLngs = getSelectedRouteLatLngs();
+    const routeAirports = getSelectedRouteAirports();
+    const routeLatLngs = routeAirports.map((airport) => [airport.latitude, airport.longitude]);
     if (routeLatLngs.length < 2) {
       return;
     }
@@ -353,18 +361,29 @@
     const routePoints = [
       L.polyline(routeLatLngs, {
         color: "#ffd34f",
-        weight: 3,
-        opacity: 0.92,
+        weight: 4,
+        opacity: 0.94,
+        dashArray: "10 8",
+        lineCap: "round",
       }),
-      ...routeLatLngs.map((latLng, index) =>
-        L.circleMarker(latLng, {
+      ...routeAirports.map((airport, index) => {
+        const marker = L.circleMarker([airport.latitude, airport.longitude], {
           radius: 5,
           weight: 2,
           color: index === 0 ? "#7dd3fc" : "#f97316",
           fillColor: "#111827",
           fillOpacity: 1,
-        })
-      ),
+        });
+
+        marker.bindTooltip(getAirportLabel(airport, index === 0 ? "FROM" : "TO"), {
+          permanent: true,
+          direction: index === 0 ? "left" : "right",
+          offset: index === 0 ? [-12, 0] : [12, 0],
+          className: "route-airport-label",
+        });
+
+        return marker;
+      }),
     ];
 
     routeLayer = L.layerGroup(routePoints).addTo(map);
@@ -394,8 +413,11 @@
       bounds.extend([selectedFlight.latitude, selectedFlight.longitude]);
     }
 
+    const narrowViewport = window.matchMedia("(max-width: 960px)").matches;
+
     map.fitBounds(bounds, {
-      padding: [72, 72],
+      paddingTopLeft: narrowViewport ? [56, 56] : [80, 80],
+      paddingBottomRight: narrowViewport ? [56, 56] : [360, 80],
       maxZoom: 7,
       animate: true,
       duration: 0.8,
@@ -423,12 +445,12 @@
       showCoverageOnHover: false,
       removeOutsideVisibleBounds: true,
       disableClusteringAtZoom: 9,
-      maxClusterRadius: 42,
+      maxClusterRadius: 38,
       iconCreateFunction(cluster) {
         return L.divIcon({
           html: `<span>${cluster.getChildCount()}</span>`,
           className: "aircraft-cluster",
-          iconSize: [42, 42],
+          iconSize: [30, 30],
         });
       },
     }).addTo(map);
@@ -529,15 +551,15 @@
 
   .map-tint {
     background:
-      linear-gradient(180deg, rgba(44, 73, 49, 0.12) 0%, rgba(24, 39, 22, 0.22) 100%),
-      radial-gradient(circle at center, rgba(127, 160, 117, 0.08), transparent 58%);
-    mix-blend-mode: soft-light;
+      linear-gradient(180deg, rgba(43, 69, 46, 0.34) 0%, rgba(17, 26, 20, 0.58) 100%),
+      radial-gradient(circle at center, rgba(98, 129, 92, 0.18), transparent 58%);
+    mix-blend-mode: multiply;
   }
 
   .map-vignette {
     background:
-      linear-gradient(180deg, rgba(7, 8, 10, 0.12) 0%, transparent 18%, transparent 82%, rgba(7, 8, 10, 0.18) 100%),
-      linear-gradient(90deg, rgba(7, 8, 10, 0.08) 0%, transparent 12%, transparent 88%, rgba(7, 8, 10, 0.1) 100%);
+      linear-gradient(180deg, rgba(7, 8, 10, 0.18) 0%, transparent 18%, transparent 82%, rgba(7, 8, 10, 0.24) 100%),
+      linear-gradient(90deg, rgba(7, 8, 10, 0.12) 0%, transparent 12%, transparent 88%, rgba(7, 8, 10, 0.14) 100%);
   }
 
   :global(.leaflet-container) {
@@ -546,6 +568,10 @@
       system-ui,
       sans-serif;
     background: var(--map-background);
+  }
+
+  :global(.leaflet-tile-pane) {
+    filter: saturate(0.8) brightness(0.66) contrast(1.02) sepia(0.18) hue-rotate(-22deg);
   }
 
   :global(.leaflet-popup-content) {
@@ -559,28 +585,28 @@
   }
 
   :global(.leaflet-top.leaflet-right) {
-    top: 5.95rem;
-    right: 19rem;
+    top: 5.2rem;
+    right: 20.9rem;
   }
 
   :global(.leaflet-control-zoom a) {
-    width: 46px;
-    height: 46px;
-    line-height: 46px;
+    width: 38px;
+    height: 38px;
+    line-height: 38px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: #f5f8fc;
-    background: rgba(28, 31, 36, 0.96);
-    backdrop-filter: blur(12px);
+    background: rgba(27, 29, 34, 0.96);
+    backdrop-filter: blur(10px);
   }
 
   :global(.leaflet-control-zoom a:first-child) {
-    border-top-left-radius: 16px;
-    border-top-right-radius: 16px;
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
   }
 
   :global(.leaflet-control-zoom a:last-child) {
-    border-bottom-left-radius: 16px;
-    border-bottom-right-radius: 16px;
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
   }
 
   :global(.aircraft-icon-shell) {
@@ -593,13 +619,14 @@
     place-items: center;
     border-radius: 50%;
     color: #171a1f;
+    font-size: 0.72rem;
     font-weight: 800;
     background:
       radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.24), transparent 35%),
       linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
     box-shadow:
-      0 14px 26px rgba(0, 0, 0, 0.28),
-      inset 0 0 0 4px rgba(0, 0, 0, 0.12);
+      0 8px 18px rgba(0, 0, 0, 0.24),
+      inset 0 0 0 2px rgba(0, 0, 0, 0.12);
   }
 
   :global(.aircraft-cluster span) {
@@ -607,15 +634,30 @@
   }
 
   :global(.aircraft-icon) {
-    width: 28px;
-    height: 28px;
-    filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.28));
+    width: 22px;
+    height: 22px;
+    filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.24));
     transform-origin: center;
+  }
+
+  :global(.leaflet-tooltip.route-airport-label) {
+    padding: 0.28rem 0.46rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #f5f8fc;
+    background: rgba(15, 17, 22, 0.92);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18);
+  }
+
+  :global(.leaflet-tooltip.route-airport-label:before) {
+    display: none;
   }
 
   @media (max-width: 960px) {
     :global(.leaflet-top.leaflet-right) {
-      top: 5.5rem;
+      top: 5rem;
       right: 0.75rem;
     }
   }

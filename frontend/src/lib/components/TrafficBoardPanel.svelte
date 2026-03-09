@@ -27,14 +27,10 @@
   $: visibleRows = boardFlights.slice(0, maxRows);
 </script>
 
-<section class="panel traffic-board-panel">
-  <div class="board-header">
-    <div>
-      <p class="eyebrow">{subtitle}</p>
-      <h2>{title}</h2>
-    </div>
-    <span class="count-pill">{flights.length}</span>
-  </div>
+<section aria-label={title} class="panel traffic-board-panel">
+  {#if subtitle}
+    <p class="board-note">{subtitle}</p>
+  {/if}
 
   {#if visibleRows.length}
     <div class="board-list">
@@ -73,74 +69,70 @@
 <style>
   .traffic-board-panel {
     display: grid;
-    gap: 0.85rem;
+    gap: 0.65rem;
   }
 
-  .board-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
-    align-items: start;
-  }
-
-  .eyebrow {
-    margin: 0 0 0.2rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-size: 0.7rem;
-    color: var(--color-muted);
-  }
-
-  h2,
   p {
     margin: 0;
   }
 
-  .count-pill {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 2rem;
-    padding: 0.32rem 0.65rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 800;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  .board-note {
+    font-size: 0.69rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: rgba(194, 206, 219, 0.56);
   }
 
   .board-list {
     display: grid;
-    gap: 0.45rem;
+    gap: 0.4rem;
+    align-content: start;
   }
 
   .board-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1.5fr) repeat(3, minmax(0, 0.8fr));
-    gap: 0.7rem;
+    grid-template-columns: auto minmax(0, 1.35fr) repeat(3, minmax(0, 0.7fr));
+    gap: 0.58rem;
     align-items: center;
     width: 100%;
-    padding: 0.78rem 0.82rem;
-    border: 1px solid var(--surface-border);
-    border-radius: 16px;
+    padding: 0.7rem 0.74rem;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
     color: inherit;
-    background: rgba(255, 255, 255, 0.04);
+    background:
+      linear-gradient(180deg, rgba(34, 37, 42, 0.98) 0%, rgba(22, 24, 28, 0.98) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.02),
+      0 10px 18px rgba(0, 0, 0, 0.18);
     text-align: left;
     cursor: pointer;
+    transition:
+      transform 160ms ease,
+      border-color 160ms ease,
+      background 160ms ease;
+  }
+
+  .board-row:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 211, 79, 0.22);
   }
 
   .board-row.selected {
     border-color: rgba(245, 185, 8, 0.58);
-    box-shadow: inset 0 0 0 1px rgba(245, 185, 8, 0.45);
+    background:
+      linear-gradient(180deg, rgba(51, 43, 14, 0.98) 0%, rgba(27, 25, 16, 0.98) 100%);
+    box-shadow:
+      inset 0 0 0 1px rgba(245, 185, 8, 0.34),
+      0 14px 24px rgba(0, 0, 0, 0.2);
   }
 
   .board-rank {
     display: grid;
     place-items: center;
-    width: 1.8rem;
-    height: 1.8rem;
+    width: 1.7rem;
+    height: 1.7rem;
     border-radius: 999px;
-    font-size: 0.76rem;
+    font-size: 0.72rem;
     font-weight: 800;
     color: #171a1f;
     background: rgba(255, 211, 79, 0.92);
@@ -155,14 +147,16 @@
   .board-main strong,
   .board-metric strong {
     color: var(--color-text);
-    font-size: 0.9rem;
+    font-size: 0.85rem;
+    line-height: 1.15;
   }
 
   .board-main span,
   .board-metric span,
   .empty-copy {
-    color: var(--color-muted);
-    font-size: 0.78rem;
+    color: rgba(194, 206, 219, 0.72);
+    font-size: 0.7rem;
+    line-height: 1.15;
   }
 
   .board-metric {
@@ -171,7 +165,11 @@
 
   @media (max-width: 720px) {
     .board-row {
-      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.8fr);
+    }
+
+    .board-metric.compact {
+      display: none;
     }
 
     .board-metric {

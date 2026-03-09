@@ -53,22 +53,22 @@ function animateMarkerPosition(entry, nextLatLng) {
 }
 
 export function createAircraftIcon(track = 0, selected = false, watched = false, watchModeEnabled = false) {
-  const fillColor = selected ? "#78c8ff" : watched ? "#7df0b1" : watchModeEnabled ? "#9aa5b3" : "#ffd11a";
-  const strokeColor = selected ? "#eff9ff" : watched ? "#ecfff4" : "#1f2329";
+  const fillColor = selected ? "#86d2ff" : watched ? "#7df0b1" : watchModeEnabled ? "#9aa5b3" : "#f7c716";
+  const strokeColor = selected ? "#eff9ff" : watched ? "#ecfff4" : "#46370a";
   const opacity = watchModeEnabled && !watched && !selected ? 0.45 : 1;
 
   return L.divIcon({
     className: "aircraft-icon-shell",
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
     html: `
       <div class="aircraft-icon" style="transform: rotate(${track}deg); opacity: ${opacity};">
-        <svg viewBox="0 0 48 48" width="28" height="28" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="22" height="22" aria-hidden="true">
           <path
             d="M22 3h4l3 12 11 7v4l-11-2.5 1.8 8.2 4.7 4v3.3L26 36.7V45h-4v-8.3l-9.5 2.3v-3.3l4.7-4 1.8-8.2L8 26v-4l11-7 3-12Z"
             fill="${fillColor}"
             stroke="${strokeColor}"
-            stroke-width="1.8"
+            stroke-width="1.7"
             stroke-linejoin="round"
           />
         </svg>

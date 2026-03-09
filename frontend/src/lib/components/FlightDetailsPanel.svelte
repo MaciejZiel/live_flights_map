@@ -167,7 +167,7 @@
 <section class="panel details-panel">
   <div class="panel-heading">
     <div>
-      <p class="eyebrow">Aircraft details</p>
+      <p class="eyebrow">{routeLabel ? "Tracking route" : "Aircraft details"}</p>
       <h2>{flight ? identity.callsign : "Flight inspector"}</h2>
     </div>
     {#if flight}
@@ -219,6 +219,25 @@
           <span>{identity.operatorCode !== "N/A" ? `Operator ${identity.operatorCode}` : identity.originCountry ?? "Country n/a"}</span>
         </div>
 
+        <div class="route-strip">
+          <article class="route-node">
+            <span class="route-label">From</span>
+            <strong>{formatAirportCode(route?.origin)}</strong>
+            <p>{formatAirportName(route?.origin)}</p>
+          </article>
+          <div class="route-line" aria-hidden="true"></div>
+          <article class="route-node current">
+            <span class="route-label">To</span>
+            <strong>{formatAirportCode(route?.destination)}</strong>
+            <p>{formatAirportName(route?.destination)}</p>
+          </article>
+        </div>
+
+        <div class="route-summary">
+          <span>{route?.iata_codes ?? route?.airport_codes ?? "Route lookup pending"}</span>
+          <strong>{routeStops.length ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}` : "Direct flight"}</strong>
+        </div>
+
         <div class="identity-actions">
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
             {followAircraft ? "Following" : "Follow"}
@@ -236,49 +255,6 @@
         <span>{detailWarning}</span>
       </section>
     {/if}
-
-    <section class="route-panel">
-      <div class="section-header">
-        <div>
-          <strong>Planned route</strong>
-          <p>{routeLabel ?? "No route metadata from the current providers."}</p>
-        </div>
-        <span class="section-badge">{route?.plausible === false ? "Unverified" : route ? "Resolved" : "Pending"}</span>
-      </div>
-
-      <div class="route-strip">
-        <article class="route-node">
-          <span class="route-label">From</span>
-          <strong>{formatAirportCode(route?.origin)}</strong>
-          <p>{formatAirportName(route?.origin)}</p>
-        </article>
-        <div class="route-line" aria-hidden="true"></div>
-        <article class="route-node current">
-          <span class="route-label">To</span>
-          <strong>{formatAirportCode(route?.destination)}</strong>
-          <p>{formatAirportName(route?.destination)}</p>
-        </article>
-      </div>
-
-      <div class="data-grid compact">
-        <article class="data-card">
-          <span>Flight number</span>
-          <strong>{routeFlightNumber || identity.callsign}</strong>
-        </article>
-        <article class="data-card">
-          <span>Stops</span>
-          <strong>{routeStops.length ? routeStops.length : "Direct"}</strong>
-        </article>
-        <article class="data-card">
-          <span>Route code</span>
-          <strong>{route?.iata_codes ?? route?.airport_codes ?? "Unknown"}</strong>
-        </article>
-        <article class="data-card">
-          <span>Current position</span>
-          <strong>{formatCoordinates(flight.latitude, flight.longitude)}</strong>
-        </article>
-      </div>
-    </section>
 
     <section class="telemetry-grid">
       <article class="telemetry-card">
@@ -303,31 +279,46 @@
       </article>
     </section>
 
-    <section class="data-grid">
-      <article class="data-card">
-        <span>ICAO24</span>
-        <strong>{identity.icao24}</strong>
-      </article>
-      <article class="data-card">
-        <span>Registration</span>
-        <strong>{identity.registration ?? "Unknown"}</strong>
-      </article>
-      <article class="data-card">
-        <span>Type code</span>
-        <strong>{identity.typeCode ?? "Unknown"}</strong>
-      </article>
-      <article class="data-card">
-        <span>Last contact</span>
-        <strong>{formatRelativeContact(flight.last_contact)}</strong>
-      </article>
-      <article class="data-card">
-        <span>Live track</span>
-        <strong>{trailPoints.length ? `${trailPoints.length} pts / ${observedDistanceKm.toFixed(1)} km` : "Waiting for trail"}</strong>
-      </article>
-      <article class="data-card">
-        <span>Country</span>
-        <strong>{identity.originCountry ?? "Unknown"}</strong>
-      </article>
+    <section class="facts-panel">
+      <div class="facts-header">
+        <strong>Live facts</strong>
+        <span>{route?.plausible === false ? "route unverified" : route ? "route resolved" : "route pending"}</span>
+      </div>
+
+      <div class="fact-list">
+        <div class="fact-row">
+          <span>Flight number</span>
+          <strong>{routeFlightNumber || identity.callsign}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Registration</span>
+          <strong>{identity.registration ?? "Unknown"}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Type code</span>
+          <strong>{identity.typeCode ?? "Unknown"}</strong>
+        </div>
+        <div class="fact-row">
+          <span>ICAO24</span>
+          <strong>{identity.icao24}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Current position</span>
+          <strong>{formatCoordinates(flight.latitude, flight.longitude)}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Last contact</span>
+          <strong>{formatRelativeContact(flight.last_contact)}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Observed trail</span>
+          <strong>{trailPoints.length ? `${trailPoints.length} pts / ${observedDistanceKm.toFixed(1)} km` : "Waiting for trail"}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Country</span>
+          <strong>{identity.originCountry ?? "Unknown"}</strong>
+        </div>
+      </div>
     </section>
   {:else}
     <p class="empty-copy">Click an aircraft marker to open focused route and tracking details.</p>
@@ -337,25 +328,7 @@
 <style>
   .details-panel {
     display: grid;
-    gap: 0.95rem;
-  }
-
-  .panel-heading,
-  .hero-headline,
-  .section-header,
-  .metric-card-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
-    align-items: start;
-  }
-
-  .eyebrow {
-    margin: 0 0 0.2rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    font-size: 0.7rem;
-    color: var(--color-muted);
+    gap: 0.9rem;
   }
 
   h2,
@@ -364,15 +337,31 @@
     margin: 0;
   }
 
+  .panel-heading,
+  .hero-headline,
+  .facts-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.18rem;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.17em;
+    color: rgba(190, 203, 217, 0.62);
+  }
+
   .status-chip,
-  .route-badge,
-  .section-badge {
+  .route-badge {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    padding: 0.34rem 0.7rem;
-    font-size: 0.76rem;
+    padding: 0.34rem 0.68rem;
+    font-size: 0.74rem;
     font-weight: 800;
   }
 
@@ -381,40 +370,41 @@
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
-  .route-badge,
-  .section-badge {
-    color: #f7db7a;
+  .route-badge {
+    color: #f8de88;
     background: rgba(245, 185, 8, 0.12);
-    border: 1px solid rgba(245, 185, 8, 0.18);
+    border: 1px solid rgba(245, 185, 8, 0.22);
   }
 
   .hero-card,
-  .route-panel,
   .telemetry-card,
-  .data-card,
-  .detail-warning {
-    border: 1px solid var(--surface-border);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.03);
+  .detail-warning,
+  .facts-panel {
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, rgba(31, 34, 39, 0.98) 0%, rgba(19, 21, 25, 0.98) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.02),
+      0 14px 26px rgba(0, 0, 0, 0.2);
   }
 
   .hero-card {
     display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.78rem;
+    gap: 0.8rem;
     padding: 0.78rem;
   }
 
   .photo-shell {
     display: grid;
-    gap: 0.6rem;
+    gap: 0.48rem;
   }
 
   .photo-shell img,
   .photo-placeholder {
     width: 100%;
     aspect-ratio: 16 / 10;
-    border-radius: 12px;
+    border-radius: 13px;
   }
 
   .photo-shell img {
@@ -428,91 +418,145 @@
   }
 
   .photo-credit,
-  .hero-meta,
   .detail-warning {
     display: grid;
-    gap: 0.18rem;
+    gap: 0.15rem;
   }
 
   .photo-credit span,
   .hero-subtitle,
   .detail-warning span,
-  .chart-empty,
   .empty-copy,
-  .section-header p {
-    color: var(--color-muted);
-    font-size: 0.82rem;
+  .facts-header span,
+  .route-node p,
+  .telemetry-card small {
+    color: rgba(190, 203, 217, 0.74);
+    font-size: 0.78rem;
   }
 
   .photo-credit strong,
   .hero-headline h3,
   .route-node strong,
-  .data-card strong,
-  .history-value {
+  .telemetry-card strong,
+  .fact-row strong,
+  .facts-header strong {
     color: var(--color-text);
   }
 
   .photo-placeholder {
     display: grid;
     align-content: center;
-    gap: 0.35rem;
-    padding: 0.9rem;
+    gap: 0.3rem;
+    padding: 0.95rem;
     background:
       radial-gradient(circle at top, rgba(245, 185, 8, 0.2), transparent 58%),
       linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
-    text-align: left;
   }
 
   .photo-placeholder.loading {
-    border: 1px solid rgba(245, 185, 8, 0.18);
+    border: 1px solid rgba(245, 185, 8, 0.2);
   }
 
   .photo-placeholder span,
   .route-label,
-  .history-label,
   .telemetry-card span,
-  .data-card span,
-  .metric-card-header span {
-    font-size: 0.74rem;
+  .fact-row span,
+  .facts-header span {
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-subtle);
+    letter-spacing: 0.1em;
+  }
+
+  .photo-placeholder span,
+  .route-label,
+  .telemetry-card span,
+  .fact-row span {
+    font-size: 0.7rem;
+    color: rgba(171, 186, 202, 0.56);
   }
 
   .photo-placeholder strong {
     font-size: 1rem;
-    color: var(--color-text);
   }
 
   .photo-placeholder small {
-    color: var(--color-muted);
-    font-size: 0.8rem;
+    color: rgba(190, 203, 217, 0.72);
+    font-size: 0.78rem;
   }
 
   .hero-copy {
     display: grid;
-    gap: 0.7rem;
+    gap: 0.72rem;
   }
 
   .hero-route {
-    font-size: 1rem;
-    font-weight: 700;
+    font-size: 1.02rem;
+    font-weight: 800;
     color: var(--color-text);
   }
 
   .hero-meta {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.45rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  .hero-meta span,
+  .route-summary {
+    padding: 0.62rem 0.7rem;
+    border-radius: 11px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .hero-meta span {
-    padding: 0.62rem 0.7rem;
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
     color: var(--color-text);
-    font-size: 0.78rem;
+    font-size: 0.77rem;
     font-weight: 600;
+  }
+
+  .route-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: center;
+    color: rgba(190, 203, 217, 0.72);
+    font-size: 0.76rem;
+  }
+
+  .route-summary strong {
+    color: #f8de88;
+    font-size: 0.8rem;
+  }
+
+  .route-strip {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.7rem;
+    align-items: center;
+  }
+
+  .route-node {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.74rem;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .route-node.current {
+    border-color: rgba(245, 185, 8, 0.26);
+  }
+
+  .route-node strong {
+    font-size: 1.02rem;
+  }
+
+  .route-line {
+    width: 100%;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(120, 200, 255, 0.34), rgba(245, 185, 8, 0.92));
   }
 
   .identity-actions {
@@ -522,122 +566,112 @@
   }
 
   .action-button {
-    border: 1px solid var(--surface-border);
+    border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    padding: 0.56rem 0.8rem;
+    padding: 0.56rem 0.86rem;
     font: inherit;
     font-weight: 700;
     color: var(--button-secondary-text);
     background: var(--button-secondary-bg);
     cursor: pointer;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      transform 160ms ease;
   }
 
-  .action-button.active,
-  .action-button.secondary.active {
+  .action-button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255, 211, 79, 0.2);
+  }
+
+  .action-button.active {
     color: var(--button-primary-text);
     background: var(--button-primary-bg);
     border-color: transparent;
   }
 
   .detail-warning,
-  .route-panel {
-    display: grid;
-    gap: 0.72rem;
+  .facts-panel {
     padding: 0.82rem;
   }
 
   .detail-warning strong {
-    color: #f7db7a;
-    font-size: 0.82rem;
-  }
-
-  .route-strip {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-    gap: 0.75rem;
-    align-items: center;
-  }
-
-  .route-node {
-    display: grid;
-    gap: 0.2rem;
-    padding: 0.72rem;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .route-node.current {
-    border: 1px solid rgba(245, 185, 8, 0.28);
-  }
-
-  .route-node p {
-    color: var(--color-muted);
+    color: #f8de88;
     font-size: 0.8rem;
   }
 
-  .route-line {
-    width: 100%;
-    height: 2px;
-    border-radius: 999px;
-    background: linear-gradient(90deg, rgba(120, 200, 255, 0.35), rgba(245, 185, 8, 0.8));
-  }
-
-  .telemetry-grid,
-  .data-grid {
-    display: grid;
-    gap: 0.55rem;
-  }
-
   .telemetry-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .data-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .data-grid.compact {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .telemetry-card,
-  .data-card {
     display: grid;
-    gap: 0.22rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .telemetry-card {
+    display: grid;
+    gap: 0.2rem;
     padding: 0.72rem 0.76rem;
   }
 
   .telemetry-card strong {
-    color: var(--color-text);
-    font-size: 1rem;
+    font-size: 0.96rem;
   }
 
-  .telemetry-card small {
-    font-size: 0.78rem;
-    color: var(--color-subtle);
+  .facts-panel {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .fact-list {
+    display: grid;
+  }
+
+  .fact-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: baseline;
+    padding: 0.7rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .fact-row:first-child {
+    border-top: 0;
+    padding-top: 0.1rem;
+  }
+
+  .fact-row strong {
+    font-size: 0.84rem;
+    text-align: right;
   }
 
   @media (max-width: 720px) {
     .panel-heading,
     .hero-headline,
-    .section-header {
+    .facts-header,
+    .route-summary {
       display: grid;
     }
 
-    .hero-card,
-    .route-strip,
+    .hero-meta,
     .telemetry-grid,
-    .data-grid,
-    .data-grid.compact,
-    .hero-meta {
+    .route-strip {
       grid-template-columns: 1fr;
     }
 
     .route-line {
-      height: 36px;
       width: 2px;
+      height: 36px;
       justify-self: center;
-      background: linear-gradient(180deg, rgba(120, 200, 255, 0.35), rgba(245, 185, 8, 0.8));
+      background: linear-gradient(180deg, rgba(120, 200, 255, 0.34), rgba(245, 185, 8, 0.92));
+    }
+
+    .fact-row {
+      display: grid;
+    }
+
+    .fact-row strong {
+      text-align: left;
     }
   }
 </style>

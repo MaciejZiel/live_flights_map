@@ -56,16 +56,18 @@
   }
 
   .aircraft-default {
-    background: linear-gradient(135deg, #12395d 0%, #2c648f 100%);
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   .aircraft-selected {
-    background: linear-gradient(135deg, #b25e10 0%, #de8b32 100%);
+    background: linear-gradient(180deg, #78c8ff 0%, #45a7ee 100%);
   }
 
   .aircraft-cluster {
-    background: linear-gradient(135deg, #12395d 0%, #2d6c98 100%);
-    box-shadow: inset 0 0 0 4px rgba(255, 255, 255, 0.16);
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    box-shadow: inset 0 0 0 4px rgba(0, 0, 0, 0.12);
   }
 
   .legend-pill {

@@ -121,9 +121,10 @@
       return L.layerGroup([aviationBase, aviationOverlay]);
     }
 
-    return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    return L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
       ...commonOptions,
-      attribution: "&copy; OpenStreetMap contributors",
+      subdomains: "abcd",
+      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
     });
   }
 
@@ -326,10 +327,14 @@
     const initialZoom = initialViewport?.zoom ?? 6;
 
     map = L.map(container, {
-      zoomControl: true,
+      zoomControl: false,
       minZoom: 4,
       preferCanvas: true,
     }).setView(initialCenter, initialZoom);
+
+    L.control.zoom({
+      position: "topright",
+    }).addTo(map);
 
     setBasemap(mapStyle);
 
@@ -415,7 +420,7 @@
         title="Jump to the Poland tracking view"
         on:click={() => applyViewPreset("poland")}
       >
-        Poland
+        PL
       </button>
       <button
         class="map-action preset-button"
@@ -423,7 +428,7 @@
         title="Jump to the Europe tracking view"
         on:click={() => applyViewPreset("europe")}
       >
-        Europe
+        EU
       </button>
       <button
         class="map-action preset-button"
@@ -431,22 +436,22 @@
         title="Jump to the global tracking view"
         on:click={() => applyViewPreset("world")}
       >
-        World
+        WLD
       </button>
     </div>
 
-  <button
-    class="map-action fullscreen-toggle"
-    type="button"
-    title="Toggle fullscreen radar view"
-    on:click={toggleFullscreen}
-  >
-    {#if isFullscreen}
-      Exit fullscreen
-    {:else}
-      Fullscreen
-    {/if}
-  </button>
+    <button
+      class="map-action fullscreen-toggle"
+      type="button"
+      title="Toggle fullscreen radar view"
+      on:click={toggleFullscreen}
+    >
+      {#if isFullscreen}
+        Exit
+      {:else}
+        Full
+      {/if}
+    </button>
   </div>
 
   <div bind:this={container} class="map-root"></div>
@@ -466,20 +471,20 @@
   .map-root {
     width: 100%;
     height: 100%;
-    min-height: 72vh;
+    min-height: 100vh;
   }
 
   .map-action {
-    border: 0;
-    border-radius: 999px;
-    padding: 0.72rem 0.95rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 16px;
+    padding: 0.72rem 0.82rem;
     font: inherit;
     font-weight: 700;
-    color: var(--button-primary-text);
+    color: #f5f8fc;
     background: var(--map-ui-bg);
-    box-shadow: 0 10px 20px rgba(18, 57, 93, 0.18);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24);
     cursor: pointer;
-    backdrop-filter: blur(6px);
+    backdrop-filter: blur(12px);
   }
 
   .map-action:hover {
@@ -488,59 +493,45 @@
 
   .map-toolbar {
     position: absolute;
-    top: 1rem;
-    left: 1rem;
     right: 1rem;
+    bottom: 6.4rem;
     z-index: 700;
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
-    pointer-events: none;
-  }
-
-  .preset-group,
-  .fullscreen-toggle {
-    pointer-events: auto;
+    display: grid;
+    gap: 0.7rem;
   }
 
   .preset-group {
-    display: flex;
+    display: grid;
     gap: 0.55rem;
-    flex-wrap: wrap;
   }
 
   .preset-button {
-    background: var(--button-secondary-bg);
-    color: var(--button-secondary-text);
+    min-width: 4rem;
   }
 
-  .preset-button:hover {
-    filter: brightness(1.04);
+  .fullscreen-toggle {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
   }
 
   @media (max-width: 720px) {
     .map-root {
-      min-height: 78vh;
+      min-height: 100vh;
     }
 
     .map-toolbar {
-      top: auto;
-      bottom: 0.9rem;
-      left: 0.75rem;
       right: 0.75rem;
-      align-items: end;
+      bottom: 5.4rem;
     }
 
     .preset-group {
-      max-width: min(68vw, 320px);
-      overflow-x: auto;
-      padding-bottom: 0.15rem;
+      max-width: none;
     }
 
     .map-action {
-      padding: 0.65rem 0.82rem;
+      padding: 0.65rem 0.75rem;
       font-size: 0.86rem;
-      white-space: nowrap;
     }
   }
 
@@ -557,6 +548,36 @@
     line-height: 1.45;
   }
 
+  :global(.leaflet-control-zoom) {
+    border: 0;
+    box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22);
+  }
+
+  :global(.leaflet-top.leaflet-right) {
+    top: 6.8rem;
+    right: 1rem;
+  }
+
+  :global(.leaflet-control-zoom a) {
+    width: 44px;
+    height: 44px;
+    line-height: 44px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #f5f8fc;
+    background: rgba(31, 34, 39, 0.94);
+    backdrop-filter: blur(12px);
+  }
+
+  :global(.leaflet-control-zoom a:first-child) {
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+  }
+
+  :global(.leaflet-control-zoom a:last-child) {
+    border-bottom-left-radius: 16px;
+    border-bottom-right-radius: 16px;
+  }
+
   :global(.aircraft-icon-shell) {
     background: transparent;
     border: 0;
@@ -566,14 +587,14 @@
     display: grid;
     place-items: center;
     border-radius: 50%;
-    color: #f7fbff;
+    color: #171a1f;
     font-weight: 800;
     background:
-      radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.22), transparent 35%),
-      linear-gradient(135deg, #12395d 0%, #2d6c98 100%);
+      radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.24), transparent 35%),
+      linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
     box-shadow:
-      0 12px 22px rgba(18, 57, 93, 0.24),
-      inset 0 0 0 4px rgba(255, 255, 255, 0.16);
+      0 14px 26px rgba(0, 0, 0, 0.28),
+      inset 0 0 0 4px rgba(0, 0, 0, 0.12);
   }
 
   :global(.aircraft-cluster span) {
@@ -581,20 +602,16 @@
   }
 
   :global(.aircraft-icon) {
-    width: 30px;
-    height: 30px;
-    filter: drop-shadow(0 8px 12px rgba(18, 57, 93, 0.3));
+    width: 32px;
+    height: 32px;
+    filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.28));
     transform-origin: center;
   }
 
   @media (max-width: 960px) {
-    .map-toolbar {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .map-root {
-      min-height: 60vh;
+    :global(.leaflet-top.leaflet-right) {
+      top: 5.5rem;
+      right: 0.75rem;
     }
   }
 </style>

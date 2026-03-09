@@ -56,7 +56,109 @@
       Math.round((points[points.length - 1].timestamp - points[0].timestamp) / 60000)
     );
 
-    return `${durationMinutes} min`;
+    if (durationMinutes < 60) {
+      return `${durationMinutes} min`;
+    }
+
+    const hours = Math.floor(durationMinutes / 60);
+    const minutes = durationMinutes % 60;
+    return minutes ? `${hours} h ${minutes} min` : `${hours} h`;
+  }
+
+  function formatHistoryTimestamp(timestamp) {
+    if (!timestamp) {
+      return "No history";
+    }
+
+    return new Intl.DateTimeFormat("pl-PL", {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    }).format(new Date(timestamp));
+  }
+
+  function formatRelativeContact(lastContact) {
+    if (lastContact === null || lastContact === undefined) {
+      return "Unknown";
+    }
+
+    const ageSeconds = Math.max(0, Math.round(Date.now() / 1000 - lastContact));
+
+    if (ageSeconds < 60) {
+      return `${ageSeconds}s ago`;
+    }
+
+    const ageMinutes = Math.floor(ageSeconds / 60);
+    const remainingSeconds = ageSeconds % 60;
+    return `${ageMinutes}m ${remainingSeconds}s ago`;
+  }
+
+  function deriveOperatorCode(callsign) {
+    const normalizedCallsign = (callsign ?? "").trim().toUpperCase();
+    const match = normalizedCallsign.match(/^[A-Z]{3}/);
+    return match ? match[0] : "N/A";
+  }
+
+  function getTrackLabel(track) {
+    if (track === null || track === undefined) {
+      return "Unknown sector";
+    }
+
+    if (track >= 315 || track < 45) {
+      return "Northbound";
+    }
+
+    if (track >= 45 && track < 135) {
+      return "Eastbound";
+    }
+
+    if (track >= 135 && track < 225) {
+      return "Southbound";
+    }
+
+    return "Westbound";
+  }
+
+  function getVerticalTrendLabel(value) {
+    if (value === null || value === undefined) {
+      return "No trend";
+    }
+
+    if (value > 0.6) {
+      return "Climbing";
+    }
+
+    if (value < -0.6) {
+      return "Descending";
+    }
+
+    return "Level";
+  }
+
+  function calculateObservedDistanceKm(points) {
+    if (points.length < 2) {
+      return 0;
+    }
+
+    const earthRadiusKm = 6371;
+    const toRadians = (value) => (value * Math.PI) / 180;
+    let distance = 0;
+
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const deltaLatitude = toRadians(current.latitude - previous.latitude);
+      const deltaLongitude = toRadians(current.longitude - previous.longitude);
+      const startLatitude = toRadians(previous.latitude);
+      const endLatitude = toRadians(current.latitude);
+      const haversine =
+        Math.sin(deltaLatitude / 2) ** 2 +
+        Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(deltaLongitude / 2) ** 2;
+
+      distance += 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
+    }
+
+    return distance;
   }
 
   function downloadHistory(content, extension, mimeType) {
@@ -118,49 +220,120 @@
   $: altitudePath = buildMetricPath(altitudeSamples, (point) => point.altitude ?? 0);
   $: speedPath = buildMetricPath(speedSamples, (point) => point.velocity ?? 0);
   $: verticalRatePath = buildMetricPath(verticalRateSamples, (point) => point.vertical_rate ?? 0);
+  $: trailStart = trailPoints[0] ?? null;
+  $: trailEnd = trailPoints[trailPoints.length - 1] ?? null;
+  $: observedDistanceKm = calculateObservedDistanceKm(trailPoints);
+  $: averageObservedSpeed = speedSamples.length
+    ? Math.round(speedSamples.reduce((total, point) => total + point.velocity * 3.6, 0) / speedSamples.length)
+    : 0;
+  $: operatorCode = deriveOperatorCode(flight?.callsign);
 </script>
 
 <section class="panel details-panel">
-  <h2>Selected aircraft</h2>
+  <div class="panel-heading">
+    <div>
+      <p class="eyebrow">Aircraft inspector</p>
+      <h2>Flight telemetry</h2>
+    </div>
+    {#if flight}
+      <span class="status-chip">{formatFlightStatus(flight)}</span>
+    {/if}
+  </div>
 
   {#if flight}
-    <div class="details-header">
-      <strong>{flight.callsign ?? "Unknown callsign"}</strong>
-      <span>{formatFlightStatus(flight)}</span>
-    </div>
+    <section class="identity-card">
+      <div class="identity-main">
+        <div>
+          <strong>{flight.callsign ?? "Unknown callsign"}</strong>
+          <p>{flight.origin_country ?? "Unknown country"} · operator {operatorCode}</p>
+        </div>
 
-    <button
-      class:active={followAircraft}
-      class="follow-button"
-      type="button"
-      title="Keep the selected aircraft centered on the map"
-      on:click={onToggleFollow}
-    >
-      {#if followAircraft}
-        Stop following
-      {:else}
-        Follow aircraft
-      {/if}
-    </button>
+        <div class="identity-actions">
+          <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
+            {followAircraft ? "Following" : "Follow"}
+          </button>
+          <button class:active={isWatched} class="action-button secondary" type="button" on:click={onToggleWatch}>
+            {isWatched ? "Watching" : "Watch"}
+          </button>
+        </div>
+      </div>
 
-    <button class:active={isWatched} class="watch-button" type="button" on:click={onToggleWatch}>
-      {#if isWatched}
-        Remove from watchlist
-      {:else}
-        Add to watchlist
-      {/if}
-    </button>
+      <div class="route-strip">
+        <article class="route-node">
+          <span class="route-label">Observed start</span>
+          <strong>{trailStart ? formatCoordinates(trailStart.latitude, trailStart.longitude) : "No trail yet"}</strong>
+          <small>{trailStart ? formatHistoryTimestamp(trailStart.timestamp) : "Waiting for more samples"}</small>
+        </article>
+        <div class="route-line" aria-hidden="true"></div>
+        <article class="route-node current">
+          <span class="route-label">Current position</span>
+          <strong>{formatCoordinates(flight.latitude, flight.longitude)}</strong>
+          <small>{formatRelativeContact(flight.last_contact)}</small>
+        </article>
+      </div>
+    </section>
+
+    <section class="telemetry-grid">
+      <article class="telemetry-card">
+        <span>Altitude</span>
+        <strong>{formatAltitude(flight.altitude)}</strong>
+        <small>{getVerticalTrendLabel(flight.vertical_rate)}</small>
+      </article>
+      <article class="telemetry-card">
+        <span>Ground speed</span>
+        <strong>{formatSpeed(flight.velocity)}</strong>
+        <small>{averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Waiting for trail"}</small>
+      </article>
+      <article class="telemetry-card">
+        <span>Heading</span>
+        <strong>{formatHeading(flight.true_track)}</strong>
+        <small>{getTrackLabel(flight.true_track)}</small>
+      </article>
+      <article class="telemetry-card">
+        <span>Vertical rate</span>
+        <strong>{formatVerticalRate(flight.vertical_rate)}</strong>
+        <small>{trailPoints.length} trail points</small>
+      </article>
+    </section>
+
+    <section class="data-grid">
+      <article class="data-card">
+        <span>ICAO24</span>
+        <strong>{flight.icao24}</strong>
+      </article>
+      <article class="data-card">
+        <span>Country</span>
+        <strong>{flight.origin_country ?? "Unknown"}</strong>
+      </article>
+      <article class="data-card">
+        <span>Track class</span>
+        <strong>{getTrackLabel(flight.true_track)}</strong>
+      </article>
+      <article class="data-card">
+        <span>Observed window</span>
+        <strong>{formatHistoryDuration(trailPoints)}</strong>
+      </article>
+      <article class="data-card">
+        <span>Observed distance</span>
+        <strong>{observedDistanceKm ? `${observedDistanceKm.toFixed(1)} km` : "No movement yet"}</strong>
+      </article>
+      <article class="data-card">
+        <span>Last contact</span>
+        <strong>{formatRelativeContact(flight.last_contact)}</strong>
+      </article>
+    </section>
 
     <section class="annotation-panel">
-      <div class="annotation-header">
+      <div class="section-header">
         <strong>Notes and tags</strong>
+        <span>{annotation.tags?.length ?? 0} tags</span>
       </div>
 
       <label class="notes-field">
         <span>Notes</span>
         <textarea
           rows="4"
-          placeholder="Add notes about this aircraft, route, or behaviour"
+          placeholder="Add notes about route behavior, callsign changes, or traffic priority"
           value={annotation.notes ?? ""}
           on:input={(event) => onUpdateNotes(event.currentTarget.value)}
         ></textarea>
@@ -168,11 +341,11 @@
 
       <div class="tag-editor">
         <label class="notes-field">
-          <span>Tags</span>
+          <span>Tag</span>
           <input
             bind:value={nextTag}
             type="text"
-            placeholder="military, priority, medevac"
+            placeholder="military, medevac, diversion"
             on:keydown={(event) => event.key === "Enter" && handleTagSubmit()}
           />
         </label>
@@ -190,119 +363,77 @@
       {/if}
     </section>
 
-    <dl>
-      <div>
-        <dt>ICAO24</dt>
-        <dd>{flight.icao24}</dd>
-      </div>
-      <div>
-        <dt>Country</dt>
-        <dd>{flight.origin_country ?? "unknown"}</dd>
-      </div>
-      <div>
-        <dt>Altitude</dt>
-        <dd>{formatAltitude(flight.altitude)}</dd>
-      </div>
-      <div>
-        <dt>Heading</dt>
-        <dd>{formatHeading(flight.true_track)}</dd>
-      </div>
-      <div>
-        <dt>Speed</dt>
-        <dd>{formatSpeed(flight.velocity)}</dd>
-      </div>
-      <div>
-        <dt>Vertical rate</dt>
-        <dd>{formatVerticalRate(flight.vertical_rate)}</dd>
-      </div>
-      <div>
-        <dt>Position</dt>
-        <dd>{formatCoordinates(flight.latitude, flight.longitude)}</dd>
-      </div>
-    </dl>
-
     <section class="history-panel">
-      <div class="history-header">
-        <strong>Session history</strong>
-        <span>{historySamples.length} samples</span>
-      </div>
-
-      <div class="history-actions">
-        <button
-          class="history-action"
-          type="button"
-          title="Export the selected flight history as JSON"
-          disabled={!trailPoints.length}
-          on:click={exportHistoryAsJson}
-        >
-          Export JSON
-        </button>
-        <button
-          class="history-action"
-          type="button"
-          title="Export the selected flight history as CSV"
-          disabled={!trailPoints.length}
-          on:click={exportHistoryAsCsv}
-        >
-          Export CSV
-        </button>
+      <div class="section-header">
+        <div>
+          <strong>Session history</strong>
+          <p>{historySamples.length} visible samples in this session</p>
+        </div>
+        <div class="history-actions">
+          <button class="history-action" type="button" disabled={!trailPoints.length} on:click={exportHistoryAsJson}>
+            JSON
+          </button>
+          <button class="history-action" type="button" disabled={!trailPoints.length} on:click={exportHistoryAsCsv}>
+            CSV
+          </button>
+        </div>
       </div>
 
       {#if altitudeSamples.length > 1}
         <div class="chart-grid">
           <article class="metric-card">
             <div class="metric-card-header">
-              <span>Altitude</span>
+              <span>Altitude profile</span>
               <strong>{formatAltitude(altitudeSamples[altitudeSamples.length - 1].altitude)}</strong>
             </div>
             <div class="history-chart">
               <svg viewBox="0 0 240 68" aria-hidden="true">
-                <path d={altitudePath} stroke="#4bb7f5" />
+                <path d={altitudePath} stroke="#78c8ff" />
               </svg>
             </div>
           </article>
 
           <article class="metric-card">
             <div class="metric-card-header">
-              <span>Speed</span>
+              <span>Speed profile</span>
               <strong>
                 {#if speedSamples.length}
                   {formatSpeed(speedSamples[speedSamples.length - 1].velocity)}
                 {:else}
-                  unknown
+                  Unknown
                 {/if}
               </strong>
             </div>
             {#if speedSamples.length > 1}
               <div class="history-chart">
                 <svg viewBox="0 0 240 68" aria-hidden="true">
-                  <path d={speedPath} stroke="#54c087" />
+                  <path d={speedPath} stroke="#7df0b1" />
                 </svg>
               </div>
             {:else}
-              <p class="chart-empty">Waiting for enough speed samples.</p>
+              <p class="chart-empty">Waiting for more speed samples.</p>
             {/if}
           </article>
 
           <article class="metric-card">
             <div class="metric-card-header">
-              <span>Vertical rate</span>
+              <span>Vertical profile</span>
               <strong>
                 {#if verticalRateSamples.length}
                   {formatVerticalRate(verticalRateSamples[verticalRateSamples.length - 1].vertical_rate)}
                 {:else}
-                  unknown
+                  Unknown
                 {/if}
               </strong>
             </div>
             {#if verticalRateSamples.length > 1}
               <div class="history-chart">
                 <svg viewBox="0 0 240 68" aria-hidden="true">
-                  <path d={verticalRatePath} stroke="#f29d4b" />
+                  <path d={verticalRatePath} stroke="#ffbf5d" />
                 </svg>
               </div>
             {:else}
-              <p class="chart-empty">Waiting for enough vertical-rate samples.</p>
+              <p class="chart-empty">Waiting for more climb rate samples.</p>
             {/if}
           </article>
         </div>
@@ -313,67 +444,120 @@
             <strong class="history-value">{formatHistoryDuration(historySamples)}</strong>
           </div>
           <div>
-            <span class="history-label">Start altitude</span>
-            <strong class="history-value">{formatAltitude(altitudeSamples[0].altitude)}</strong>
+            <span class="history-label">Start point</span>
+            <strong class="history-value">
+              {trailStart ? formatCoordinates(trailStart.latitude, trailStart.longitude) : "Unknown"}
+            </strong>
           </div>
           <div>
-            <span class="history-label">Latest altitude</span>
-            <strong class="history-value">{formatAltitude(altitudeSamples[altitudeSamples.length - 1].altitude)}</strong>
+            <span class="history-label">Latest point</span>
+            <strong class="history-value">
+              {trailEnd ? formatCoordinates(trailEnd.latitude, trailEnd.longitude) : "Unknown"}
+            </strong>
           </div>
         </div>
       {:else}
-        <p>Waiting for enough history to draw an altitude profile for this aircraft.</p>
+        <p class="empty-copy">Waiting for enough history to draw a usable telemetry profile.</p>
       {/if}
     </section>
   {:else}
-    <p>Click an aircraft marker to inspect its current details.</p>
+    <p class="empty-copy">Click an aircraft marker to open a denser telemetry view.</p>
   {/if}
 </section>
 
 <style>
   .details-panel {
     display: grid;
-    gap: 0.9rem;
+    gap: 0.95rem;
   }
 
-  .details-header {
+  .panel-heading,
+  .identity-main,
+  .section-header,
+  .metric-card-header {
     display: flex;
     justify-content: space-between;
-    gap: 0.75rem;
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .eyebrow {
+    margin: 0 0 0.2rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.7rem;
+    color: var(--color-muted);
+  }
+
+  h2,
+  p {
+    margin: 0;
+  }
+
+  .status-chip,
+  .tag-chip {
+    display: inline-flex;
     align-items: center;
-  }
-
-  .details-header strong {
-    font-size: 1.05rem;
-  }
-
-  .details-header span {
-    padding: 0.28rem 0.6rem;
+    justify-content: center;
     border-radius: 999px;
-    background: var(--chip-bg);
-    font-size: 0.82rem;
-    font-weight: 700;
+    padding: 0.34rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 800;
   }
 
-  .follow-button {
-    border: 0;
-    border-radius: 12px;
-    padding: 0.8rem 0.95rem;
-    font: inherit;
-    font-weight: 700;
-    color: var(--button-primary-text);
-    background: var(--button-primary-bg);
-    cursor: pointer;
+  .status-chip {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
-  .follow-button.active {
-    background: linear-gradient(135deg, #b25e10 0%, #de8b32 100%);
-  }
-
-  .watch-button {
+  .identity-card,
+  .annotation-panel,
+  .history-panel,
+  .telemetry-card,
+  .data-card,
+  .metric-card {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.8rem 0.95rem;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .identity-card,
+  .annotation-panel,
+  .history-panel {
+    display: grid;
+    gap: 0.85rem;
+    padding: 1rem;
+  }
+
+  .identity-main strong {
+    display: block;
+    font-size: 1.15rem;
+    color: var(--color-text);
+  }
+
+  .identity-main p,
+  .section-header span,
+  .chart-empty,
+  .empty-copy {
+    color: var(--color-muted);
+    font-size: 0.82rem;
+  }
+
+  .identity-actions,
+  .history-actions,
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    justify-content: flex-end;
+  }
+
+  .action-button,
+  .tag-add-button,
+  .history-action {
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 0.68rem 0.9rem;
     font: inherit;
     font-weight: 700;
     color: var(--button-secondary-text);
@@ -381,85 +565,140 @@
     cursor: pointer;
   }
 
-  .watch-button.active {
+  .action-button.active,
+  .action-button.secondary.active {
     color: var(--button-primary-text);
     background: var(--button-primary-bg);
-    border: 0;
+    border-color: transparent;
   }
 
-  dl {
+  .route-strip {
     display: grid;
-    gap: 0.8rem;
-    margin: 0;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
   }
 
-  dl div {
+  .route-node {
     display: grid;
-    gap: 0.15rem;
+    gap: 0.18rem;
+    padding: 0.85rem;
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.03);
   }
 
-  dt {
-    font-size: 0.76rem;
+  .route-node.current {
+    border: 1px solid rgba(245, 185, 8, 0.28);
+  }
+
+  .route-label,
+  .history-label,
+  .notes-field span {
+    font-size: 0.74rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: var(--color-subtle);
   }
 
-  dd {
-    margin: 0;
-    font-size: 0.98rem;
+  .route-node strong,
+  .data-card strong,
+  .history-value {
+    color: var(--color-text);
+    font-size: 0.92rem;
   }
 
-  p {
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  .history-panel {
-    display: grid;
-    gap: 0.75rem;
-    padding-top: 0.2rem;
-    border-top: 1px solid var(--surface-border);
-  }
-
-  .history-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
-    align-items: center;
-  }
-
-  .history-header span {
-    font-size: 0.82rem;
+  .route-node small {
+    font-size: 0.78rem;
     color: var(--color-muted);
   }
 
-  .history-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.55rem;
+  .route-line {
+    width: 100%;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(120, 200, 255, 0.35), rgba(245, 185, 8, 0.8));
   }
 
-  .history-action {
+  .telemetry-grid,
+  .data-grid,
+  .chart-grid,
+  .history-meta {
+    display: grid;
+    gap: 0.7rem;
+  }
+
+  .telemetry-grid,
+  .data-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .telemetry-card,
+  .data-card {
+    display: grid;
+    gap: 0.22rem;
+    padding: 0.85rem 0.9rem;
+  }
+
+  .telemetry-card span,
+  .data-card span,
+  .metric-card-header span {
+    font-size: 0.76rem;
+    color: var(--color-muted);
+  }
+
+  .telemetry-card strong {
+    color: var(--color-text);
+    font-size: 1rem;
+  }
+
+  .telemetry-card small {
+    font-size: 0.78rem;
+    color: var(--color-subtle);
+  }
+
+  .notes-field,
+  .tag-editor {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .notes-field textarea,
+  .notes-field input {
     border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.68rem 0.82rem;
+    border-radius: 14px;
+    padding: 0.78rem 0.85rem;
     font: inherit;
-    font-weight: 700;
-    color: var(--button-secondary-text);
-    background: var(--button-secondary-bg);
+    color: var(--color-text);
+    background: var(--surface-input-bg);
+  }
+
+  .tag-editor {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .tag-chip {
+    border: 1px solid rgba(245, 185, 8, 0.24);
+    color: #f7db7a;
+    background: rgba(245, 185, 8, 0.08);
     cursor: pointer;
   }
 
-  .history-action:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
+  .metric-card {
+    display: grid;
+    gap: 0.55rem;
+    padding: 0.85rem;
+  }
+
+  .metric-card-header strong {
+    font-size: 0.92rem;
+    color: var(--color-text);
   }
 
   .history-chart {
-    border-radius: 16px;
+    border-radius: 14px;
     padding: 0.55rem;
-    background: linear-gradient(180deg, rgba(52, 125, 182, 0.14) 0%, rgba(52, 125, 182, 0.04) 100%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.015) 100%);
   }
 
   .history-chart svg {
@@ -475,138 +714,41 @@
     stroke-linejoin: round;
   }
 
-  .chart-grid {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .metric-card {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .metric-card-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
-    align-items: center;
-  }
-
-  .metric-card-header span {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--color-muted);
-  }
-
-  .metric-card-header strong {
-    font-size: 0.9rem;
-  }
-
-  .chart-empty {
-    font-size: 0.86rem;
-    color: var(--color-muted);
-  }
-
   .history-meta {
-    display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.8rem;
   }
 
   .history-meta div {
     display: grid;
-    gap: 0.15rem;
-  }
-
-  .history-label {
-    font-size: 0.76rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--color-subtle);
-  }
-
-  .history-value {
-    font-size: 0.98rem;
-  }
-
-  .annotation-panel {
-    display: grid;
-    gap: 0.75rem;
-    padding-top: 0.2rem;
-    border-top: 1px solid var(--surface-border);
-  }
-
-  .annotation-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.75rem;
-    align-items: center;
-  }
-
-  .notes-field {
-    display: grid;
-    gap: 0.4rem;
-  }
-
-  .notes-field span {
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: var(--color-muted);
-  }
-
-  .notes-field textarea,
-  .notes-field input {
-    border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.75rem 0.85rem;
-    font: inherit;
-    color: var(--color-text);
-    background: var(--surface-input-bg);
-  }
-
-  .notes-field textarea {
-    resize: vertical;
-  }
-
-  .tag-editor {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.55rem;
-    align-items: end;
-  }
-
-  .tag-add-button {
-    border: 1px solid var(--surface-border);
-    border-radius: 12px;
-    padding: 0.75rem 0.82rem;
-    font: inherit;
-    font-weight: 700;
-    color: var(--button-secondary-text);
-    background: var(--button-secondary-bg);
-    cursor: pointer;
-  }
-
-  .tag-list {
-    display: flex;
-    gap: 0.45rem;
-    flex-wrap: wrap;
-  }
-
-  .tag-chip {
-    border: 0;
-    border-radius: 999px;
-    padding: 0.42rem 0.7rem;
-    font: inherit;
-    font-size: 0.82rem;
-    font-weight: 700;
-    color: var(--button-primary-text);
-    background: var(--button-primary-bg);
-    cursor: pointer;
+    gap: 0.18rem;
   }
 
   @media (max-width: 720px) {
-    .history-meta {
+    .panel-heading,
+    .identity-main,
+    .section-header,
+    .metric-card-header {
+      display: grid;
+    }
+
+    .route-strip,
+    .telemetry-grid,
+    .data-grid,
+    .history-meta,
+    .tag-editor {
       grid-template-columns: 1fr;
+    }
+
+    .route-line {
+      height: 36px;
+      width: 2px;
+      justify-self: center;
+      background: linear-gradient(180deg, rgba(120, 200, 255, 0.35), rgba(245, 185, 8, 0.8));
+    }
+
+    .identity-actions,
+    .history-actions {
+      justify-content: flex-start;
     }
   }
 </style>

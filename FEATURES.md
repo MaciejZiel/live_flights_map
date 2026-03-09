@@ -44,7 +44,6 @@
 
 ## History and Analytics
 
-- Rewind and replay controls.
 - Charts for altitude, speed, and vertical rate.
 - Regional traffic stats: flight count, average altitude, popular routes.
 - Day-over-day and week-over-week traffic comparison.

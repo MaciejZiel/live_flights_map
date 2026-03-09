@@ -2,8 +2,14 @@
   export let snapshots = [];
   export let activeSnapshot = null;
   export let activeIndex = -1;
+  export let isPlaying = false;
+  export let canStepBackward = false;
+  export let canStepForward = false;
   export let onSelectIndex = () => {};
   export let onReturnToLive = () => {};
+  export let onStepBackward = () => {};
+  export let onStepForward = () => {};
+  export let onTogglePlayback = () => {};
 
   function handleInput(event) {
     onSelectIndex(Number(event.currentTarget.value));
@@ -50,6 +56,39 @@
     <div class="timeline-meta">
       <strong>{formatSnapshotTime(snapshots[sliderValue].fetchedAt)}</strong>
       <span>{snapshots[sliderValue].count} tracked aircraft</span>
+    </div>
+
+    <div class="timeline-controls">
+      <button
+        class="control-button"
+        type="button"
+        title="Move one snapshot backward"
+        disabled={!canStepBackward}
+        on:click={onStepBackward}
+      >
+        Step back
+      </button>
+      <button
+        class="control-button primary"
+        type="button"
+        title={isPlaying ? "Pause replay playback" : "Play recorded snapshots in sequence"}
+        on:click={onTogglePlayback}
+      >
+        {#if isPlaying}
+          Pause
+        {:else}
+          Play
+        {/if}
+      </button>
+      <button
+        class="control-button"
+        type="button"
+        title="Move one snapshot forward"
+        disabled={!canStepForward}
+        on:click={onStepForward}
+      >
+        Step forward
+      </button>
     </div>
   {/if}
 </section>
@@ -117,6 +156,34 @@
 
   .timeline-meta span {
     color: var(--color-muted);
+  }
+
+  .timeline-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .control-button {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.72rem 0.8rem;
+    font: inherit;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .control-button.primary {
+    border: 0;
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
+  }
+
+  .control-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
   }
 
   @media (max-width: 720px) {

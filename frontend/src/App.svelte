@@ -61,6 +61,8 @@
   let snapshotHistory = [];
   let replaySnapshotCursor = null;
   let lastReplaySnapshotKey = null;
+  let replayPlaybackActive = false;
+  let replayPlaybackTimer = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -96,6 +98,9 @@
       window.removeEventListener("keydown", handleKeyboardShortcut);
       mobileViewportQuery.removeEventListener("change", syncViewportMode);
       window.clearInterval(freshnessTimer);
+      if (replayPlaybackTimer) {
+        window.clearInterval(replayPlaybackTimer);
+      }
       unsubscribe();
       flightsStore.stop();
     };
@@ -221,11 +226,96 @@
   }
 
   function selectReplaySnapshot(index) {
+    replayPlaybackActive = false;
     replaySnapshotCursor = snapshotHistory[index]?.fetchedAt ?? null;
   }
 
   function returnToLiveReplay() {
+    replayPlaybackActive = false;
     replaySnapshotCursor = null;
+  }
+
+  function setReplaySnapshotIndex(index) {
+    if (!snapshotHistory.length) {
+      replaySnapshotCursor = null;
+      return;
+    }
+
+    const boundedIndex = Math.max(0, Math.min(index, snapshotHistory.length - 1));
+    replaySnapshotCursor = snapshotHistory[boundedIndex]?.fetchedAt ?? null;
+  }
+
+  function stepReplay(direction) {
+    if (snapshotHistory.length < 2) {
+      return;
+    }
+
+    replayPlaybackActive = false;
+
+    if (replaySnapshotIndex < 0) {
+      if (direction < 0) {
+        setReplaySnapshotIndex(snapshotHistory.length - 2);
+      } else {
+        setReplaySnapshotIndex(0);
+      }
+      return;
+    }
+
+    const nextIndex = replaySnapshotIndex + direction;
+    if (nextIndex >= snapshotHistory.length - 1) {
+      replaySnapshotCursor = null;
+      return;
+    }
+
+    setReplaySnapshotIndex(nextIndex);
+  }
+
+  function toggleReplayPlayback() {
+    if (snapshotHistory.length < 2) {
+      return;
+    }
+
+    if (replayPlaybackActive) {
+      replayPlaybackActive = false;
+      return;
+    }
+
+    if (replaySnapshotIndex < 0) {
+      setReplaySnapshotIndex(0);
+    }
+
+    replayPlaybackActive = true;
+  }
+
+  function syncReplayPlaybackTimer() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (replayPlaybackTimer) {
+      window.clearInterval(replayPlaybackTimer);
+      replayPlaybackTimer = null;
+    }
+
+    if (!replayPlaybackActive || snapshotHistory.length < 2) {
+      return;
+    }
+
+    replayPlaybackTimer = window.setInterval(() => {
+      if (replaySnapshotIndex < 0) {
+        setReplaySnapshotIndex(0);
+        return;
+      }
+
+      const nextIndex = replaySnapshotIndex + 1;
+      if (nextIndex >= snapshotHistory.length - 1) {
+        replayPlaybackActive = false;
+        replaySnapshotCursor = null;
+        return;
+      }
+
+      setReplaySnapshotIndex(nextIndex);
+    }, 1200);
   }
 
   function handleKeyboardShortcut(event) {
@@ -384,6 +474,8 @@
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
+  $: canStepReplayBackward = snapshotHistory.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
+  $: canStepReplayForward = snapshotHistory.length > 1 && replaySnapshotIndex !== -1;
   $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
     selectedIcao24 = null;
   }
@@ -396,6 +488,12 @@
   }
   $: if (activeReplaySnapshot && followAircraft) {
     followAircraft = false;
+  }
+  $: {
+    replayPlaybackActive;
+    replaySnapshotIndex;
+    snapshotHistory.length;
+    syncReplayPlaybackTimer();
   }
   $: if (preferencesReady) {
     syncThemeClass(theme);
@@ -566,8 +664,14 @@
         snapshots={snapshotHistory}
         activeSnapshot={activeReplaySnapshot}
         activeIndex={replaySnapshotIndex}
+        isPlaying={replayPlaybackActive}
+        canStepBackward={canStepReplayBackward}
+        canStepForward={canStepReplayForward}
         onSelectIndex={selectReplaySnapshot}
         onReturnToLive={returnToLiveReplay}
+        onStepBackward={() => stepReplay(-1)}
+        onStepForward={() => stepReplay(1)}
+        onTogglePlayback={toggleReplayPlayback}
       />
 
       <section class="panel">

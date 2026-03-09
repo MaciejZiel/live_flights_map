@@ -399,18 +399,38 @@
 <div bind:this={shell} class:fullscreen={isFullscreen} class="map-shell">
   <div class="map-toolbar">
     <div class="preset-group">
-      <button class="map-action preset-button" type="button" on:click={() => applyViewPreset("poland")}>
+      <button
+        class="map-action preset-button"
+        type="button"
+        title="Jump to the Poland tracking view"
+        on:click={() => applyViewPreset("poland")}
+      >
         Poland
       </button>
-      <button class="map-action preset-button" type="button" on:click={() => applyViewPreset("europe")}>
+      <button
+        class="map-action preset-button"
+        type="button"
+        title="Jump to the Europe tracking view"
+        on:click={() => applyViewPreset("europe")}
+      >
         Europe
       </button>
-      <button class="map-action preset-button" type="button" on:click={() => applyViewPreset("world")}>
+      <button
+        class="map-action preset-button"
+        type="button"
+        title="Jump to the global tracking view"
+        on:click={() => applyViewPreset("world")}
+      >
         World
       </button>
     </div>
 
-  <button class="map-action fullscreen-toggle" type="button" on:click={toggleFullscreen}>
+  <button
+    class="map-action fullscreen-toggle"
+    type="button"
+    title="Toggle fullscreen radar view"
+    on:click={toggleFullscreen}
+  >
     {#if isFullscreen}
       Exit fullscreen
     {:else}

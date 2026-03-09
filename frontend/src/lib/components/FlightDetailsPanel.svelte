@@ -22,7 +22,13 @@
       <span>{formatFlightStatus(flight)}</span>
     </div>
 
-    <button class:active={followAircraft} class="follow-button" type="button" on:click={onToggleFollow}>
+    <button
+      class:active={followAircraft}
+      class="follow-button"
+      type="button"
+      title="Keep the selected aircraft centered on the map"
+      on:click={onToggleFollow}
+    >
       {#if followAircraft}
         Stop following
       {:else}

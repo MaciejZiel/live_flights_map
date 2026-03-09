@@ -3,6 +3,7 @@
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
+  import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { flightsStore } from "./lib/stores/flights.js";
@@ -48,6 +49,7 @@
   let presetName = "";
   let sortBy = "altitude_desc";
   let theme = "light";
+  let onboardingDismissed = false;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -61,6 +63,7 @@
       filterPresets = savedPreferences.filterPresets ?? filterPresets;
       sortBy = savedPreferences.sortBy ?? sortBy;
       theme = savedPreferences.theme ?? theme;
+      onboardingDismissed = savedPreferences.onboardingDismissed ?? onboardingDismissed;
     }
 
     syncThemeClass(theme);
@@ -171,6 +174,10 @@
 
   function setTheme(nextTheme) {
     theme = nextTheme;
+  }
+
+  function dismissOnboarding() {
+    onboardingDismissed = true;
   }
 
   function handleKeyboardShortcut(event) {
@@ -341,6 +348,7 @@
       filterPresets,
       sortBy,
       theme,
+      onboardingDismissed,
     });
   }
 </script>
@@ -362,10 +370,20 @@
 
     <div class="status-panel">
       <div class="theme-switcher" role="group" aria-label="Theme switcher">
-        <button class:active={theme === "light"} type="button" on:click={() => setTheme("light")}>
+        <button
+          class:active={theme === "light"}
+          type="button"
+          title="Use the brighter cockpit-style palette"
+          on:click={() => setTheme("light")}
+        >
           Light
         </button>
-        <button class:active={theme === "dark"} type="button" on:click={() => setTheme("dark")}>
+        <button
+          class:active={theme === "dark"}
+          type="button"
+          title="Use the darker low-glare palette"
+          on:click={() => setTheme("dark")}
+        >
           Dark
         </button>
       </div>
@@ -403,19 +421,43 @@
 
   <main class="layout">
     <aside class="sidebar">
+      {#if !onboardingDismissed}
+        <OnboardingPanel onDismiss={dismissOnboarding} />
+      {/if}
+
       <section class="panel">
         <h2>Map style</h2>
         <div class="segmented-control">
-          <button class:active={mapStyle === "standard"} type="button" on:click={() => (mapStyle = "standard")}>
+          <button
+            class:active={mapStyle === "standard"}
+            type="button"
+            title="Standard street and terrain context"
+            on:click={() => (mapStyle = "standard")}
+          >
             Standard
           </button>
-          <button class:active={mapStyle === "satellite"} type="button" on:click={() => (mapStyle = "satellite")}>
+          <button
+            class:active={mapStyle === "satellite"}
+            type="button"
+            title="Satellite imagery for ground context"
+            on:click={() => (mapStyle = "satellite")}
+          >
             Satellite
           </button>
-          <button class:active={mapStyle === "dark"} type="button" on:click={() => (mapStyle = "dark")}>
+          <button
+            class:active={mapStyle === "dark"}
+            type="button"
+            title="Dark basemap for low-light tracking"
+            on:click={() => (mapStyle = "dark")}
+          >
             Dark
           </button>
-          <button class:active={mapStyle === "aviation"} type="button" on:click={() => (mapStyle = "aviation")}>
+          <button
+            class:active={mapStyle === "aviation"}
+            type="button"
+            title="Aviation chart overlays for airspace context"
+            on:click={() => (mapStyle = "aviation")}
+          >
             Aviation
           </button>
         </div>
@@ -437,7 +479,7 @@
         <h2>Filters</h2>
         <label class="field">
           <span>Sort by</span>
-          <select bind:value={sortBy}>
+          <select bind:value={sortBy} title="Choose how aircraft are ordered in the current result set">
             <option value="altitude_desc">Altitude</option>
             <option value="speed_desc">Speed</option>
             <option value="distance_asc">Distance from map center</option>
@@ -451,19 +493,30 @@
             bind:value={filters.query}
             type="text"
             placeholder="callsign, ICAO24, country"
+            title="Search by callsign, ICAO24, or origin country"
           />
         </label>
         <label class="field">
           <span>Min altitude (m)</span>
-          <input bind:value={filters.minAltitude} type="number" min="0" step="100" />
+          <input
+            bind:value={filters.minAltitude}
+            type="number"
+            min="0"
+            step="100"
+            title="Show only aircraft above this altitude"
+          />
         </label>
         <label class="checkbox-field">
-          <input bind:checked={filters.hideGroundTraffic} type="checkbox" />
+          <input
+            bind:checked={filters.hideGroundTraffic}
+            type="checkbox"
+            title="Hide aircraft currently reported on the ground"
+          />
           <span>Hide ground traffic</span>
         </label>
         <label class="field">
           <span>Recent activity</span>
-          <select bind:value={filters.recentActivity}>
+          <select bind:value={filters.recentActivity} title="Limit results to recently updated aircraft">
             <option value="any">Any time</option>
             <option value="30s">Last 30 seconds</option>
             <option value="2m">Last 2 minutes</option>
@@ -472,15 +525,28 @@
           </select>
         </label>
         <div class="filter-actions">
-          <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>
+          <button
+            class="reset-button"
+            type="button"
+            title="Clear all active filters and return to defaults"
+            on:click={resetFilters}
+          >
+            Reset filters
+          </button>
           <div class="preset-save-row">
             <input
               bind:value={presetName}
               type="text"
               placeholder="preset name"
+              title="Name the current filter combination before saving it"
               on:keydown={(event) => event.key === "Enter" && saveCurrentPreset()}
             />
-            <button class="secondary-button" type="button" on:click={saveCurrentPreset}>
+            <button
+              class="secondary-button"
+              type="button"
+              title="Save the current filters as a reusable preset"
+              on:click={saveCurrentPreset}
+            >
               Save preset
             </button>
           </div>
@@ -488,10 +554,20 @@
             <div class="preset-list">
               {#each filterPresets as preset}
                 <div class="preset-item">
-                  <button class="secondary-button preset-load" type="button" on:click={() => applyFilterPreset(preset)}>
+                  <button
+                    class="secondary-button preset-load"
+                    type="button"
+                    title={`Apply preset ${preset.name}`}
+                    on:click={() => applyFilterPreset(preset)}
+                  >
                     {preset.name}
                   </button>
-                  <button class="preset-delete" type="button" on:click={() => deleteFilterPreset(preset.name)}>
+                  <button
+                    class="preset-delete"
+                    type="button"
+                    title={`Remove preset ${preset.name}`}
+                    on:click={() => deleteFilterPreset(preset.name)}
+                  >
                     Remove
                   </button>
                 </div>

@@ -42,6 +42,19 @@ class OpenSkyClient:
                 timeout=self.timeout,
             )
             response.raise_for_status()
+        except requests.HTTPError as exc:
+            status_code = exc.response.status_code if exc.response is not None else None
+            if status_code == 401:
+                message = "OpenSky rejected the credentials."
+            elif status_code == 403:
+                message = "OpenSky denied access for this request."
+            elif status_code == 429:
+                message = "OpenSky rate limit exceeded."
+            else:
+                message = f"OpenSky returned HTTP {status_code}."
+            raise OpenSkyError(message) from exc
+        except requests.ConnectionError as exc:
+            raise OpenSkyError("Could not reach OpenSky from the current environment.") from exc
         except requests.RequestException as exc:
             raise OpenSkyError("Unable to fetch data from OpenSky.") from exc
 
@@ -65,7 +78,7 @@ class OpenSkyClient:
             icao24 = self._as_str(state[0])
             longitude = self._as_float(state[5])
             latitude = self._as_float(state[6])
-            altitude = self._as_float(state[13])
+            altitude = self._as_float(state[7]) or self._as_float(state[13])
             true_track = self._as_float(state[10])
 
             if not icao24 or longitude is None or latitude is None:

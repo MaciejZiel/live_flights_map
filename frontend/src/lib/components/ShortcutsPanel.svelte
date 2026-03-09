@@ -38,11 +38,11 @@
     min-width: 2rem;
     padding: 0.3rem 0.45rem;
     border-radius: 8px;
-    border: 1px solid rgba(73, 105, 135, 0.18);
+    border: 1px solid var(--kbd-border);
     font: inherit;
     font-weight: 800;
     text-align: center;
-    background: rgba(255, 255, 255, 0.92);
+    background: var(--kbd-bg);
     box-shadow: inset 0 -2px 0 rgba(18, 57, 93, 0.08);
   }
 </style>

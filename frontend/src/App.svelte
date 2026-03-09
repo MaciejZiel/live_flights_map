@@ -47,6 +47,7 @@
   let filterPresets = [];
   let presetName = "";
   let sortBy = "altitude_desc";
+  let theme = "light";
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -59,8 +60,10 @@
       mapViewport = savedPreferences.mapViewport ?? mapViewport;
       filterPresets = savedPreferences.filterPresets ?? filterPresets;
       sortBy = savedPreferences.sortBy ?? sortBy;
+      theme = savedPreferences.theme ?? theme;
     }
 
+    syncThemeClass(theme);
     preferencesReady = true;
     flightsStore.start();
     window.addEventListener("keydown", handleKeyboardShortcut);
@@ -98,6 +101,14 @@
 
   function handleViewportChange(event) {
     mapViewport = event.detail.viewport;
+  }
+
+  function syncThemeClass(nextTheme) {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    document.body.classList.toggle("theme-dark", nextTheme === "dark");
   }
 
   function toggleFollowAircraft() {
@@ -156,6 +167,10 @@
 
   function triggerFullscreenToggle() {
     fullscreenRequestId = Date.now();
+  }
+
+  function setTheme(nextTheme) {
+    theme = nextTheme;
   }
 
   function handleKeyboardShortcut(event) {
@@ -318,12 +333,14 @@
     followAircraft = false;
   }
   $: if (preferencesReady) {
+    syncThemeClass(theme);
     saveUserPreferences({
       filters,
       mapStyle,
       mapViewport,
       filterPresets,
       sortBy,
+      theme,
     });
   }
 </script>
@@ -344,6 +361,14 @@
     </div>
 
     <div class="status-panel">
+      <div class="theme-switcher" role="group" aria-label="Theme switcher">
+        <button class:active={theme === "light"} type="button" on:click={() => setTheme("light")}>
+          Light
+        </button>
+        <button class:active={theme === "dark"} type="button" on:click={() => setTheme("dark")}>
+          Dark
+        </button>
+      </div>
       <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
         {#if state.status === "loading"}
           Syncing...
@@ -525,7 +550,7 @@
     text-transform: uppercase;
     letter-spacing: 0.16em;
     font-size: 0.72rem;
-    color: #4a6987;
+    color: var(--color-muted);
   }
 
   h1 {
@@ -540,9 +565,9 @@
     min-width: 220px;
     padding: 1rem 1.1rem;
     border-radius: 18px;
-    background: rgba(255, 255, 255, 0.72);
+    background: var(--surface-strong-bg);
     backdrop-filter: blur(10px);
-    box-shadow: 0 16px 40px rgba(28, 66, 106, 0.12);
+    box-shadow: var(--shadow-soft);
   }
 
   .status-panel p {
@@ -553,29 +578,29 @@
   .status-pill {
     padding: 0.35rem 0.7rem;
     border-radius: 999px;
-    background: rgba(180, 80, 72, 0.12);
-    color: #973a32;
+    background: var(--status-neutral-bg);
+    color: var(--status-neutral-text);
     font-size: 0.84rem;
     font-weight: 700;
   }
 
   .status-pill.online {
-    background: rgba(35, 125, 84, 0.14);
-    color: #1b6d46;
+    background: var(--status-online-bg);
+    color: var(--status-online-text);
   }
 
   .error-banner {
     padding: 0.9rem 1rem;
     border-radius: 14px;
-    background: rgba(183, 57, 57, 0.12);
-    color: #852020;
+    background: var(--banner-error-bg);
+    color: var(--banner-error-text);
   }
 
   .warning-banner {
     padding: 0.9rem 1rem;
     border-radius: 14px;
-    background: rgba(196, 106, 23, 0.14);
-    color: #91510e;
+    background: var(--banner-warning-bg);
+    color: var(--banner-warning-text);
   }
 
   .layout {
@@ -594,9 +619,9 @@
   .panel,
   .map-card {
     border-radius: 24px;
-    background: rgba(255, 255, 255, 0.78);
+    background: var(--surface-bg);
     backdrop-filter: blur(8px);
-    box-shadow: 0 18px 44px rgba(26, 57, 92, 0.14);
+    box-shadow: var(--shadow-strong);
   }
 
   .panel {
@@ -621,42 +646,44 @@
   }
 
   .segmented-control button {
-    border: 1px solid rgba(73, 105, 135, 0.18);
+    border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
     font: inherit;
     font-weight: 700;
-    color: #244566;
-    background: rgba(255, 255, 255, 0.9);
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
     cursor: pointer;
   }
 
   .segmented-control button.active {
-    color: #f4f9ff;
-    background: linear-gradient(135deg, #12395d 0%, #375f86 100%);
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
   }
 
   .field span,
   .checkbox-field span {
     font-size: 0.83rem;
     font-weight: 600;
-    color: #49657f;
+    color: var(--color-muted);
   }
 
   .field input {
-    border: 1px solid rgba(73, 105, 135, 0.2);
+    border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
     font: inherit;
-    background: rgba(255, 255, 255, 0.9);
+    color: var(--color-text);
+    background: var(--surface-input-bg);
   }
 
   .field select {
-    border: 1px solid rgba(73, 105, 135, 0.2);
+    border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
     font: inherit;
-    background: rgba(255, 255, 255, 0.9);
+    color: var(--color-text);
+    background: var(--surface-input-bg);
   }
 
   .filter-actions {
@@ -671,11 +698,12 @@
   }
 
   .preset-save-row input {
-    border: 1px solid rgba(73, 105, 135, 0.2);
+    border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
     font: inherit;
-    background: rgba(255, 255, 255, 0.9);
+    color: var(--color-text);
+    background: var(--surface-input-bg);
   }
 
   .checkbox-field {
@@ -689,8 +717,8 @@
     padding: 0.8rem 0.95rem;
     font: inherit;
     font-weight: 700;
-    color: #f4f9ff;
-    background: linear-gradient(135deg, #12395d 0%, #375f86 100%);
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
     cursor: pointer;
   }
 
@@ -700,7 +728,7 @@
 
   .secondary-button,
   .preset-delete {
-    border: 1px solid rgba(73, 105, 135, 0.18);
+    border: 1px solid var(--surface-border);
     border-radius: 12px;
     padding: 0.75rem 0.85rem;
     font: inherit;
@@ -709,13 +737,37 @@
   }
 
   .secondary-button {
-    color: #1f4466;
-    background: rgba(255, 255, 255, 0.92);
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
   }
 
   .preset-delete {
-    color: #8f3c2a;
-    background: rgba(255, 244, 241, 0.94);
+    color: var(--button-danger-text);
+    background: var(--button-danger-bg);
+  }
+
+  .theme-switcher {
+    display: inline-grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.4rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .theme-switcher button {
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 0.45rem 0.7rem;
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .theme-switcher button.active {
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
   }
 
   .preset-list {

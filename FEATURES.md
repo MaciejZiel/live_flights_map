@@ -56,7 +56,6 @@
 
 - Collapsible and reorderable side panels.
 - Responsive mobile layout with simplified map mode.
-- Light and dark themes.
 - Tooltips and onboarding for new users.
 - Multi-language interface.
 - Favorites for airports and aircraft.

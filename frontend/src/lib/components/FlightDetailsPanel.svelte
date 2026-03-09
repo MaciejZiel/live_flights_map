@@ -85,7 +85,7 @@
   .details-header span {
     padding: 0.28rem 0.6rem;
     border-radius: 999px;
-    background: rgba(18, 57, 93, 0.08);
+    background: var(--chip-bg);
     font-size: 0.82rem;
     font-weight: 700;
   }
@@ -96,8 +96,8 @@
     padding: 0.8rem 0.95rem;
     font: inherit;
     font-weight: 700;
-    color: #f4f9ff;
-    background: linear-gradient(135deg, #12395d 0%, #375f86 100%);
+    color: var(--button-primary-text);
+    background: var(--button-primary-bg);
     cursor: pointer;
   }
 
@@ -120,7 +120,7 @@
     font-size: 0.76rem;
     text-transform: uppercase;
     letter-spacing: 0.08em;
-    color: #607892;
+    color: var(--color-subtle);
   }
 
   dd {

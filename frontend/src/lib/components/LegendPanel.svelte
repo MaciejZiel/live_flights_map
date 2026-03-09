@@ -80,12 +80,12 @@
   }
 
   .legend-pill.live {
-    color: #16553a;
-    background: rgba(35, 125, 84, 0.14);
+    color: var(--status-online-text);
+    background: var(--status-online-bg);
   }
 
   .legend-pill.cached {
-    color: #91510e;
-    background: rgba(196, 106, 23, 0.14);
+    color: var(--banner-warning-text);
+    background: var(--banner-warning-bg);
   }
 </style>

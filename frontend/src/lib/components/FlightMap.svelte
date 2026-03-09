@@ -430,9 +430,7 @@
   }
 
   .map-shell.fullscreen {
-    background:
-      radial-gradient(circle at top, rgba(20, 59, 94, 0.34), transparent 32%),
-      linear-gradient(180deg, #082037 0%, #102d4b 100%);
+    background: var(--fullscreen-background);
   }
 
   .map-root {
@@ -447,15 +445,15 @@
     padding: 0.72rem 0.95rem;
     font: inherit;
     font-weight: 700;
-    color: #f4f9ff;
-    background: rgba(18, 57, 93, 0.88);
+    color: var(--button-primary-text);
+    background: var(--map-ui-bg);
     box-shadow: 0 10px 20px rgba(18, 57, 93, 0.18);
     cursor: pointer;
     backdrop-filter: blur(6px);
   }
 
   .map-action:hover {
-    background: rgba(18, 57, 93, 0.96);
+    background: var(--map-ui-bg-hover);
   }
 
   .map-toolbar {
@@ -482,12 +480,12 @@
   }
 
   .preset-button {
-    background: rgba(255, 255, 255, 0.9);
-    color: #163958;
+    background: var(--button-secondary-bg);
+    color: var(--button-secondary-text);
   }
 
   .preset-button:hover {
-    background: rgba(255, 255, 255, 0.98);
+    filter: brightness(1.04);
   }
 
   :global(.leaflet-container) {
@@ -495,7 +493,7 @@
       "IBM Plex Sans",
       system-ui,
       sans-serif;
-    background: #bfd6ea;
+    background: var(--map-background);
   }
 
   :global(.leaflet-popup-content) {

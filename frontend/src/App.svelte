@@ -181,6 +181,24 @@
     ].filter(Boolean).length;
   }
 
+  function getTopValues(flights, getValue, limit = 4) {
+    const counts = new Map();
+
+    for (const flight of flights) {
+      const value = getValue(flight);
+      if (!value) {
+        continue;
+      }
+
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+    }
+
+    return [...counts.entries()]
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+      .slice(0, limit)
+      .map(([value]) => value);
+  }
+
   function handleBoundsChange(event) {
     flightsStore.setBbox(event.detail.bbox);
   }
@@ -656,6 +674,87 @@
       hideGroundTraffic: true,
       recentActivity: "any",
     };
+  }
+
+  function applyQuickFilter(presetKey) {
+    if (presetKey === "reset") {
+      resetFilters();
+      return;
+    }
+
+    if (presetKey === "fast") {
+      filters = {
+        ...filters,
+        minSpeed: "700",
+        hideGroundTraffic: true,
+      };
+      return;
+    }
+
+    if (presetKey === "high") {
+      filters = {
+        ...filters,
+        minAltitude: "9000",
+        hideGroundTraffic: true,
+      };
+      return;
+    }
+
+    if (presetKey === "recent") {
+      filters = {
+        ...filters,
+        recentActivity: "2m",
+      };
+      return;
+    }
+
+    if (presetKey === "ground") {
+      filters = {
+        ...filters,
+        hideGroundTraffic: false,
+      };
+    }
+  }
+
+  function clearFilterToken(tokenKey) {
+    if (tokenKey === "query") {
+      filters = { ...filters, query: "" };
+      return;
+    }
+
+    if (tokenKey === "minAltitude") {
+      filters = { ...filters, minAltitude: "" };
+      return;
+    }
+
+    if (tokenKey === "minSpeed") {
+      filters = { ...filters, minSpeed: "" };
+      return;
+    }
+
+    if (tokenKey === "country") {
+      filters = { ...filters, country: "" };
+      return;
+    }
+
+    if (tokenKey === "operator") {
+      filters = { ...filters, operator: "" };
+      return;
+    }
+
+    if (tokenKey === "headingBand") {
+      filters = { ...filters, headingBand: "any" };
+      return;
+    }
+
+    if (tokenKey === "recentActivity") {
+      filters = { ...filters, recentActivity: "any" };
+      return;
+    }
+
+    if (tokenKey === "ground") {
+      filters = { ...filters, hideGroundTraffic: true };
+    }
   }
 
   function saveCurrentPreset() {
@@ -1159,6 +1258,20 @@
       )
     : 0;
   $: activeFilterCount = countActiveFilters(filters);
+  $: topOperatorSuggestions = getTopValues(replayFlights, (flight) => deriveOperatorCode(flight) || "", 4);
+  $: topCountrySuggestions = getTopValues(replayFlights, (flight) => flight.origin_country ?? "", 4);
+  $: activeFilterTokens = [
+    filters.query.trim() ? { key: "query", label: `Search: ${filters.query.trim()}` } : null,
+    filters.minAltitude ? { key: "minAltitude", label: `Min altitude ${filters.minAltitude} m` } : null,
+    filters.minSpeed ? { key: "minSpeed", label: `Min speed ${filters.minSpeed} km/h` } : null,
+    filters.country.trim() ? { key: "country", label: `Country: ${filters.country.trim()}` } : null,
+    filters.operator.trim() ? { key: "operator", label: `Operator: ${filters.operator.trim().toUpperCase()}` } : null,
+    filters.headingBand !== "any" ? { key: "headingBand", label: `Heading: ${filters.headingBand}` } : null,
+    !filters.hideGroundTraffic ? { key: "ground", label: "Ground traffic visible" } : null,
+    filters.recentActivity !== "any"
+      ? { key: "recentActivity", label: `Recent: ${filters.recentActivity}` }
+      : null,
+  ].filter(Boolean);
   $: activeAlertEvents = alertEvents.slice(0, 4);
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
@@ -1626,6 +1739,80 @@
               </div>
               <span class="card-badge">{activeFilterCount}</span>
             </div>
+
+            <label class="field">
+              <span>Search query</span>
+              <input
+                bind:value={filters.query}
+                type="text"
+                placeholder="callsign, ICAO24, country, operator"
+              />
+            </label>
+
+            <div class="filter-cluster">
+              <div class="cluster-header">
+                <strong>Quick presets</strong>
+                <span>One click traffic shaping</span>
+              </div>
+              <div class="chip-list filter-chip-list">
+                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("reset")}>All traffic</button>
+                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast movers</button>
+                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
+                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("recent")}>Recent only</button>
+                <button class="tool-chip" type="button" on:click={() => applyQuickFilter("ground")}>Include ground</button>
+              </div>
+            </div>
+
+            {#if activeFilterTokens.length}
+              <div class="filter-cluster">
+                <div class="cluster-header">
+                  <strong>Active filters</strong>
+                  <span>{activeFilterTokens.length} active</span>
+                </div>
+                <div class="active-filter-list">
+                  {#each activeFilterTokens as token}
+                    <button class="active-filter-chip" type="button" on:click={() => clearFilterToken(token.key)}>
+                      {token.label} ×
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            {#if topOperatorSuggestions.length || topCountrySuggestions.length}
+              <div class="filter-cluster">
+                <div class="cluster-header">
+                  <strong>Live suggestions</strong>
+                  <span>Built from current traffic</span>
+                </div>
+
+                {#if topOperatorSuggestions.length}
+                  <div class="suggestion-group">
+                    <span class="suggestion-label">Operators</span>
+                    <div class="active-filter-list">
+                      {#each topOperatorSuggestions as operator}
+                        <button class="suggestion-chip" type="button" on:click={() => (filters = { ...filters, operator })}>
+                          {operator}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+
+                {#if topCountrySuggestions.length}
+                  <div class="suggestion-group">
+                    <span class="suggestion-label">Countries</span>
+                    <div class="active-filter-list">
+                      {#each topCountrySuggestions as country}
+                        <button class="suggestion-chip" type="button" on:click={() => (filters = { ...filters, country })}>
+                          {country}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
 
             <label class="field">
               <span>Sort by</span>
@@ -2223,6 +2410,66 @@
     gap: 0.55rem;
   }
 
+  .filter-cluster,
+  .suggestion-group {
+    display: grid;
+    gap: 0.55rem;
+  }
+
+  .filter-cluster {
+    padding: 0.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .cluster-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .cluster-header strong,
+  .suggestion-label {
+    color: #f6f8fb;
+    font-size: 0.84rem;
+  }
+
+  .cluster-header span,
+  .suggestion-label {
+    color: #aeb9c7;
+  }
+
+  .filter-chip-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .active-filter-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .active-filter-chip,
+  .suggestion-chip {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.55rem 0.8rem;
+    font: inherit;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #f6f8fb;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+  }
+
+  .suggestion-chip {
+    color: #f7db7a;
+    background: rgba(245, 185, 8, 0.08);
+    border-color: rgba(245, 185, 8, 0.22);
+  }
+
   .field input,
   .field select,
   .preset-save-row input {
@@ -2366,7 +2613,8 @@
 
     .flight-hero-header,
     .card-header,
-    .topbar-actions {
+    .topbar-actions,
+    .cluster-header {
       display: grid;
     }
 

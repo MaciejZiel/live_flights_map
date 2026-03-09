@@ -162,57 +162,71 @@
   $: routeWarning = route?.plausible === false ? "Route is not fully verified yet." : null;
   $: detailWarning = detailsError ?? details?.meta?.warning ?? routeWarning ?? null;
   $: photoUrl = resolvePhotoUrl(photo);
+  $: routeStatusText = route?.plausible === false
+    ? "Route unverified"
+    : route
+      ? "Route resolved"
+      : ["loading", "refreshing"].includes(detailsStatus)
+        ? "Resolving route"
+        : "Live track";
 </script>
 
 <section class="panel details-panel">
   <div class="panel-heading">
     <div>
-      <p class="eyebrow">{routeLabel ? "Tracking route" : "Aircraft details"}</p>
+      <p class="eyebrow">{routeLabel ? "Selected route" : "Selected aircraft"}</p>
       <h2>{flight ? identity.callsign : "Flight inspector"}</h2>
     </div>
     {#if flight}
-      <span class="status-chip">{formatFlightStatus(flight)}</span>
+      <span class="route-badge panel-badge">{routeStatusText}</span>
     {/if}
   </div>
 
   {#if flight}
     <section class="hero-card">
       <div class="photo-shell">
-        {#if photoUrl}
-          {#if photo?.link}
-            <a class="photo-link" href={photo.link} rel="noreferrer" target="_blank">
+        <div class="photo-visual">
+          {#if photoUrl}
+            {#if photo?.link}
+              <a class="photo-link" href={photo.link} rel="noreferrer" target="_blank">
+                <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
+              </a>
+            {:else}
               <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
-            </a>
+            {/if}
           {:else}
-            <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
+            <div class:loading={detailsStatus === "loading" || detailsStatus === "refreshing"} class="photo-placeholder">
+              <span>{detailsStatus === "loading" || detailsStatus === "refreshing" ? "Resolving aircraft" : "Photo unavailable"}</span>
+              <strong>{identity.registration ?? identity.icao24}</strong>
+              <small>{identity.typeCode ?? "Type unknown"}</small>
+            </div>
           {/if}
+
+          <div class="photo-overlay">
+            <div class="photo-badge-row">
+              <span class="status-chip overlay-chip">{formatFlightStatus(flight)}</span>
+              {#if routeFlightNumber}
+                <span class="route-badge">{routeFlightNumber}</span>
+              {/if}
+            </div>
+
+            <div class="photo-copy">
+              <p class="eyebrow">Live route</p>
+              <h3>{routeLabel ?? identity.callsign}</h3>
+              <p class="hero-subtitle">{routeVerbose ?? `${identity.originCountry ?? "Unknown country"} · ICAO24 ${identity.icao24}`}</p>
+            </div>
+          </div>
+        </div>
+
+        {#if photoUrl}
           <div class="photo-credit">
             <span>{photo?.source ?? "photo"}</span>
             <strong>{photo?.photographer ?? "Unknown photographer"}</strong>
-          </div>
-        {:else}
-          <div class:loading={detailsStatus === "loading" || detailsStatus === "refreshing"} class="photo-placeholder">
-            <span>{detailsStatus === "loading" || detailsStatus === "refreshing" ? "Resolving aircraft" : "Photo unavailable"}</span>
-            <strong>{identity.registration ?? identity.icao24}</strong>
-            <small>{identity.typeCode ?? "Type unknown"}</small>
           </div>
         {/if}
       </div>
 
       <div class="hero-copy">
-        <div class="hero-headline">
-          <div>
-            <p class="eyebrow">Selected flight</p>
-            <h3>{routeLabel ?? identity.callsign}</h3>
-          </div>
-          {#if routeFlightNumber}
-            <span class="route-badge">{routeFlightNumber}</span>
-          {/if}
-        </div>
-
-        <p class="hero-route">{routeLabel ?? "Live track active. Route will appear when the lookup resolves."}</p>
-        <p class="hero-subtitle">{routeVerbose ?? `${identity.originCountry ?? "Unknown country"} · ICAO24 ${identity.icao24}`}</p>
-
         <div class="hero-meta">
           <span>{identity.registration ?? "Registration n/a"}</span>
           <span>{identity.typeCode ?? "Type n/a"}</span>
@@ -235,12 +249,12 @@
 
         <div class="route-summary">
           <span>{route?.iata_codes ?? route?.airport_codes ?? "Route lookup pending"}</span>
-          <strong>{routeStops.length ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}` : "Direct flight"}</strong>
+          <strong>{routeStops.length ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}` : routeStatusText}</strong>
         </div>
 
         <div class="identity-actions">
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
-            {followAircraft ? "Following" : "Follow"}
+            {followAircraft ? "Following on map" : "Track on map"}
           </button>
           <button class="action-button secondary" type="button" on:click={onRetryDetails}>
             Refresh
@@ -338,7 +352,6 @@
   }
 
   .panel-heading,
-  .hero-headline,
   .facts-header {
     display: flex;
     justify-content: space-between;
@@ -376,6 +389,10 @@
     border: 1px solid rgba(245, 185, 8, 0.22);
   }
 
+  .panel-badge {
+    align-self: center;
+  }
+
   .hero-card,
   .telemetry-card,
   .detail-warning,
@@ -393,6 +410,7 @@
     display: grid;
     gap: 0.8rem;
     padding: 0.78rem;
+    overflow: hidden;
   }
 
   .photo-shell {
@@ -400,11 +418,18 @@
     gap: 0.48rem;
   }
 
+  .photo-visual {
+    position: relative;
+    overflow: hidden;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
   .photo-shell img,
   .photo-placeholder {
     width: 100%;
     aspect-ratio: 16 / 10;
-    border-radius: 13px;
   }
 
   .photo-shell img {
@@ -415,6 +440,39 @@
 
   .photo-link {
     display: block;
+  }
+
+  .photo-overlay {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    gap: 0.52rem;
+    padding: 1rem 0.9rem 0.82rem;
+    background:
+      linear-gradient(180deg, rgba(6, 7, 10, 0) 0%, rgba(7, 8, 11, 0.82) 42%, rgba(7, 8, 11, 0.96) 100%);
+  }
+
+  .photo-badge-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .overlay-chip {
+    background: rgba(255, 211, 79, 0.95);
+  }
+
+  .photo-copy {
+    display: grid;
+    gap: 0.2rem;
+  }
+
+  .photo-copy h3 {
+    font-size: 1.18rem;
+    line-height: 1.1;
   }
 
   .photo-credit,
@@ -435,7 +493,7 @@
   }
 
   .photo-credit strong,
-  .hero-headline h3,
+  .photo-copy h3,
   .route-node strong,
   .telemetry-card strong,
   .fact-row strong,
@@ -486,12 +544,6 @@
   .hero-copy {
     display: grid;
     gap: 0.72rem;
-  }
-
-  .hero-route {
-    font-size: 1.02rem;
-    font-weight: 800;
-    color: var(--color-text);
   }
 
   .hero-meta {
@@ -647,7 +699,6 @@
 
   @media (max-width: 720px) {
     .panel-heading,
-    .hero-headline,
     .facts-header,
     .route-summary {
       display: grid;

@@ -416,9 +416,9 @@
     const narrowViewport = window.matchMedia("(max-width: 960px)").matches;
 
     map.fitBounds(bounds, {
-      paddingTopLeft: narrowViewport ? [56, 56] : [80, 80],
-      paddingBottomRight: narrowViewport ? [56, 56] : [360, 80],
-      maxZoom: 7,
+      paddingTopLeft: narrowViewport ? [56, 56] : [300, 110],
+      paddingBottomRight: narrowViewport ? [56, 56] : [360, 120],
+      maxZoom: 6.8,
       animate: true,
       duration: 0.8,
     });

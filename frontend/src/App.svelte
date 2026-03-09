@@ -12,6 +12,7 @@
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
   import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
+  import { fetchFlightDetails } from "./lib/api/flights.js";
   import { flightsStore } from "./lib/stores/flights.js";
   import { formatAltitude, formatHeading, formatSpeed } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
@@ -93,6 +94,12 @@
   let savedViews = [];
   let savedViewName = "";
   let activeSavedViewId = null;
+  let flightDetailsCache = new Map();
+  let selectedFlightDetails = null;
+  let selectedFlightDetailsStatus = "idle";
+  let selectedFlightDetailsError = null;
+  let selectedFlightDetailsRequestId = 0;
+  let lastSelectedFlightDetailsKey = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -665,6 +672,129 @@
     if (isMobileViewport) {
       mobileSidebarOpen = true;
     }
+  }
+
+  function buildFlightDetailsKey(flight) {
+    if (!flight?.icao24) {
+      return null;
+    }
+
+    return [
+      flight.icao24,
+      (flight.callsign ?? "").trim().toUpperCase(),
+      (flight.registration ?? "").trim().toUpperCase(),
+    ].join(":");
+  }
+
+  function buildFlightDetailsFallback(flight, warning = null) {
+    if (!flight) {
+      return null;
+    }
+
+    const operatorCode = deriveOperatorCode(flight);
+
+    return {
+      aircraft: {
+        icao24: flight.icao24,
+        callsign: flight.callsign ?? null,
+        registration: flight.registration ?? null,
+        type_code: flight.type_code ?? null,
+        origin_country: flight.origin_country ?? null,
+        operator_code: operatorCode || null,
+      },
+      route: null,
+      photo: null,
+      meta: {
+        fetched_at: null,
+        warning,
+      },
+    };
+  }
+
+  function mergeFlightDetails(flight, details) {
+    if (!flight) {
+      return details;
+    }
+
+    const fallbackDetails = buildFlightDetailsFallback(flight, details?.meta?.warning ?? null);
+    const operatorCode = details?.aircraft?.operator_code || fallbackDetails?.aircraft?.operator_code || null;
+
+    return {
+      ...fallbackDetails,
+      ...details,
+      aircraft: {
+        ...fallbackDetails?.aircraft,
+        ...details?.aircraft,
+        operator_code: operatorCode,
+      },
+      meta: {
+        ...fallbackDetails?.meta,
+        ...details?.meta,
+      },
+    };
+  }
+
+  async function loadSelectedFlightDetails(flight, options = {}) {
+    const key = buildFlightDetailsKey(flight);
+    if (!key) {
+      selectedFlightDetails = null;
+      selectedFlightDetailsStatus = "idle";
+      selectedFlightDetailsError = null;
+      return;
+    }
+
+    const force = options.force ?? false;
+    const cachedDetails = flightDetailsCache.get(key);
+    if (cachedDetails && !force) {
+      selectedFlightDetails = mergeFlightDetails(flight, cachedDetails);
+      selectedFlightDetailsStatus = "success";
+      selectedFlightDetailsError = null;
+      return;
+    }
+
+    const requestId = ++selectedFlightDetailsRequestId;
+    const fallbackDetails = mergeFlightDetails(flight, cachedDetails ?? buildFlightDetailsFallback(flight));
+    selectedFlightDetails = fallbackDetails;
+    selectedFlightDetailsStatus = cachedDetails ? "refreshing" : "loading";
+    selectedFlightDetailsError = null;
+
+    try {
+      const detailsPayload = await fetchFlightDetails(flight);
+      if (requestId !== selectedFlightDetailsRequestId || buildFlightDetailsKey(selectedFlight) !== key) {
+        return;
+      }
+
+      const mergedDetails = mergeFlightDetails(flight, detailsPayload);
+      const nextCache = new Map(flightDetailsCache);
+      nextCache.set(key, mergedDetails);
+      flightDetailsCache = nextCache;
+      selectedFlightDetails = mergedDetails;
+      selectedFlightDetailsStatus = "success";
+      selectedFlightDetailsError = null;
+    } catch (error) {
+      if (requestId !== selectedFlightDetailsRequestId || buildFlightDetailsKey(selectedFlight) !== key) {
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : "Failed to load aircraft details.";
+      selectedFlightDetails = mergeFlightDetails(flight, {
+        ...fallbackDetails,
+        meta: {
+          ...fallbackDetails?.meta,
+          warning: message,
+        },
+      });
+      selectedFlightDetailsStatus = cachedDetails ? "success" : "error";
+      selectedFlightDetailsError = cachedDetails ? null : message;
+    }
+  }
+
+  function retrySelectedFlightDetails() {
+    if (!selectedFlight) {
+      return;
+    }
+
+    loadSelectedFlightDetails(selectedFlight, { force: true });
   }
 
   function toggleWatchMode() {
@@ -1380,6 +1510,17 @@
   $: selectedFlightAnnotation = selectedIcao24
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
+  $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
+  $: if (!selectedFlightDetailsKey) {
+    lastSelectedFlightDetailsKey = null;
+    selectedFlightDetails = null;
+    selectedFlightDetailsStatus = "idle";
+    selectedFlightDetailsError = null;
+  }
+  $: if (selectedFlightDetailsKey && selectedFlightDetailsKey !== lastSelectedFlightDetailsKey) {
+    lastSelectedFlightDetailsKey = selectedFlightDetailsKey;
+    loadSelectedFlightDetails(selectedFlight);
+  }
   $: if (!selectedFlight) {
     followAircraft = false;
   }
@@ -1795,15 +1936,15 @@
           {#if inspectorTab === "details"}
             <FlightDetailsPanel
               flight={selectedFlight}
+              details={selectedFlightDetails}
+              detailsStatus={selectedFlightDetailsStatus}
+              detailsError={selectedFlightDetailsError}
               followAircraft={followAircraft}
               trailPoints={selectedFlightTrail}
               isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
-              annotation={selectedFlightAnnotation}
               onToggleFollow={toggleFollowAircraft}
               onToggleWatch={toggleSelectedFlightWatchlist}
-              onUpdateNotes={updateSelectedFlightNotes}
-              onAddTag={addSelectedFlightTag}
-              onRemoveTag={removeSelectedFlightTag}
+              onRetryDetails={retrySelectedFlightDetails}
             />
         {:else if inspectorTab === "traffic"}
           <TrafficBoardPanel

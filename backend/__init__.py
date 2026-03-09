@@ -3,8 +3,11 @@ from flask import Flask
 from .config import Config
 from .routes import api
 from .services.adsb_lol import ADSBLolClient
+from .services.adsb_lol_routes import ADSBLolRouteClient
+from .services.flight_details import FlightDetailsService
 from .services.flight_snapshot import FlightSnapshotService
 from .services.opensky import OpenSkyClient
+from .services.planespotting import PlanespottingClient
 
 
 def create_app() -> Flask:
@@ -43,6 +46,19 @@ def create_app() -> Flask:
         cache_ttl=app.config["OPENSKY_CACHE_TTL"],
         cooldown_seconds=app.config["OPENSKY_COOLDOWN_SECONDS"],
         cache_path=app.config["OPENSKY_CACHE_PATH"],
+    )
+    app.extensions["flight_details_service"] = FlightDetailsService(
+        route_client=ADSBLolRouteClient(
+            base_url=app.config["ADSB_LOL_ROUTE_API_URL"],
+            timeout=app.config["ADSB_LOL_ROUTE_TIMEOUT"],
+            max_retries=app.config["ADSB_LOL_ROUTE_RETRY_COUNT"],
+        ),
+        photo_client=PlanespottingClient(
+            base_url=app.config["PLANESPOTTING_BASE_URL"],
+            timeout=app.config["PLANESPOTTING_TIMEOUT"],
+            max_retries=app.config["PLANESPOTTING_RETRY_COUNT"],
+        ),
+        cache_ttl=app.config["FLIGHT_DETAILS_CACHE_TTL"],
     )
     app.register_blueprint(api, url_prefix="/api")
 

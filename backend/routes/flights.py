@@ -43,6 +43,26 @@ def _parse_bbox():
     return bbox
 
 
+def _parse_optional_float(name: str) -> float | None:
+    raw_value = request.args.get(name)
+    if raw_value is None or raw_value == "":
+        return None
+
+    try:
+        return float(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid '{name}' query parameter.") from exc
+
+
+def _normalize_text(raw_value: str | None, uppercase: bool = False) -> str | None:
+    if raw_value is None:
+        return None
+    cleaned = raw_value.strip()
+    if not cleaned:
+        return None
+    return cleaned.upper() if uppercase else cleaned
+
+
 @api.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = current_app.config[
@@ -68,6 +88,31 @@ def list_flights():
         return jsonify({"error": str(exc)}), 502
 
     return jsonify(flights_payload)
+
+
+@api.get("/flights/<icao24>/details")
+def flight_details(icao24: str):
+    normalized_icao24 = _normalize_text(icao24, uppercase=False)
+    if not normalized_icao24 or len(normalized_icao24) < 6:
+        return jsonify({"error": "Invalid aircraft identifier."}), 400
+
+    try:
+        latitude = _parse_optional_float("lat")
+        longitude = _parse_optional_float("lon")
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    service = current_app.extensions["flight_details_service"]
+    details_payload = service.get_details(
+        icao24=normalized_icao24,
+        callsign=_normalize_text(request.args.get("callsign"), uppercase=True),
+        registration=_normalize_text(request.args.get("registration"), uppercase=True),
+        type_code=_normalize_text(request.args.get("type_code"), uppercase=True),
+        latitude=latitude,
+        longitude=longitude,
+        origin_country=_normalize_text(request.args.get("origin_country")),
+    )
+    return jsonify(details_payload)
 
 
 @api.get("/flights/stream")

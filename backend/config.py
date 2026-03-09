@@ -30,12 +30,25 @@ class Config:
     ADSB_LOL_TIMEOUT = float(os.getenv("ADSB_LOL_TIMEOUT", "10"))
     ADSB_LOL_RETRY_COUNT = int(os.getenv("ADSB_LOL_RETRY_COUNT", "1"))
     ADSB_LOL_RADIUS_LIMIT_NM = int(os.getenv("ADSB_LOL_RADIUS_LIMIT_NM", "250"))
+    ADSB_LOL_ROUTE_API_URL = os.getenv(
+        "ADSB_LOL_ROUTE_API_URL",
+        "https://api.adsb.lol/api/0/routeset",
+    )
+    ADSB_LOL_ROUTE_TIMEOUT = float(os.getenv("ADSB_LOL_ROUTE_TIMEOUT", "10"))
+    ADSB_LOL_ROUTE_RETRY_COUNT = int(os.getenv("ADSB_LOL_ROUTE_RETRY_COUNT", "1"))
+    PLANESPOTTING_BASE_URL = os.getenv(
+        "PLANESPOTTING_BASE_URL",
+        "https://www.planespotting.be/api/objects/imagesRegistration.php",
+    )
+    PLANESPOTTING_TIMEOUT = float(os.getenv("PLANESPOTTING_TIMEOUT", "10"))
+    PLANESPOTTING_RETRY_COUNT = int(os.getenv("PLANESPOTTING_RETRY_COUNT", "1"))
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(
         "OPENSKY_CACHE_PATH",
         os.path.join(gettempdir(), "live-flights-map-opensky-cache.json"),
     )
+    FLIGHT_DETAILS_CACHE_TTL = float(os.getenv("FLIGHT_DETAILS_CACHE_TTL", "21600"))
     FLIGHT_STREAM_INTERVAL_SECONDS = float(
         os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "30")
     )

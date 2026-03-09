@@ -138,6 +138,8 @@ class ADSBLolClient:
             "icao24": icao24,
             "callsign": self._clean_callsign(aircraft.get("flight")),
             "origin_country": None,
+            "registration": self._as_str(aircraft.get("r"), uppercase=True),
+            "type_code": self._as_str(aircraft.get("t"), uppercase=True),
             "longitude": longitude,
             "latitude": latitude,
             "last_contact": last_contact,
@@ -182,11 +184,13 @@ class ADSBLolClient:
         return cleaned or None
 
     @staticmethod
-    def _as_str(value: object) -> str | None:
+    def _as_str(value: object, uppercase: bool = False) -> str | None:
         if value is None:
             return None
-        cleaned = str(value).strip().lower()
-        return cleaned or None
+        cleaned = str(value).strip()
+        if not cleaned:
+            return None
+        return cleaned.upper() if uppercase else cleaned.lower()
 
     @staticmethod
     def _as_float(value: object) -> float | None:

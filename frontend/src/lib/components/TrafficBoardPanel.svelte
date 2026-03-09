@@ -3,31 +3,10 @@
 
   export let flights = [];
   export let selectedIcao24 = null;
-  export let viewport = null;
   export let title = "Traffic board";
   export let subtitle = "Visible traffic";
   export let maxRows = 12;
   export let onSelectFlight = () => {};
-
-  let activeBoard = "list";
-
-  function toRadians(value) {
-    return (value * Math.PI) / 180;
-  }
-
-  function calculateDistanceKm(flight, currentViewport) {
-    const center = currentViewport?.center ?? [52.15, 19.4];
-    const earthRadiusKm = 6371;
-    const deltaLatitude = toRadians(flight.latitude - center[0]);
-    const deltaLongitude = toRadians(flight.longitude - center[1]);
-    const startLatitude = toRadians(center[0]);
-    const endLatitude = toRadians(flight.latitude);
-    const haversine =
-      Math.sin(deltaLatitude / 2) ** 2 +
-      Math.cos(startLatitude) * Math.cos(endLatitude) * Math.sin(deltaLongitude / 2) ** 2;
-
-    return 2 * earthRadiusKm * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-  }
 
   function formatLastContact(lastContact) {
     if (lastContact === null || lastContact === undefined) {
@@ -44,14 +23,7 @@
     return match ? match[0] : "N/A";
   }
 
-  $: boardFlights =
-    activeBoard === "closest"
-      ? [...flights].sort(
-          (left, right) => calculateDistanceKm(left, viewport) - calculateDistanceKm(right, viewport)
-        )
-      : activeBoard === "recent"
-        ? [...flights].sort((left, right) => (right.last_contact ?? -Infinity) - (left.last_contact ?? -Infinity))
-        : flights;
+  $: boardFlights = flights;
   $: visibleRows = boardFlights.slice(0, maxRows);
 </script>
 
@@ -62,18 +34,6 @@
       <h2>{title}</h2>
     </div>
     <span class="count-pill">{flights.length}</span>
-  </div>
-
-  <div class="board-tabs" role="tablist" aria-label="Traffic board view">
-    <button class:active={activeBoard === "list"} type="button" on:click={() => (activeBoard = "list")}>
-      Ranked
-    </button>
-    <button class:active={activeBoard === "closest"} type="button" on:click={() => (activeBoard = "closest")}>
-      Nearby
-    </button>
-    <button class:active={activeBoard === "recent"} type="button" on:click={() => (activeBoard = "recent")}>
-      Fresh
-    </button>
   </div>
 
   {#if visibleRows.length}
@@ -99,8 +59,8 @@
             <span>SPD</span>
           </span>
           <span class="board-metric compact">
-            <strong>{activeBoard === "closest" ? `${calculateDistanceKm(flight, viewport).toFixed(0)} km` : formatLastContact(flight.last_contact)}</strong>
-            <span>{activeBoard === "closest" ? "DIST" : "AGE"}</span>
+            <strong>{formatLastContact(flight.last_contact)}</strong>
+            <span>AGE</span>
           </span>
         </button>
       {/each}
@@ -149,32 +109,9 @@
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
-  .board-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.45rem;
-  }
-
-  .board-tabs button {
-    border: 1px solid var(--surface-border);
-    border-radius: 14px;
-    padding: 0.68rem 0.72rem;
-    font: inherit;
-    font-weight: 700;
-    color: var(--button-secondary-text);
-    background: var(--button-secondary-bg);
-    cursor: pointer;
-  }
-
-  .board-tabs button.active {
-    color: var(--button-primary-text);
-    background: var(--button-primary-bg);
-    border-color: transparent;
-  }
-
   .board-list {
     display: grid;
-    gap: 0.55rem;
+    gap: 0.45rem;
   }
 
   .board-row {

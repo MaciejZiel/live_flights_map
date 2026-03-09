@@ -14,9 +14,7 @@
   export let detailsError = null;
   export let followAircraft = false;
   export let trailPoints = [];
-  export let isWatched = false;
   export let onToggleFollow = () => {};
-  export let onToggleWatch = () => {};
   export let onRetryDetails = () => {};
 
   function formatRelativeContact(lastContact) {
@@ -170,7 +168,7 @@
   <div class="panel-heading">
     <div>
       <p class="eyebrow">Aircraft details</p>
-      <h2>{flight ? "Focused tracking" : "Flight inspector"}</h2>
+      <h2>{flight ? identity.callsign : "Flight inspector"}</h2>
     </div>
     {#if flight}
       <span class="status-chip">{formatFlightStatus(flight)}</span>
@@ -204,8 +202,8 @@
       <div class="hero-copy">
         <div class="hero-headline">
           <div>
-            <p class="eyebrow">Selected aircraft</p>
-            <h3>{identity.callsign}</h3>
+            <p class="eyebrow">Selected flight</p>
+            <h3>{routeLabel ?? identity.callsign}</h3>
           </div>
           {#if routeFlightNumber}
             <span class="route-badge">{routeFlightNumber}</span>
@@ -225,11 +223,8 @@
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
             {followAircraft ? "Following" : "Follow"}
           </button>
-          <button class:active={isWatched} class="action-button secondary" type="button" on:click={onToggleWatch}>
-            {isWatched ? "Watching" : "Watch"}
-          </button>
           <button class="action-button secondary" type="button" on:click={onRetryDetails}>
-            Refresh details
+            Refresh
           </button>
         </div>
       </div>
@@ -399,15 +394,15 @@
   .data-card,
   .detail-warning {
     border: 1px solid var(--surface-border);
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.035);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .hero-card {
     display: grid;
-    grid-template-columns: 148px minmax(0, 1fr);
-    gap: 1rem;
-    padding: 1rem;
+    grid-template-columns: 1fr;
+    gap: 0.78rem;
+    padding: 0.78rem;
   }
 
   .photo-shell {
@@ -418,8 +413,8 @@
   .photo-shell img,
   .photo-placeholder {
     width: 100%;
-    aspect-ratio: 1 / 1;
-    border-radius: 16px;
+    aspect-ratio: 16 / 10;
+    border-radius: 12px;
   }
 
   .photo-shell img {
@@ -434,8 +429,7 @@
 
   .photo-credit,
   .hero-meta,
-  .detail-warning,
-  .history-meta div {
+  .detail-warning {
     display: grid;
     gap: 0.18rem;
   }
@@ -486,7 +480,7 @@
   }
 
   .photo-placeholder strong {
-    font-size: 1.15rem;
+    font-size: 1rem;
     color: var(--color-text);
   }
 
@@ -497,40 +491,40 @@
 
   .hero-copy {
     display: grid;
-    gap: 0.85rem;
+    gap: 0.7rem;
   }
 
   .hero-route {
-    font-size: 1.12rem;
+    font-size: 1rem;
     font-weight: 700;
     color: var(--color-text);
   }
 
   .hero-meta {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.55rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
   }
 
   .hero-meta span {
-    padding: 0.72rem 0.78rem;
-    border-radius: 14px;
+    padding: 0.62rem 0.7rem;
+    border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.06);
     background: rgba(255, 255, 255, 0.03);
     color: var(--color-text);
-    font-size: 0.83rem;
+    font-size: 0.78rem;
     font-weight: 600;
   }
 
   .identity-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.55rem;
+    gap: 0.45rem;
   }
 
   .action-button {
     border: 1px solid var(--surface-border);
     border-radius: 999px;
-    padding: 0.68rem 0.9rem;
+    padding: 0.56rem 0.8rem;
     font: inherit;
     font-weight: 700;
     color: var(--button-secondary-text);
@@ -548,8 +542,8 @@
   .detail-warning,
   .route-panel {
     display: grid;
-    gap: 0.85rem;
-    padding: 1rem;
+    gap: 0.72rem;
+    padding: 0.82rem;
   }
 
   .detail-warning strong {
@@ -567,8 +561,8 @@
   .route-node {
     display: grid;
     gap: 0.2rem;
-    padding: 0.9rem;
-    border-radius: 16px;
+    padding: 0.72rem;
+    border-radius: 12px;
     background: rgba(255, 255, 255, 0.03);
   }
 
@@ -591,7 +585,7 @@
   .telemetry-grid,
   .data-grid {
     display: grid;
-    gap: 0.7rem;
+    gap: 0.55rem;
   }
 
   .telemetry-grid {
@@ -599,18 +593,18 @@
   }
 
   .data-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .data-grid.compact {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .telemetry-card,
   .data-card {
     display: grid;
     gap: 0.22rem;
-    padding: 0.85rem 0.9rem;
+    padding: 0.72rem 0.76rem;
   }
 
   .telemetry-card strong {

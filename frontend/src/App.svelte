@@ -1592,9 +1592,9 @@
     <header class="radar-topbar">
       <div class="overlay-card center-bar">
         <div class="brand-inline">
-          <div class="brand-mark">24</div>
+          <div class="brand-mark">◎</div>
           <div class="brand-copy">
-            <strong>Live Flights</strong>
+            <strong>liveflights<span>24</span></strong>
             <span>live air traffic</span>
           </div>
         </div>
@@ -1611,38 +1611,14 @@
         </label>
 
         <div class="center-actions">
-          <div class="status-strip compact">
-            <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
-              {statusLabel}
-            </div>
-            <div class="status-stack">
-              <strong class="status-number">{formatCompactCount(visibleTrackedCount)}</strong>
-              <span class="status-inline-meta">{getConfidenceLabel(state)} · {getFreshnessLabel(state.fetchedAt)}</span>
-            </div>
+          <div class="traffic-counter">
+            <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+            <strong>{formatCompactCount(visibleTrackedCount)}</strong>
+            <small>aircraft</small>
           </div>
-
-          <button class="map-view-chip" type="button" on:click={() => triggerViewPreset("poland")}>
-            View <strong>Map</strong>
-          </button>
-
-          <button
-            class="overlay-card topbar-icon"
-            type="button"
-            title="Copy a link to the current map state and selected aircraft"
-            on:click={copyShareLink}
-          >
-            ↗
-          </button>
-          <button class="overlay-card topbar-icon" type="button" on:click={() => setTheme(theme === "dark" ? "light" : "dark")}>
-            {theme === "dark" ? "☼" : "◐"}
-          </button>
 
           {#if isMobileViewport}
             <button class="overlay-card topbar-icon" type="button" on:click={toggleMobileSidebar}>☰</button>
-          {/if}
-
-          {#if shareFeedback}
-            <span class="share-feedback">{shareFeedback}</span>
           {/if}
         </div>
       </div>
@@ -1670,7 +1646,6 @@
               <strong>Most tracked flights</strong>
               <span class="live-pill">LIVE</span>
             </div>
-            <span class="widget-toggle">⌃</span>
           </div>
 
           {#if compactLeaderboardFlights.length}
@@ -1696,18 +1671,6 @@
             <p class="widget-empty">Waiting for flights in the active map view.</p>
           {/if}
         </section>
-
-        <section class="widget-card compact">
-          <div class="widget-header">
-            <div class="widget-heading">
-              <strong>How to use</strong>
-              <span class="live-pill">FOCUS</span>
-            </div>
-          </div>
-          <p class="widget-empty">
-            Click any aircraft on the map. The right panel will show its photo, route and live details.
-          </p>
-        </section>
       </div>
     </aside>
 
@@ -1718,22 +1681,24 @@
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
       <div class="rail-header">
         <div class="rail-brand">
-          <span>liveflights</span>
-          <strong>24</strong>
+          <span>{selectedFlight ? "Selected flight" : "Traffic list"}</span>
+          <strong>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : `${visibleTrackedCount} visible`}</strong>
         </div>
-        <button
-          class="rail-close"
-          type="button"
-          aria-label="Close selected aircraft"
-          on:click={() => {
-            selectedIcao24 = null;
-            if (isMobileViewport) {
-              closeMobileSidebar();
-            }
-          }}
-        >
-          ×
-        </button>
+        {#if selectedFlight}
+          <button
+            class="rail-close"
+            type="button"
+            aria-label="Close selected aircraft"
+            on:click={() => {
+              selectedIcao24 = null;
+              if (isMobileViewport) {
+                closeMobileSidebar();
+              }
+            }}
+          >
+            ×
+          </button>
+        {/if}
       </div>
 
       <div class="inspector-scroll">
@@ -1745,32 +1710,16 @@
             detailsError={selectedFlightDetailsError}
             followAircraft={followAircraft}
             trailPoints={selectedFlightTrail}
-            isWatched={selectedFlight ? watchlist.includes(selectedFlight.icao24) : false}
             onToggleFollow={toggleFollowAircraft}
-            onToggleWatch={toggleSelectedFlightWatchlist}
             onRetryDetails={retrySelectedFlightDetails}
           />
         {:else}
-          <section class="panel inspector-panel">
-            <div class="card-header">
-              <div>
-                <p class="section-kicker">Flight details</p>
-                <h2>Select an aircraft</h2>
-              </div>
-              <span class="card-badge">{visibleTrackedCount}</span>
-            </div>
-            <p class="inspector-subtitle">
-              Click any aircraft marker on the map. This panel will switch to the selected flight and show its route, photo and live telemetry.
-            </p>
-          </section>
-
           <TrafficBoardPanel
             flights={sortedFlights}
             selectedIcao24={selectedIcao24}
-            viewport={mapViewport}
-            title="Traffic list"
-            subtitle="Current radar traffic"
-            maxRows={12}
+            title="Visible traffic"
+            subtitle="Click any aircraft"
+            maxRows={14}
             onSelectFlight={selectWatchedFlight}
           />
         {/if}
@@ -1797,12 +1746,12 @@
 
   .overlay-card {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 22px;
+    border-radius: 16px;
     background:
-      linear-gradient(180deg, rgba(43, 46, 52, 0.94) 0%, rgba(25, 28, 33, 0.94) 100%);
-    backdrop-filter: blur(18px);
+      linear-gradient(180deg, rgba(40, 42, 46, 0.96) 0%, rgba(22, 24, 28, 0.96) 100%);
+    backdrop-filter: blur(12px);
     box-shadow:
-      0 20px 50px rgba(0, 0, 0, 0.34),
+      0 20px 42px rgba(0, 0, 0, 0.3),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
 
@@ -1816,7 +1765,7 @@
   }
 
   .radar-topbar {
-    top: 0.95rem;
+    top: 0.75rem;
     left: 1rem;
     right: 1rem;
     display: flex;
@@ -1829,10 +1778,11 @@
     display: grid;
     grid-template-columns: auto minmax(250px, 1fr) auto;
     align-items: center;
-    gap: 0.8rem;
-    width: min(930px, calc(100vw - 39rem));
+    gap: 0.65rem;
+    width: min(760px, calc(100vw - 39rem));
     min-width: 520px;
-    padding: 0.55rem 0.7rem;
+    padding: 0.35rem 0.45rem 0.35rem 0.55rem;
+    border-radius: 14px;
   }
 
   .brand-inline {
@@ -1844,10 +1794,10 @@
   .brand-mark {
     display: grid;
     place-items: center;
-    width: 2.6rem;
-    height: 2.6rem;
+    width: 2.15rem;
+    height: 2.15rem;
     border-radius: 999px;
-    font-size: 1rem;
+    font-size: 0.85rem;
     font-weight: 900;
     color: #171a1f;
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
@@ -1858,9 +1808,13 @@
   .inspector-title h2 {
     display: block;
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 0.98rem;
     font-weight: 800;
     color: #f6f8fb;
+  }
+
+  .brand-copy strong span {
+    color: #f5b908;
   }
 
   .brand-copy span {
@@ -1887,27 +1841,29 @@
     align-items: center;
     gap: 0.55rem;
     min-width: 0;
-    padding: 0 0.15rem;
+    padding: 0.65rem 0.8rem;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.96);
   }
 
   .search-icon {
-    color: rgba(225, 231, 241, 0.58);
+    color: rgba(35, 40, 48, 0.6);
     font-size: 0.95rem;
   }
 
   .search-field input {
     width: 100%;
     border: 0;
-    padding: 0.28rem 0;
+    padding: 0;
     font: inherit;
-    font-size: 0.98rem;
-    color: #f6f8fb;
+    font-size: 0.9rem;
+    color: #1d232b;
     background: transparent;
     outline: none;
   }
 
   .search-field input::placeholder {
-    color: rgba(225, 231, 241, 0.58);
+    color: rgba(35, 40, 48, 0.5);
   }
 
   .center-actions {
@@ -1917,58 +1873,43 @@
     align-items: center;
   }
 
-  .status-strip {
-    display: flex;
-    gap: 0.6rem;
-    align-items: center;
-    padding: 0.38rem 0.48rem;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.04);
-  }
-
-  .status-strip.compact {
-    min-width: 0;
-  }
-
-  .status-stack {
-    display: grid;
-    gap: 0.12rem;
-  }
-
   .share-feedback,
   .inspector-subtitle {
     font-size: 0.78rem;
     color: #aeb9c7;
   }
 
-  .status-pill {
+  .traffic-counter {
     display: inline-flex;
     align-items: center;
-    justify-content: center;
-    padding: 0.38rem 0.62rem;
+    gap: 0.45rem;
+    padding: 0.45rem 0.68rem;
     border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #e6eaf0;
     background: rgba(255, 255, 255, 0.07);
-    white-space: nowrap;
   }
 
-  .status-pill.online {
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-  }
-
-  .status-inline-meta {
-    white-space: nowrap;
-  }
-
-  .status-number {
+  .traffic-counter strong {
     color: #f6f8fb;
-    font-size: 0.88rem;
-    line-height: 1;
+    font-size: 0.82rem;
+  }
+
+  .traffic-counter small {
+    color: #aeb9c7;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .traffic-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+  }
+
+  .traffic-dot.online {
+    background: #63d77e;
+    box-shadow: 0 0 0 4px rgba(99, 215, 126, 0.14);
   }
 
   .map-view-chip {
@@ -1976,8 +1917,8 @@
     align-items: center;
     gap: 0.35rem;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.58rem 0.8rem;
+    border-radius: 12px;
+    padding: 0.62rem 0.82rem;
     font: inherit;
     font-weight: 700;
     color: #f6f8fb;
@@ -2018,10 +1959,10 @@
   .topbar-icon {
     display: grid;
     place-items: center;
-    width: 2.45rem;
-    height: 2.45rem;
+    width: 2.3rem;
+    height: 2.3rem;
     padding: 0;
-    border-radius: 14px;
+    border-radius: 12px;
     flex: 0 0 auto;
   }
 
@@ -2064,41 +2005,41 @@
 
   .radar-left-panel,
   .radar-right-panel {
-    top: 5.9rem;
-    bottom: 5.55rem;
-    width: min(18.25rem, calc(100vw - 2rem));
-    padding: 0.85rem;
+    top: 4.8rem;
+    bottom: 1rem;
+    width: min(16.5rem, calc(100vw - 2rem));
+    padding: 0.72rem;
     overflow: hidden;
   }
 
   .radar-left-panel {
     left: 1rem;
     background:
-      linear-gradient(180deg, rgba(36, 39, 45, 0.95) 0%, rgba(24, 27, 31, 0.95) 100%);
+      linear-gradient(180deg, rgba(49, 51, 55, 0.95) 0%, rgba(30, 32, 36, 0.95) 100%);
   }
 
   .radar-right-panel {
     right: 1rem;
-    width: min(18rem, calc(100vw - 2rem));
+    width: min(20.75rem, calc(100vw - 2rem));
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);
-    gap: 0.75rem;
+    gap: 0.55rem;
     background:
-      linear-gradient(180deg, rgba(19, 20, 24, 0.98) 0%, rgba(9, 10, 13, 0.98) 100%);
+      linear-gradient(180deg, rgba(21, 22, 26, 0.98) 0%, rgba(10, 11, 14, 0.98) 100%);
   }
 
   .panel-stack,
   .inspector-scroll {
     display: grid;
-    gap: 0.9rem;
+    gap: 0.65rem;
     min-height: 0;
     overflow-y: auto;
-    padding-right: 0.15rem;
+    padding-right: 0.1rem;
   }
 
   .inspector-panel,
   .flight-hero {
-    padding: 1rem;
+    padding: 0.9rem;
   }
 
   .card-header {
@@ -2125,13 +2066,13 @@
 
   .widget-card {
     display: grid;
-    gap: 0.68rem;
-    padding: 0.82rem;
-    border-radius: 18px;
+    gap: 0.58rem;
+    padding: 0.76rem;
+    border-radius: 14px;
     background:
-      linear-gradient(180deg, rgba(55, 58, 64, 0.96) 0%, rgba(38, 41, 46, 0.96) 100%);
+      linear-gradient(180deg, rgba(63, 66, 72, 0.96) 0%, rgba(42, 45, 50, 0.96) 100%);
     box-shadow:
-      0 14px 28px rgba(0, 0, 0, 0.28),
+      0 12px 22px rgba(0, 0, 0, 0.22),
       inset 3px 0 0 #f5b908;
   }
 
@@ -2205,11 +2146,11 @@
     gap: 0.6rem;
     align-items: center;
     width: 100%;
-    padding: 0.72rem 0.65rem;
+    padding: 0.62rem 0.58rem;
     border: 0;
-    border-radius: 12px;
+    border-radius: 10px;
     color: inherit;
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(0, 0, 0, 0.22);
     text-align: left;
     cursor: pointer;
   }
@@ -2252,7 +2193,7 @@
   }
 
   .widget-highlight {
-    font-size: 1rem;
+    font-size: 0.92rem;
     font-weight: 900;
     color: #f5b908;
   }
@@ -2305,25 +2246,24 @@
     justify-content: space-between;
     gap: 0.75rem;
     align-items: center;
-    padding: 0.1rem 0.1rem 0.25rem;
+    padding: 0.15rem 0.18rem 0.05rem;
   }
 
   .rail-brand {
-    display: flex;
-    align-items: center;
-    gap: 0.1rem;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    color: #eef3f8;
+    display: grid;
+    gap: 0.16rem;
   }
 
   .rail-brand span {
-    color: #eef3f8;
-    opacity: 0.92;
+    color: #98a4b3;
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
   }
 
   .rail-brand strong {
-    color: #f5b908;
+    color: #eef3f8;
+    font-size: 0.98rem;
   }
 
   .rail-close {
@@ -2650,7 +2590,7 @@
     }
 
     .center-bar {
-      width: calc(100vw - 20rem);
+      width: calc(100vw - 22rem);
       min-width: 0;
     }
   }
@@ -2661,9 +2601,9 @@
     }
 
     .radar-right-panel {
-      top: 5.1rem;
+      top: 4.8rem;
       right: 0.75rem;
-      bottom: 5.7rem;
+      bottom: 0.75rem;
       left: 0.75rem;
       width: auto;
       transform: translateY(110%);
@@ -2684,13 +2624,6 @@
       background: rgba(5, 8, 12, 0.56);
     }
 
-    .bottom-dock {
-      left: 0.75rem;
-      right: 0.75rem;
-      width: auto;
-      transform: none;
-    }
-
     .inspector-tabs,
     .chip-list,
     .hero-metrics {
@@ -2703,47 +2636,20 @@
       top: 0.75rem;
       left: 0.75rem;
       right: 0.75rem;
-      gap: 0.65rem;
+      gap: 0.55rem;
       display: grid;
     }
 
     .center-bar {
       grid-template-columns: 1fr;
       width: auto;
-      padding: 0.75rem 0.85rem;
-    }
-
-    .status-strip {
-      padding: 0.42rem 0.5rem;
+      min-width: 0;
+      padding: 0.65rem 0.7rem;
     }
 
     .center-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
-    }
-
-    .inspector-tabs {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .flight-hero-header,
-    .card-header,
-    .cluster-header {
-      display: grid;
-    }
-
-    .preset-save-row,
-    .preset-item {
-      grid-template-columns: 1fr;
-    }
-
-    .bottom-dock {
-      flex-wrap: wrap;
-    }
-
-    .dock-button {
-      min-width: 7.5rem;
-      font-size: 0.82rem;
     }
   }
 </style>

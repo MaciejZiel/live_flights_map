@@ -52,8 +52,11 @@
   };
   let selectedIcao24 = null;
   let followAircraft = false;
-  let mapStyle = "standard";
-  let mapViewport = null;
+  let mapStyle = "aviation";
+  let mapViewport = {
+    center: [52.2297, 21.0122],
+    zoom: 7.7,
+  };
   let preferencesReady = false;
   let searchInput;
   let fullscreenRequestId = 0;
@@ -167,6 +170,34 @@
     }).format(value ?? 0);
   }
 
+  function getStatusLabel(stateValue) {
+    if (stateValue.status === "loading") {
+      return "Syncing";
+    }
+
+    if (stateValue.status === "refreshing") {
+      return "Live sync";
+    }
+
+    if (stateValue.status === "error") {
+      return "Upstream error";
+    }
+
+    if (stateValue.reason === "rate_limit" || stateValue.reason === "cooldown") {
+      return "Rate limited";
+    }
+
+    if (stateValue.source === "cache") {
+      return "Cached";
+    }
+
+    if (stateValue.status === "success") {
+      return "Live";
+    }
+
+    return "Idle";
+  }
+
   function countActiveFilters(currentFilters) {
     return [
       currentFilters.query.trim(),
@@ -196,6 +227,33 @@
       .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
       .slice(0, limit)
       .map(([value]) => value);
+  }
+
+  function buildCountryActivity(flights, limit = 3) {
+    const grouped = new Map();
+
+    for (const flight of flights) {
+      const key = flight.origin_country ?? "Unknown";
+      const current = grouped.get(key) ?? {
+        country: key,
+        count: 0,
+        averageSpeed: 0,
+        ground: 0,
+      };
+
+      current.count += 1;
+      current.averageSpeed += (flight.velocity ?? 0) * 3.6;
+      current.ground += flight.on_ground ? 1 : 0;
+      grouped.set(key, current);
+    }
+
+    return [...grouped.values()]
+      .map((entry) => ({
+        ...entry,
+        averageSpeed: entry.count ? Math.round(entry.averageSpeed / entry.count) : 0,
+      }))
+      .sort((left, right) => right.count - left.count || right.averageSpeed - left.averageSpeed)
+      .slice(0, limit);
   }
 
   function handleBoundsChange(event) {
@@ -800,6 +858,13 @@
     theme = nextTheme;
   }
 
+  function cycleMapStyle() {
+    const mapStyles = ["aviation", "dark", "satellite", "standard"];
+    const currentIndex = mapStyles.indexOf(mapStyle);
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % mapStyles.length;
+    mapStyle = mapStyles[nextIndex];
+  }
+
   function dismissOnboarding() {
     onboardingDismissed = true;
   }
@@ -1273,12 +1338,15 @@
   ].filter(Boolean);
   $: activeAlertEvents = alertEvents.slice(0, 4);
   $: compactLeaderboardFlights = leaderboardFlights.slice(0, 3);
+  $: countryActivity = buildCountryActivity(filteredFlights, 3);
   $: leftBookmarks = savedViews.slice(0, 3);
   $: leftWatchPreview = watchedFlightEntries.slice(0, 3);
+  $: leadFeedFlight = compactLeaderboardFlights[0] ?? null;
+  $: statusLabel = getStatusLabel(state);
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
-    : "52.15, 19.40";
-  $: zoomLabel = Number.isFinite(mapViewport?.zoom) ? mapViewport.zoom.toFixed(1) : "6.0";
+    : "52.23, 21.01";
+  $: zoomLabel = Number.isFinite(mapViewport?.zoom) ? mapViewport.zoom.toFixed(1) : "7.7";
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: canStepReplayBackward =
     replaySourceSnapshots.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
@@ -1397,6 +1465,7 @@
         </div>
 
         <label class="search-field">
+          <span class="search-icon">⌕</span>
           <input
             bind:this={searchInput}
             bind:value={filters.query}
@@ -1406,54 +1475,35 @@
           />
         </label>
 
-        <button class="map-view-chip" type="button" on:click={() => openInspectorTab("traffic")}>
-          View <strong>Map</strong>
-        </button>
-      </div>
+        <div class="center-actions">
+          <div class="status-strip compact">
+            <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
+              {statusLabel}
+            </div>
+            <div class="status-stack">
+              <strong class="status-number">{formatCompactCount(visibleTrackedCount)}</strong>
+              <span class="status-inline-meta">{getConfidenceLabel(state)} · {getFreshnessLabel(state.fetchedAt)}</span>
+            </div>
+          </div>
 
-      <div class="topbar-side">
-        <div class="overlay-card status-strip compact">
-          <div class:online={["success", "refreshing"].includes(state.status)} class="status-pill">
-            {#if state.status === "loading"}
-              Syncing
-            {:else if state.status === "refreshing"}
-              Live sync
-            {:else if state.status === "error"}
-              Upstream error
-            {:else if state.reason === "rate_limit" || state.reason === "cooldown"}
-              Rate limited
-            {:else if state.source === "cache"}
-              Cached
-            {:else if state.status === "success"}
-              Live
-            {:else}
-              Idle
-            {/if}
-          </div>
-          <div class="status-copy">
-            <strong>{formatCompactCount(visibleTrackedCount)}</strong>
-            <span>tracked</span>
-          </div>
-          <div class="status-copy">
-            <strong>{getConfidenceLabel(state)}</strong>
-            <span>{formatTimestamp(state.fetchedAt)}</span>
-          </div>
-        </div>
+          <button class="map-view-chip" type="button" on:click={() => triggerViewPreset("poland")}>
+            View <strong>Map</strong>
+          </button>
 
-        <div class="topbar-actions">
           <button
-            class="overlay-card topbar-action"
+            class="overlay-card topbar-icon"
             type="button"
             title="Copy a link to the current map state and selected aircraft"
             on:click={copyShareLink}
           >
-            Share
+            ↗
+          </button>
+          <button class="overlay-card topbar-icon" type="button" on:click={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            {theme === "dark" ? "☼" : "◐"}
           </button>
 
           {#if isMobileViewport}
-            <button class="overlay-card topbar-action accent" type="button" on:click={toggleMobileSidebar}>
-              {mobileSidebarOpen ? "Hide panel" : "Open panel"}
-            </button>
+            <button class="overlay-card topbar-icon" type="button" on:click={toggleMobileSidebar}>☰</button>
           {/if}
 
           {#if shareFeedback}
@@ -1481,8 +1531,11 @@
       <div class="panel-stack">
         <section class="widget-card">
           <div class="widget-header">
-            <strong>Most tracked flights</strong>
-            <span class="live-pill">LIVE</span>
+            <div class="widget-heading">
+              <strong>Most tracked flights</strong>
+              <span class="live-pill">LIVE</span>
+            </div>
+            <span class="widget-toggle">⌃</span>
           </div>
 
           {#if compactLeaderboardFlights.length}
@@ -1492,6 +1545,12 @@
                   <span class="widget-rank">{index + 1}.</span>
                   <span class="widget-main">
                     <strong>{flight.callsign ?? flight.icao24}</strong>
+                    <span class="widget-codes">
+                      <small>{flight.icao24.toUpperCase()}</small>
+                      {#if deriveOperatorCode(flight)}
+                        <small>{deriveOperatorCode(flight)}</small>
+                      {/if}
+                    </span>
                     <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
                   </span>
                   <span class="widget-highlight">{formatSpeed(flight.velocity).replace(" km/h", "")}</span>
@@ -1505,26 +1564,39 @@
 
         <section class="widget-card">
           <div class="widget-header">
-            <strong>Radar overview</strong>
-            <span class="widget-ghost">{zoomLabel}x</span>
+            <div class="widget-heading">
+              <strong>Traffic hotspots</strong>
+              <span class="live-pill">LIVE</span>
+            </div>
+            <span class="widget-toggle">⌃</span>
           </div>
 
-          <div class="mini-stat-list">
-            <div><span>Tracked</span><strong>{formatCompactCount(visibleTrackedCount)}</strong></div>
-            <div><span>Airborne</span><strong>{airborneCount}</strong></div>
-            <div><span>Ground</span><strong>{groundCount}</strong></div>
-            <div><span>Avg speed</span><strong>{averageSpeedKmh}</strong></div>
-          </div>
+          {#if countryActivity.length}
+            <div class="mini-stat-list">
+              {#each countryActivity as item}
+                <div>
+                  <span>{item.country}</span>
+                  <strong>{item.count}</strong>
+                  <small>{item.averageSpeed} km/h · {item.ground} ground</small>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <p class="widget-empty">Traffic activity appears here after the first snapshot.</p>
+          {/if}
 
-          <button class="widget-footer-button" type="button" on:click={() => openInspectorTab("filters")}>
-            Open filters
+          <button class="widget-footer-button" type="button" on:click={() => openInspectorTab("traffic")}>
+            Open traffic list
           </button>
         </section>
 
-        <section class="widget-card compact">
+        <section class="widget-card compact collapsed">
           <div class="widget-header">
-            <strong>Bookmarks</strong>
-            <span class="widget-ghost">{leftBookmarks.length}</span>
+            <div class="widget-heading">
+              <strong>Bookmarks</strong>
+              <span class="widget-ghost">{leftBookmarks.length || leftWatchPreview.length}</span>
+            </div>
+            <span class="widget-toggle">⌃</span>
           </div>
 
           {#if leftBookmarks.length}
@@ -1555,6 +1627,26 @@
     {/if}
 
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
+      <div class="rail-header">
+        <div class="rail-brand">
+          <span>liveflights</span>
+          <strong>24</strong>
+        </div>
+        <button
+          class="rail-close"
+          type="button"
+          aria-label="Close selected aircraft"
+          on:click={() => {
+            selectedIcao24 = null;
+            if (isMobileViewport) {
+              closeMobileSidebar();
+            }
+          }}
+        >
+          ×
+        </button>
+      </div>
+
       {#if !selectedFlight && inspectorTab === "details" && !isMobileViewport}
         <div class="feed-rail">
           <section class="feed-hero">
@@ -1562,10 +1654,24 @@
               <div class="feed-plane-mark">✈</div>
             </div>
             <div class="feed-hero-copy">
-              <strong>Traffic around {mapCenterLabel}</strong>
-              <p>{visibleTrackedCount} tracked aircraft in the active radar view.</p>
+              <strong>{leadFeedFlight ? leadFeedFlight.callsign ?? leadFeedFlight.icao24 : `Traffic around ${mapCenterLabel}`}</strong>
+              <p>
+                {leadFeedFlight
+                  ? `${leadFeedFlight.origin_country ?? "Unknown country"} · ${formatAltitude(leadFeedFlight.altitude)} · ${formatSpeed(leadFeedFlight.velocity)}`
+                  : `${visibleTrackedCount} tracked aircraft in the active radar view.`}
+              </p>
             </div>
           </section>
+
+          <article class="promo-card">
+            <div>
+              <strong>Open live traffic list</strong>
+              <p>Jump into the densest flights, then narrow the map with fast filters.</p>
+            </div>
+            <button class="promo-action" type="button" on:click={() => openInspectorTab("traffic")}>
+              Open list
+            </button>
+          </article>
 
           <article class="feed-card emphasis">
             <div class="feed-card-icon">◎</div>
@@ -1939,29 +2045,20 @@
     </aside>
 
     <nav class="overlay-card bottom-dock" aria-label="Quick radar actions">
-      <button class:active={inspectorTab === "details"} class="dock-button" type="button" on:click={() => openInspectorTab("details")}>
+      <button class:active={inspectorTab === "help"} class="dock-button" type="button" on:click={() => openInspectorTab("help")}>
         Settings
+      </button>
+      <button class:active={mapStyle === "dark" || mapStyle === "satellite"} class="dock-button" type="button" on:click={cycleMapStyle}>
+        Layers
       </button>
       <button class:active={inspectorTab === "filters"} class="dock-button" type="button" on:click={() => openInspectorTab("filters")}>
         Filters
       </button>
       <button class:active={inspectorTab === "traffic"} class="dock-button" type="button" on:click={() => openInspectorTab("traffic")}>
-        Widgets
-      </button>
-      <button class:active={inspectorTab === "watchlist"} class="dock-button" type="button" on:click={() => openInspectorTab("watchlist")}>
-        Watchlist
+        Traffic
       </button>
       <button class:active={inspectorTab === "replay"} class="dock-button" type="button" on:click={() => openInspectorTab("replay")}>
         Playback
-      </button>
-      <button class:active={inspectorTab === "views"} class="dock-button" type="button" on:click={() => openInspectorTab("views")}>
-        Views
-      </button>
-      <button class:active={inspectorTab === "alerts"} class="dock-button" type="button" on:click={() => openInspectorTab("alerts")}>
-        Alerts
-      </button>
-      <button class:active={inspectorTab === "help"} class="dock-button" type="button" on:click={() => openInspectorTab("help")}>
-        Help
       </button>
     </nav>
   </section>
@@ -2015,21 +2112,12 @@
 
   .center-bar {
     display: grid;
-    grid-template-columns: auto minmax(260px, 1fr) auto;
+    grid-template-columns: auto minmax(250px, 1fr) auto;
     align-items: center;
-    gap: 0.9rem;
-    width: min(840px, calc(100vw - 42rem));
+    gap: 0.8rem;
+    width: min(930px, calc(100vw - 39rem));
     min-width: 520px;
-    padding: 0.7rem 0.9rem;
-  }
-
-  .topbar-side {
-    position: absolute;
-    top: 0;
-    right: 0;
-    display: grid;
-    gap: 0.6rem;
-    justify-items: end;
+    padding: 0.55rem 0.7rem;
   }
 
   .brand-inline {
@@ -2080,6 +2168,16 @@
 
   .search-field {
     position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    min-width: 0;
+    padding: 0 0.15rem;
+  }
+
+  .search-icon {
+    color: rgba(225, 231, 241, 0.58);
+    font-size: 0.95rem;
   }
 
   .search-field input {
@@ -2097,40 +2195,65 @@
     color: rgba(225, 231, 241, 0.58);
   }
 
-  .topbar-actions {
+  .center-actions {
     display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-start;
-    gap: 0.75rem;
+    justify-content: flex-end;
+    gap: 0.55rem;
     align-items: center;
   }
 
   .status-strip {
     display: flex;
-    gap: 0.9rem;
+    gap: 0.6rem;
     align-items: center;
-    padding: 0.72rem 0.95rem;
+    padding: 0.38rem 0.48rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .status-strip.compact {
-    min-width: 20rem;
+    min-width: 0;
   }
 
-  .status-copy {
+  .status-stack {
     display: grid;
     gap: 0.12rem;
   }
 
-  .status-copy strong {
-    font-size: 0.88rem;
-    color: #f6f8fb;
-  }
-
-  .status-copy span,
   .share-feedback,
   .inspector-subtitle {
     font-size: 0.78rem;
     color: #aeb9c7;
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.38rem 0.62rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #e6eaf0;
+    background: rgba(255, 255, 255, 0.07);
+    white-space: nowrap;
+  }
+
+  .status-pill.online {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .status-inline-meta {
+    white-space: nowrap;
+  }
+
+  .status-number {
+    color: #f6f8fb;
+    font-size: 0.88rem;
+    line-height: 1;
   }
 
   .map-view-chip {
@@ -2139,7 +2262,7 @@
     gap: 0.35rem;
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 999px;
-    padding: 0.68rem 0.9rem;
+    padding: 0.58rem 0.8rem;
     font: inherit;
     font-weight: 700;
     color: #f6f8fb;
@@ -2147,7 +2270,7 @@
     cursor: pointer;
   }
 
-  .topbar-action,
+  .topbar-icon,
   .tool-chip,
   .dock-button,
   .mobile-sidebar-close,
@@ -2169,7 +2292,6 @@
       transform 160ms ease;
   }
 
-  .topbar-action.accent,
   .hero-action.primary,
   .reset-button,
   .dock-button.active {
@@ -2178,7 +2300,16 @@
     border-color: transparent;
   }
 
-  .topbar-action,
+  .topbar-icon {
+    display: grid;
+    place-items: center;
+    width: 2.45rem;
+    height: 2.45rem;
+    padding: 0;
+    border-radius: 14px;
+    flex: 0 0 auto;
+  }
+
   .mobile-sidebar-close {
     padding-inline: 1rem;
   }
@@ -2218,25 +2349,27 @@
 
   .radar-left-panel,
   .radar-right-panel {
-    top: 6.1rem;
-    bottom: 5.8rem;
-    width: min(21rem, calc(100vw - 2rem));
-    padding: 1rem;
+    top: 5.9rem;
+    bottom: 5.55rem;
+    width: min(18.25rem, calc(100vw - 2rem));
+    padding: 0.85rem;
     overflow: hidden;
   }
 
   .radar-left-panel {
     left: 1rem;
+    background:
+      linear-gradient(180deg, rgba(36, 39, 45, 0.95) 0%, rgba(24, 27, 31, 0.95) 100%);
   }
 
   .radar-right-panel {
     right: 1rem;
-    width: min(20rem, calc(100vw - 2rem));
+    width: min(18rem, calc(100vw - 2rem));
     display: grid;
-    grid-template-rows: auto auto auto minmax(0, 1fr);
-    gap: 0.9rem;
+    grid-template-rows: auto minmax(0, 1fr);
+    gap: 0.75rem;
     background:
-      linear-gradient(180deg, rgba(20, 21, 24, 0.97) 0%, rgba(11, 12, 15, 0.97) 100%);
+      linear-gradient(180deg, rgba(19, 20, 24, 0.98) 0%, rgba(9, 10, 13, 0.98) 100%);
   }
 
   .panel-stack,
@@ -2277,18 +2410,22 @@
 
   .widget-card {
     display: grid;
-    gap: 0.75rem;
-    padding: 0.95rem;
-    border-radius: 20px;
+    gap: 0.68rem;
+    padding: 0.82rem;
+    border-radius: 18px;
     background:
-      linear-gradient(180deg, rgba(44, 46, 50, 0.96) 0%, rgba(30, 32, 36, 0.96) 100%);
+      linear-gradient(180deg, rgba(55, 58, 64, 0.96) 0%, rgba(38, 41, 46, 0.96) 100%);
     box-shadow:
-      0 18px 34px rgba(0, 0, 0, 0.28),
+      0 14px 28px rgba(0, 0, 0, 0.28),
       inset 3px 0 0 #f5b908;
   }
 
   .widget-card.compact {
-    padding-block: 0.85rem;
+    padding-block: 0.75rem;
+  }
+
+  .widget-card.collapsed {
+    gap: 0.6rem;
   }
 
   .widget-header {
@@ -2298,11 +2435,24 @@
     align-items: center;
   }
 
+  .widget-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    min-width: 0;
+  }
+
   .widget-header strong,
   .widget-main strong,
   .feed-hero-copy strong,
-  .feed-card strong {
+  .feed-card strong,
+  .promo-card strong {
     color: #f6f8fb;
+  }
+
+  .widget-toggle {
+    color: #aab5c3;
+    font-size: 0.82rem;
   }
 
   .live-pill,
@@ -2340,11 +2490,11 @@
     gap: 0.6rem;
     align-items: center;
     width: 100%;
-    padding: 0.8rem 0.7rem;
+    padding: 0.72rem 0.65rem;
     border: 0;
-    border-radius: 14px;
+    border-radius: 12px;
     color: inherit;
-    background: rgba(255, 255, 255, 0.04);
+    background: rgba(0, 0, 0, 0.18);
     text-align: left;
     cursor: pointer;
   }
@@ -2360,10 +2510,28 @@
     gap: 0.15rem;
   }
 
+  .widget-codes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28rem;
+  }
+
+  .widget-codes small {
+    padding: 0.08rem 0.34rem;
+    border-radius: 6px;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #d8e0ea;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .widget-main span,
   .widget-empty,
   .feed-hero-copy p,
-  .feed-card p {
+  .feed-card p,
+  .promo-card p {
     font-size: 0.78rem;
     color: #aeb9c7;
   }
@@ -2384,9 +2552,9 @@
     justify-content: space-between;
     gap: 0.7rem;
     align-items: center;
-    padding: 0.68rem 0.7rem;
-    border-radius: 14px;
-    background: rgba(255, 255, 255, 0.04);
+    padding: 0.62rem 0.7rem;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.18);
   }
 
   .mini-stat-list span {
@@ -2401,8 +2569,8 @@
   .widget-footer-button,
   .bookmark-chip {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 14px;
-    padding: 0.72rem 0.82rem;
+    border-radius: 12px;
+    padding: 0.62rem 0.78rem;
     font: inherit;
     font-weight: 700;
     color: #f6f8fb;
@@ -2417,13 +2585,51 @@
     padding-right: 0.1rem;
   }
 
+  .rail-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.1rem 0.1rem 0.25rem;
+  }
+
+  .rail-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.1rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: #eef3f8;
+  }
+
+  .rail-brand span {
+    color: #eef3f8;
+    opacity: 0.92;
+  }
+
+  .rail-brand strong {
+    color: #f5b908;
+  }
+
+  .rail-close {
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 1.5rem;
+    line-height: 1;
+    color: #c8d0db;
+    background: transparent;
+    cursor: pointer;
+  }
+
   .feed-hero,
-  .feed-card {
+  .feed-card,
+  .promo-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.8rem;
-    padding: 0.95rem;
-    border-radius: 18px;
+    padding: 0.88rem;
+    border-radius: 16px;
     background: rgba(255, 255, 255, 0.035);
   }
 
@@ -2434,10 +2640,29 @@
       linear-gradient(180deg, rgba(61, 70, 79, 0.96) 0%, rgba(33, 37, 42, 0.96) 100%);
   }
 
+  .promo-card {
+    grid-template-columns: 1fr;
+    gap: 0.7rem;
+    border: 1px solid rgba(96, 206, 124, 0.18);
+    background:
+      linear-gradient(180deg, rgba(33, 51, 36, 0.98) 0%, rgba(25, 37, 27, 0.98) 100%);
+  }
+
+  .promo-action {
+    border: 0;
+    border-radius: 999px;
+    padding: 0.72rem 0.8rem;
+    font: inherit;
+    font-weight: 800;
+    color: #f4fff6;
+    background: linear-gradient(180deg, #63d77e 0%, #48ba64 100%);
+    cursor: pointer;
+  }
+
   .feed-hero-media {
     display: grid;
     place-items: center;
-    min-height: 8.5rem;
+    min-height: 7.8rem;
     border-radius: 16px;
     background:
       linear-gradient(135deg, rgba(167, 179, 191, 0.18), rgba(54, 61, 68, 0.1)),
@@ -2457,10 +2682,10 @@
   .feed-card-icon {
     display: grid;
     place-items: center;
-    width: 2.2rem;
-    height: 2.2rem;
+    width: 2rem;
+    height: 2rem;
     border-radius: 999px;
-    font-size: 1rem;
+    font-size: 0.92rem;
     font-weight: 800;
     color: #d9dde4;
     background: rgba(255, 255, 255, 0.08);
@@ -2675,16 +2900,18 @@
     bottom: 1rem;
     transform: translateX(-50%);
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    width: min(34rem, calc(100vw - 2rem));
-    padding: 0.5rem;
+    flex-wrap: nowrap;
+    gap: 0.35rem;
+    width: min(28.5rem, calc(100vw - 2rem));
+    padding: 0.35rem;
     justify-content: center;
   }
 
   .dock-button {
-    flex: 1 1 6rem;
-    border-radius: 16px;
+    flex: 1 1 0;
+    border-radius: 14px;
+    padding: 0.58rem 0.45rem;
+    font-size: 0.88rem;
   }
 
   .sidebar-backdrop {
@@ -2708,7 +2935,7 @@
     }
 
     .center-bar {
-      width: calc(100vw - 23rem);
+      width: calc(100vw - 20rem);
       min-width: 0;
     }
   }
@@ -2718,14 +2945,8 @@
       display: none;
     }
 
-    .topbar-side {
-      position: static;
-      justify-items: stretch;
-      width: 100%;
-    }
-
     .radar-right-panel {
-      top: 5.3rem;
+      top: 5.1rem;
       right: 0.75rem;
       bottom: 5.7rem;
       left: 0.75rem;
@@ -2771,19 +2992,19 @@
       display: grid;
     }
 
-    .center-bar,
-    .status-strip {
-      padding: 0.75rem 0.85rem;
-    }
-
     .center-bar {
       grid-template-columns: 1fr;
       width: auto;
+      padding: 0.75rem 0.85rem;
     }
 
     .status-strip {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
+      padding: 0.42rem 0.5rem;
+    }
+
+    .center-actions {
+      justify-content: flex-start;
+      flex-wrap: wrap;
     }
 
     .inspector-tabs {
@@ -2792,7 +3013,6 @@
 
     .flight-hero-header,
     .card-header,
-    .topbar-actions,
     .cluster-header {
       display: grid;
     }
@@ -2800,6 +3020,15 @@
     .preset-save-row,
     .preset-item {
       grid-template-columns: 1fr;
+    }
+
+    .bottom-dock {
+      flex-wrap: wrap;
+    }
+
+    .dock-button {
+      min-width: 7.5rem;
+      font-size: 0.82rem;
     }
   }
 </style>

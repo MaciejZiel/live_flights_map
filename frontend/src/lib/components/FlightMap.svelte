@@ -9,7 +9,7 @@
   export let flights = [];
   export let selectedIcao24 = null;
   export let followAircraft = false;
-  export let mapStyle = "standard";
+  export let mapStyle = "aviation";
   export let trailPoints = [];
   export let watchedIcao24s = [];
   export let watchModeEnabled = false;
@@ -323,8 +323,8 @@
   }
 
   onMount(() => {
-    const initialCenter = initialViewport?.center ?? [52.15, 19.4];
-    const initialZoom = initialViewport?.zoom ?? 6;
+    const initialCenter = initialViewport?.center ?? [52.2297, 21.0122];
+    const initialZoom = initialViewport?.zoom ?? 7.7;
 
     map = L.map(container, {
       zoomControl: false,
@@ -412,48 +412,6 @@
 </script>
 
 <div bind:this={shell} class:fullscreen={isFullscreen} class="map-shell">
-  <div class="map-toolbar">
-    <div class="preset-group">
-      <button
-        class="map-action preset-button"
-        type="button"
-        title="Jump to the Poland tracking view"
-        on:click={() => applyViewPreset("poland")}
-      >
-        PL
-      </button>
-      <button
-        class="map-action preset-button"
-        type="button"
-        title="Jump to the Europe tracking view"
-        on:click={() => applyViewPreset("europe")}
-      >
-        EU
-      </button>
-      <button
-        class="map-action preset-button"
-        type="button"
-        title="Jump to the global tracking view"
-        on:click={() => applyViewPreset("world")}
-      >
-        WLD
-      </button>
-    </div>
-
-    <button
-      class="map-action fullscreen-toggle"
-      type="button"
-      title="Toggle fullscreen radar view"
-      on:click={toggleFullscreen}
-    >
-      {#if isFullscreen}
-        Exit
-      {:else}
-        Full
-      {/if}
-    </button>
-</div>
-
   <div bind:this={container} class="map-root"></div>
   <div class="map-tint" aria-hidden="true"></div>
   <div class="map-vignette" aria-hidden="true"></div>
@@ -485,8 +443,8 @@
 
   .map-tint {
     background:
-      linear-gradient(180deg, rgba(33, 63, 44, 0.08) 0%, rgba(20, 34, 18, 0.16) 100%),
-      radial-gradient(circle at center, rgba(168, 197, 159, 0.06), transparent 55%);
+      linear-gradient(180deg, rgba(27, 44, 32, 0.18) 0%, rgba(16, 23, 14, 0.28) 100%),
+      radial-gradient(circle at center, rgba(135, 167, 118, 0.11), transparent 55%);
     mix-blend-mode: multiply;
   }
 
@@ -494,67 +452,6 @@
     background:
       linear-gradient(180deg, rgba(7, 8, 10, 0.12) 0%, transparent 18%, transparent 82%, rgba(7, 8, 10, 0.18) 100%),
       linear-gradient(90deg, rgba(7, 8, 10, 0.08) 0%, transparent 12%, transparent 88%, rgba(7, 8, 10, 0.1) 100%);
-  }
-
-  .map-action {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 16px;
-    padding: 0.72rem 0.82rem;
-    font: inherit;
-    font-weight: 700;
-    color: #f5f8fc;
-    background: var(--map-ui-bg);
-    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.24);
-    cursor: pointer;
-    backdrop-filter: blur(12px);
-  }
-
-  .map-action:hover {
-    background: var(--map-ui-bg-hover);
-  }
-
-  .map-toolbar {
-    position: absolute;
-    right: 1rem;
-    bottom: 6.4rem;
-    z-index: 700;
-    display: grid;
-    gap: 0.7rem;
-  }
-
-  .preset-group {
-    display: grid;
-    gap: 0.55rem;
-  }
-
-  .preset-button {
-    min-width: 4rem;
-  }
-
-  .fullscreen-toggle {
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-    border-color: transparent;
-  }
-
-  @media (max-width: 720px) {
-    .map-root {
-      min-height: 100vh;
-    }
-
-    .map-toolbar {
-      right: 0.75rem;
-      bottom: 5.4rem;
-    }
-
-    .preset-group {
-      max-width: none;
-    }
-
-    .map-action {
-      padding: 0.65rem 0.75rem;
-      font-size: 0.86rem;
-    }
   }
 
   :global(.leaflet-container) {
@@ -576,17 +473,17 @@
   }
 
   :global(.leaflet-top.leaflet-right) {
-    top: 6.8rem;
-    right: 1rem;
+    top: 5.95rem;
+    right: 19rem;
   }
 
   :global(.leaflet-control-zoom a) {
-    width: 44px;
-    height: 44px;
-    line-height: 44px;
+    width: 46px;
+    height: 46px;
+    line-height: 46px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: #f5f8fc;
-    background: rgba(31, 34, 39, 0.94);
+    background: rgba(28, 31, 36, 0.96);
     backdrop-filter: blur(12px);
   }
 
@@ -624,8 +521,8 @@
   }
 
   :global(.aircraft-icon) {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     filter: drop-shadow(0 10px 12px rgba(0, 0, 0, 0.28));
     transform-origin: center;
   }

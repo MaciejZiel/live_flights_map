@@ -59,11 +59,11 @@ export function createAircraftIcon(track = 0, selected = false, watched = false,
 
   return L.divIcon({
     className: "aircraft-icon-shell",
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
     html: `
       <div class="aircraft-icon" style="transform: rotate(${track}deg); opacity: ${opacity};">
-        <svg viewBox="0 0 48 48" width="32" height="32" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="28" height="28" aria-hidden="true">
           <path
             d="M22 3h4l3 12 11 7v4l-11-2.5 1.8 8.2 4.7 4v3.3L26 36.7V45h-4v-8.3l-9.5 2.3v-3.3l4.7-4 1.8-8.2L8 26v-4l11-7 3-12Z"
             fill="${fillColor}"

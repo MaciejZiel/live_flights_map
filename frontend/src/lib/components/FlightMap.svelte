@@ -8,6 +8,7 @@
 
   export let flights = [];
   export let selectedIcao24 = null;
+  export let followAircraft = false;
 
   const dispatch = createEventDispatcher();
   let container;
@@ -28,6 +29,22 @@
         lomin: bounds.getWest(),
         lomax: bounds.getEast(),
       },
+    });
+  }
+
+  function centerOnSelectedAircraft() {
+    if (!map || !followAircraft || !selectedIcao24) {
+      return;
+    }
+
+    const selectedFlight = flights.find((flight) => flight.icao24 === selectedIcao24);
+    if (!selectedFlight) {
+      return;
+    }
+
+    map.panTo([selectedFlight.latitude, selectedFlight.longitude], {
+      animate: true,
+      duration: 1,
     });
   }
 
@@ -73,6 +90,8 @@
       dispatch("select", { flight });
     });
   }
+
+  $: centerOnSelectedAircraft();
 </script>
 
 <div bind:this={container} class="map-root"></div>

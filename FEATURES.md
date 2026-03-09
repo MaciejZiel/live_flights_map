@@ -2,7 +2,6 @@
 
 ## Map and Movement
 
-- `Follow aircraft` mode for a selected flight.
 - Multiple basemap styles: standard, satellite, dark, aviation.
 - Additional layers: country borders, FIRs, airports, ATS routes.
 - Traffic heatmap for the selected region.

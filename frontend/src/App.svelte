@@ -24,6 +24,7 @@
     hideGroundTraffic: true,
   };
   let selectedIcao24 = null;
+  let followAircraft = false;
 
   onMount(() => {
     flightsStore.start();
@@ -52,6 +53,15 @@
 
   function handleFlightSelect(event) {
     selectedIcao24 = event.detail.flight.icao24;
+  }
+
+  function toggleFollowAircraft() {
+    if (!selectedFlight) {
+      followAircraft = false;
+      return;
+    }
+
+    followAircraft = !followAircraft;
   }
 
   function resetFilters() {
@@ -86,6 +96,9 @@
   $: selectedFlight = selectedIcao24
     ? filteredFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
     : null;
+  $: if (!selectedFlight) {
+    followAircraft = false;
+  }
 </script>
 
 <svelte:head>
@@ -167,13 +180,18 @@
         <button class="reset-button" type="button" on:click={resetFilters}>Reset filters</button>
       </section>
 
-      <FlightDetailsPanel flight={selectedFlight} />
+      <FlightDetailsPanel
+        flight={selectedFlight}
+        followAircraft={followAircraft}
+        onToggleFollow={toggleFollowAircraft}
+      />
     </aside>
 
     <section class="map-card">
       <FlightMap
         flights={filteredFlights}
         selectedIcao24={selectedIcao24}
+        followAircraft={followAircraft}
         on:boundschange={handleBoundsChange}
         on:select={handleFlightSelect}
       />

@@ -9,6 +9,8 @@
   } from "../utils/flightFormatters.js";
 
   export let flight = null;
+  export let followAircraft = false;
+  export let onToggleFollow = () => {};
 </script>
 
 <section class="panel details-panel">
@@ -19,6 +21,14 @@
       <strong>{flight.callsign ?? "Unknown callsign"}</strong>
       <span>{formatFlightStatus(flight)}</span>
     </div>
+
+    <button class:active={followAircraft} class="follow-button" type="button" on:click={onToggleFollow}>
+      {#if followAircraft}
+        Stop following
+      {:else}
+        Follow aircraft
+      {/if}
+    </button>
 
     <dl>
       <div>
@@ -78,6 +88,21 @@
     background: rgba(18, 57, 93, 0.08);
     font-size: 0.82rem;
     font-weight: 700;
+  }
+
+  .follow-button {
+    border: 0;
+    border-radius: 12px;
+    padding: 0.8rem 0.95rem;
+    font: inherit;
+    font-weight: 700;
+    color: #f4f9ff;
+    background: linear-gradient(135deg, #12395d 0%, #375f86 100%);
+    cursor: pointer;
+  }
+
+  .follow-button.active {
+    background: linear-gradient(135deg, #b25e10 0%, #de8b32 100%);
   }
 
   dl {

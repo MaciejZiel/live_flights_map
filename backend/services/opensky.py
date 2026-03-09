@@ -5,12 +5,14 @@ from datetime import datetime, timezone
 
 import requests
 
+from .provider_base import FlightProviderError, FlightProviderRateLimitError
 
-class OpenSkyError(Exception):
+
+class OpenSkyError(FlightProviderError):
     pass
 
 
-class OpenSkyRateLimitError(OpenSkyError):
+class OpenSkyRateLimitError(FlightProviderRateLimitError, OpenSkyError):
     pass
 
 
@@ -30,6 +32,8 @@ class FlightState:
 
 
 class OpenSkyClient:
+    name = "opensky"
+
     def __init__(
         self,
         base_url: str,

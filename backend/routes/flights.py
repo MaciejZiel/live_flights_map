@@ -3,7 +3,7 @@ from time import sleep
 
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
-from backend.services.opensky import OpenSkyError
+from backend.services.provider_base import FlightProviderError
 
 api = Blueprint("api", __name__)
 
@@ -64,7 +64,7 @@ def list_flights():
 
     try:
         flights_payload = service.get_flights(bbox=bbox)
-    except OpenSkyError as exc:
+    except FlightProviderError as exc:
         return jsonify({"error": str(exc)}), 502
 
     return jsonify(flights_payload)
@@ -88,7 +88,7 @@ def stream_flights():
             try:
                 flights_payload = service.get_flights(bbox=bbox)
                 yield _build_sse_event("snapshot", flights_payload)
-            except OpenSkyError as exc:
+            except FlightProviderError as exc:
                 yield _build_sse_event("upstream_error", {"error": str(exc)})
 
             sleep(interval_seconds)

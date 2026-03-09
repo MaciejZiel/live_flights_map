@@ -2,7 +2,7 @@
 
 Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 
-- `backend/`: Flask proxy do OpenSky Network
+- `backend/`: Flask proxy do OpenSky Network z fallbackiem do ADSB.lol
 - `frontend/`: Svelte + Leaflet do wizualizacji samolotów na mapie
 
 ## Architektura
@@ -11,8 +11,8 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 
 - `GET /api/flights`
 - `GET /api/flights/stream` (SSE transport)
-- pobiera świeży snapshot z OpenSky przy każdym wywołaniu
-- ma krótki cache per `bbox`, retry na timeout i fallback do ostatniego snapshotu przy błędach upstreamu
+- pobiera świeży snapshot z łańcucha providerów `opensky -> adsb_lol`
+- ma cache per `bbox`, cooldown przy rate-limitach i fallback do ostatniego snapshotu przy błędach upstreamu
 - dla frontendu wspiera SSE z fallbackiem do zwykłego pollingu
 - filtruje odpowiedź do pól:
   - `icao24`
@@ -25,8 +25,8 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 
 ### Frontend
 
-- odpytuje backend co 12 sekund
-- preferuje transport SSE i przełącza się na polling przy zerwaniu streamu
+- odpytuje backend co 30 sekund
+- domyślnie używa zwykłego pollingu; SSE można włączyć jawnie zmienną środowiskową
 - wysyła aktualny bounding box mapy po przesunięciu lub zoomie
 - renderuje samoloty jako markery Leaflet
 - animuje pozycje markerów pomiędzy kolejnymi snapshotami
@@ -103,19 +103,26 @@ Frontend będzie dostępny pod:
 http://127.0.0.1:5173
 ```
 
-## Konfiguracja OpenSky
+## Konfiguracja providerów lotów
 
 Wpisz dane do istniejącego `.env`:
 
 ```env
+FLIGHT_DATA_PROVIDERS=opensky,adsb_lol
 OPENSKY_USERNAME=
 OPENSKY_PASSWORD=
 OPENSKY_RETRY_COUNT=1
-OPENSKY_CACHE_TTL=8
-OPENSKY_COOLDOWN_SECONDS=25
-FLIGHT_STREAM_INTERVAL_SECONDS=12
+ADSB_LOL_BASE_URL=https://api.adsb.lol
+ADSB_LOL_TIMEOUT=10
+ADSB_LOL_RETRY_COUNT=1
+ADSB_LOL_RADIUS_LIMIT_NM=250
+OPENSKY_CACHE_TTL=25
+OPENSKY_COOLDOWN_SECONDS=75
+FLIGHT_STREAM_INTERVAL_SECONDS=30
 ```
 
-Obecna integracja zakłada standardowe dane logowania OpenSky (`username` + `password`), nie osobny token API.
+`FLIGHT_DATA_PROVIDERS` określa kolejność upstreamów. Domyślnie backend próbuje najpierw OpenSky, a przy błędzie lub rate-limicie przechodzi do ADSB.lol.
 
-Jeżeli pola zostaną puste, backend spróbuje połączenia anonimowego, ale limity będą ostrzejsze.
+Obecna integracja OpenSky zakłada standardowe dane logowania (`username` + `password`), nie osobny token API.
+
+Jeżeli pola OpenSky zostaną puste, backend spróbuje połączenia anonimowego, ale limity będą ostrzejsze. ADSB.lol działa jako publiczny fallback i dla większych widoków typu Europa/World może zwracać tylko część ruchu, bo endpoint punktowy ma limit promienia `250nm`.

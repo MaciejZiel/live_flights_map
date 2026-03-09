@@ -7,7 +7,7 @@ from pathlib import Path
 from threading import Lock
 from time import monotonic
 
-from .opensky import OpenSkyClient, OpenSkyError, OpenSkyRateLimitError
+from .provider_base import FlightProvider, FlightProviderError, FlightProviderRateLimitError
 
 
 @dataclass(slots=True)
@@ -19,16 +19,16 @@ class SnapshotCacheEntry:
 class FlightSnapshotService:
     def __init__(
         self,
-        client: OpenSkyClient,
+        providers: list[FlightProvider],
         cache_ttl: float,
         cooldown_seconds: float,
         cache_path: str | None = None,
     ) -> None:
-        self.client = client
+        self.providers = providers
         self.cache_ttl = cache_ttl
         self.cooldown_seconds = cooldown_seconds
         self._cache: dict[tuple[float, float, float, float], SnapshotCacheEntry] = {}
-        self._cooldown_until: dict[tuple[float, float, float, float], float] = {}
+        self._cooldown_until: dict[tuple[str, tuple[float, float, float, float]], float] = {}
         self._lock = Lock()
         self._cache_path = Path(cache_path).expanduser() if cache_path else None
         self._load_cache_from_disk()
@@ -39,7 +39,6 @@ class FlightSnapshotService:
 
         with self._lock:
             cache_entry = self._cache.get(cache_key)
-            cooldown_until = self._cooldown_until.get(cache_key, 0)
 
             if cache_entry and cache_entry.expires_at > now:
                 return self._with_meta(
@@ -49,48 +48,64 @@ class FlightSnapshotService:
                     reason="cache_hit",
                 )
 
-        if cooldown_until > now:
-            if cache_entry:
-                retry_after = max(1, int(cooldown_until - now))
-                return self._build_stale_response(
-                    cache_entry.payload,
-                    reason="cooldown",
-                    warning=f"Using cached snapshot while OpenSky cools down ({retry_after}s left).",
-                )
-            raise OpenSkyError("OpenSky cooldown is active. Try again in a few seconds.")
-
-        try:
-            payload = self.client.fetch_flights(bbox=bbox)
-        except OpenSkyRateLimitError as exc:
-            with self._lock:
-                self._cooldown_until[cache_key] = monotonic() + self.cooldown_seconds
-
+        payload, fallback_reason, fallback_warning, last_error = self._fetch_from_providers(bbox, cache_key, now)
+        if payload is None:
             if cache_entry:
                 return self._build_stale_response(
                     cache_entry.payload,
-                    reason="rate_limit",
-                    warning="OpenSky rate limit exceeded. Showing the last cached snapshot.",
+                    reason=fallback_reason or "upstream_error",
+                    warning=fallback_warning or "Upstream providers failed. Showing the last cached snapshot.",
                 )
-
-            raise exc
-        except OpenSkyError as exc:
-            if cache_entry:
-                return self._build_stale_response(
-                    cache_entry.payload,
-                    reason="upstream_error",
-                    warning=f"{exc} Showing the last cached snapshot.",
-                )
-            raise
+            raise last_error or FlightProviderError("No upstream providers are currently available.")
 
         with self._lock:
             self._cache[cache_key] = SnapshotCacheEntry(
                 payload=payload,
                 expires_at=monotonic() + self.cache_ttl,
             )
-            self._cooldown_until.pop(cache_key, None)
             self._persist_cache_to_disk()
 
         return self._with_meta(payload, source="live", stale=False, reason="live")
+
+    def _fetch_from_providers(
+        self,
+        bbox: dict[str, float],
+        cache_key: tuple[float, float, float, float],
+        now: float,
+    ) -> tuple[dict[str, object] | None, str | None, str | None, FlightProviderError | None]:
+        saw_cooldown = False
+        saw_rate_limit = False
+        last_error: FlightProviderError | None = None
+
+        for provider in self.providers:
+            provider_cooldown_key = (provider.name, cache_key)
+            cooldown_until = self._cooldown_until.get(provider_cooldown_key, 0)
+            if cooldown_until > now:
+                saw_cooldown = True
+                continue
+
+            try:
+                payload = provider.fetch_flights(bbox=bbox)
+            except FlightProviderRateLimitError as exc:
+                with self._lock:
+                    self._cooldown_until[provider_cooldown_key] = monotonic() + self.cooldown_seconds
+                saw_rate_limit = True
+                last_error = exc
+                continue
+            except FlightProviderError as exc:
+                last_error = exc
+                continue
+
+            with self._lock:
+                self._cooldown_until.pop(provider_cooldown_key, None)
+            return payload, None, None, None
+
+        if saw_rate_limit:
+            return None, "rate_limit", "Upstream provider rate limit exceeded. Showing the last cached snapshot.", last_error
+        if saw_cooldown:
+            return None, "cooldown", "Using cached snapshot while upstream providers cool down.", last_error
+
+        return None, "upstream_error", None if last_error is None else str(last_error), last_error
 
     @staticmethod
     def _build_stale_response(

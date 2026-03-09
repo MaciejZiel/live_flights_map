@@ -17,10 +17,19 @@ class Config:
         "OPENSKY_BASE_URL",
         "https://opensky-network.org/api/states/all",
     )
+    FLIGHT_DATA_PROVIDERS = tuple(
+        provider.strip()
+        for provider in os.getenv("FLIGHT_DATA_PROVIDERS", "opensky,adsb_lol").split(",")
+        if provider.strip()
+    )
     OPENSKY_USERNAME = os.getenv("OPENSKY_USERNAME")
     OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD")
     OPENSKY_TIMEOUT = float(os.getenv("OPENSKY_TIMEOUT", "10"))
     OPENSKY_RETRY_COUNT = int(os.getenv("OPENSKY_RETRY_COUNT", "1"))
+    ADSB_LOL_BASE_URL = os.getenv("ADSB_LOL_BASE_URL", "https://api.adsb.lol")
+    ADSB_LOL_TIMEOUT = float(os.getenv("ADSB_LOL_TIMEOUT", "10"))
+    ADSB_LOL_RETRY_COUNT = int(os.getenv("ADSB_LOL_RETRY_COUNT", "1"))
+    ADSB_LOL_RADIUS_LIMIT_NM = int(os.getenv("ADSB_LOL_RADIUS_LIMIT_NM", "250"))
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(

@@ -3,6 +3,7 @@
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
+  import SavedViewsPanel from "./lib/components/SavedViewsPanel.svelte";
   import AlertPanel from "./lib/components/AlertPanel.svelte";
   import LegendPanel from "./lib/components/LegendPanel.svelte";
   import MonitoringSessionsPanel from "./lib/components/MonitoringSessionsPanel.svelte";
@@ -84,6 +85,9 @@
   let lastAlertCheckKey = null;
   let monitoringSessions = [];
   let activeMonitoringSessionId = null;
+  let savedViews = [];
+  let savedViewName = "";
+  let activeSavedViewId = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -104,6 +108,7 @@
       alertRules = savedPreferences.alertRules ?? alertRules;
       alertEvents = savedPreferences.alertEvents ?? alertEvents;
       monitoringSessions = savedPreferences.monitoringSessions ?? monitoringSessions;
+      savedViews = savedPreferences.savedViews ?? savedViews;
     }
 
     applySharedStateFromUrl();
@@ -424,6 +429,61 @@
 
   function clearAlertEvents() {
     alertEvents = [];
+  }
+
+  function saveCurrentView() {
+    const normalizedName = savedViewName.trim();
+    if (!normalizedName) {
+      return;
+    }
+
+    const nextView = {
+      id: crypto.randomUUID(),
+      name: normalizedName,
+      watchlistCount: watchlist.length,
+      mapStyle,
+      state: {
+        filters: { ...filters },
+        sortBy,
+        theme,
+        mapStyle,
+        mapViewport,
+        watchlist: [...watchlist],
+        watchModeEnabled,
+        selectedIcao24,
+      },
+    };
+
+    savedViews = [nextView, ...savedViews.filter((view) => view.name !== normalizedName)].slice(0, 10);
+    activeSavedViewId = nextView.id;
+    savedViewName = "";
+  }
+
+  function loadSavedView(viewId) {
+    const view = savedViews.find((entry) => entry.id === viewId);
+    if (!view) {
+      return;
+    }
+
+    filters = {
+      ...filters,
+      ...view.state.filters,
+    };
+    sortBy = view.state.sortBy ?? sortBy;
+    theme = view.state.theme ?? theme;
+    mapStyle = view.state.mapStyle ?? mapStyle;
+    mapViewport = view.state.mapViewport ?? mapViewport;
+    watchlist = view.state.watchlist ?? watchlist;
+    watchModeEnabled = view.state.watchModeEnabled ?? watchModeEnabled;
+    selectedIcao24 = view.state.selectedIcao24 ?? null;
+    activeSavedViewId = view.id;
+  }
+
+  function deleteSavedView(viewId) {
+    savedViews = savedViews.filter((view) => view.id !== viewId);
+    if (activeSavedViewId === viewId) {
+      activeSavedViewId = null;
+    }
   }
 
   function evaluateAlertRules() {
@@ -1080,6 +1140,7 @@
       alertRules,
       alertEvents,
       monitoringSessions,
+      savedViews,
     });
   }
 </script>
@@ -1272,6 +1333,16 @@
         onSaveSession={saveCurrentMonitoringSession}
         onLoadSession={loadMonitoringSession}
         onDeleteSession={deleteMonitoringSession}
+      />
+
+      <SavedViewsPanel
+        views={savedViews}
+        activeViewId={activeSavedViewId}
+        currentName={savedViewName}
+        onNameChange={(value) => (savedViewName = value)}
+        onSaveView={saveCurrentView}
+        onLoadView={loadSavedView}
+        onDeleteView={deleteSavedView}
       />
 
       <section class="panel">

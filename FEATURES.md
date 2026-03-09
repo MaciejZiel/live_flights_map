@@ -58,7 +58,6 @@
 
 ## Pro and Collaboration Features
 
-- Custom dashboards and saved views.
 - Public or private user API.
 - Embeddable map widget.
 - PDF and CSV reports.

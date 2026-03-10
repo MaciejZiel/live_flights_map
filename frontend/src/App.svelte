@@ -5,7 +5,12 @@
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
   import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
-  import { fetchFlightDetails } from "./lib/api/flights.js";
+  import {
+    fetchFlightDetails,
+    fetchFlightTrail,
+    fetchReplayHistory,
+    searchFlights,
+  } from "./lib/api/flights.js";
   import { flightsStore } from "./lib/stores/flights.js";
   import { formatAltitude, formatHeading, formatSpeed } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
@@ -89,11 +94,28 @@
   let savedViewName = "";
   let activeSavedViewId = null;
   let flightDetailsCache = new Map();
+  let flightTrailCache = new Map();
   let selectedFlightDetails = null;
   let selectedFlightDetailsStatus = "idle";
   let selectedFlightDetailsError = null;
   let selectedFlightDetailsRequestId = 0;
   let lastSelectedFlightDetailsKey = null;
+  let selectedFlightTrailRemote = [];
+  let selectedFlightTrailStatus = "idle";
+  let selectedFlightTrailError = null;
+  let selectedFlightTrailRequestId = 0;
+  let lastSelectedFlightTrailKey = null;
+  let archivedReplayStatus = "idle";
+  let archivedReplayError = null;
+  let archivedReplayRequestId = 0;
+  let lastArchivedReplayBboxKey = null;
+  let replayHydrationTimer = null;
+  let remoteSearchResults = [];
+  let remoteSearchStatus = "idle";
+  let remoteSearchError = null;
+  let remoteSearchRequestId = 0;
+  let searchDebounceTimer = null;
+  let pendingSearchSelection = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -146,6 +168,12 @@
       }
       if (alertToastTimer) {
         window.clearTimeout(alertToastTimer);
+      }
+      if (replayHydrationTimer) {
+        window.clearTimeout(replayHydrationTimer);
+      }
+      if (searchDebounceTimer) {
+        window.clearTimeout(searchDebounceTimer);
       }
       unsubscribe();
       flightsStore.stop();
@@ -747,6 +775,9 @@
 
     const force = options.force ?? false;
     const cachedDetails = flightDetailsCache.get(key);
+    if (pendingSearchSelection === flight?.icao24) {
+      pendingSearchSelection = null;
+    }
     if (cachedDetails && !force) {
       selectedFlightDetails = mergeFlightDetails(flight, cachedDetails);
       selectedFlightDetailsStatus = "success";
@@ -797,6 +828,159 @@
     }
 
     loadSelectedFlightDetails(selectedFlight, { force: true });
+  }
+
+  async function loadSelectedFlightTrail(flight, options = {}) {
+    const key = flight?.icao24 ?? null;
+    if (!key) {
+      selectedFlightTrailRemote = [];
+      selectedFlightTrailStatus = "idle";
+      selectedFlightTrailError = null;
+      return;
+    }
+
+    const force = options.force ?? false;
+    const cachedTrail = flightTrailCache.get(key);
+    if (cachedTrail && !force) {
+      selectedFlightTrailRemote = cachedTrail;
+      selectedFlightTrailStatus = "success";
+      selectedFlightTrailError = null;
+      return;
+    }
+
+    const requestId = ++selectedFlightTrailRequestId;
+    selectedFlightTrailStatus = cachedTrail?.length ? "refreshing" : "loading";
+    selectedFlightTrailError = null;
+    if (cachedTrail) {
+      selectedFlightTrailRemote = cachedTrail;
+    }
+
+    try {
+      const trailPayload = await fetchFlightTrail(key, {
+        hours: 6,
+        limit: 360,
+      });
+      if (requestId !== selectedFlightTrailRequestId || selectedFlight?.icao24 !== key) {
+        return;
+      }
+
+      const normalizedPoints = (trailPayload.points ?? [])
+        .map((point) => normalizeTrailPoint(point))
+        .filter(Boolean);
+      const nextCache = new Map(flightTrailCache);
+      nextCache.set(key, normalizedPoints);
+      flightTrailCache = nextCache;
+      selectedFlightTrailRemote = normalizedPoints;
+      selectedFlightTrailStatus = "success";
+      selectedFlightTrailError = null;
+    } catch (error) {
+      if (requestId !== selectedFlightTrailRequestId || selectedFlight?.icao24 !== key) {
+        return;
+      }
+
+      selectedFlightTrailStatus = cachedTrail?.length ? "success" : "error";
+      selectedFlightTrailError =
+        error instanceof Error ? error.message : "Failed to load the archived trail.";
+    }
+  }
+
+  async function hydrateReplayHistory(bbox) {
+    const bboxKey = buildBboxKey(bbox);
+    if (!bboxKey) {
+      archivedReplayStatus = "idle";
+      archivedReplayError = null;
+      return;
+    }
+
+    const requestId = ++archivedReplayRequestId;
+    archivedReplayStatus = snapshotHistory.length ? "refreshing" : "loading";
+    archivedReplayError = null;
+
+    try {
+      const replayPayload = await fetchReplayHistory(bbox, {
+        minutes: 90,
+        limit: 120,
+      });
+      if (requestId !== archivedReplayRequestId || buildBboxKey(state.bbox) !== bboxKey) {
+        return;
+      }
+
+      snapshotHistory = mergeReplaySnapshots(snapshotHistory, replayPayload.snapshots ?? []);
+      archivedReplayStatus = "success";
+      archivedReplayError = null;
+    } catch (error) {
+      if (requestId !== archivedReplayRequestId || buildBboxKey(state.bbox) !== bboxKey) {
+        return;
+      }
+
+      archivedReplayStatus = snapshotHistory.length ? "success" : "error";
+      archivedReplayError =
+        snapshotHistory.length || !(error instanceof Error)
+          ? null
+          : error.message;
+    }
+  }
+
+  async function loadRemoteSearchResults(query) {
+    const normalizedQuery = query.trim();
+    if (normalizedQuery.length < 2) {
+      remoteSearchResults = [];
+      remoteSearchStatus = "idle";
+      remoteSearchError = null;
+      return;
+    }
+
+    const requestId = ++remoteSearchRequestId;
+    remoteSearchStatus = "loading";
+    remoteSearchError = null;
+
+    try {
+      const searchPayload = await searchFlights(normalizedQuery, { limit: 8 });
+      if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedQuery) {
+        return;
+      }
+
+      remoteSearchResults = searchPayload.results ?? [];
+      remoteSearchStatus = "success";
+      remoteSearchError = null;
+    } catch (error) {
+      if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedQuery) {
+        return;
+      }
+
+      remoteSearchResults = [];
+      remoteSearchStatus = "error";
+      remoteSearchError =
+        error instanceof Error ? error.message : "Failed to search archived flights.";
+    }
+  }
+
+  function selectSearchResult(result) {
+    if (!result || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
+      return;
+    }
+
+    pendingSearchSelection = result.icao24;
+    selectedIcao24 = result.icao24;
+    replayPlaybackActive = false;
+    activeMonitoringSessionId = null;
+    replaySnapshotCursor = null;
+    mapViewport = {
+      center: [result.latitude, result.longitude],
+      zoom: Math.max(mapViewport?.zoom ?? 7.1, 8.4),
+    };
+    sidebarMode = "traffic";
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+    }
+
+    filters = {
+      ...filters,
+      query: "",
+    };
+    remoteSearchResults = [];
+    remoteSearchStatus = "idle";
+    remoteSearchError = null;
   }
 
   function toggleWatchMode() {
@@ -1001,14 +1185,101 @@
     onboardingDismissed = true;
   }
 
-  function pushReplaySnapshot(history, snapshotState) {
-    const snapshot = {
-      fetchedAt: snapshotState.fetchedAt,
-      count: snapshotState.count ?? 0,
-      flights: (snapshotState.flights ?? []).map((flight) => ({ ...flight })),
-    };
+  function buildBboxKey(bbox) {
+    if (!bbox) {
+      return null;
+    }
 
-    return [...history.filter((entry) => entry.fetchedAt !== snapshot.fetchedAt), snapshot].slice(-90);
+    return [bbox.lamin, bbox.lamax, bbox.lomin, bbox.lomax]
+      .map((value) => Number(value).toFixed(4))
+      .join("|");
+  }
+
+  function normalizeReplaySnapshot(snapshot) {
+    if (!snapshot) {
+      return null;
+    }
+
+    const fetchedAt = snapshot.fetchedAt ?? snapshot.fetched_at ?? null;
+    if (!fetchedAt) {
+      return null;
+    }
+
+    return {
+      fetchedAt,
+      count: snapshot.count ?? snapshot.flights?.length ?? 0,
+      flights: (snapshot.flights ?? []).map((flight) => ({ ...flight })),
+    };
+  }
+
+  function mergeReplaySnapshots(history, snapshots) {
+    const merged = new Map(history.map((snapshot) => [snapshot.fetchedAt, snapshot]));
+
+    for (const snapshot of snapshots) {
+      const normalizedSnapshot = normalizeReplaySnapshot(snapshot);
+      if (!normalizedSnapshot) {
+        continue;
+      }
+
+      merged.set(normalizedSnapshot.fetchedAt, normalizedSnapshot);
+    }
+
+    return [...merged.values()]
+      .sort((left, right) => new Date(left.fetchedAt) - new Date(right.fetchedAt))
+      .slice(-180);
+  }
+
+  function pushReplaySnapshot(history, snapshotState) {
+    const snapshot = normalizeReplaySnapshot(snapshotState);
+    if (!snapshot) {
+      return history;
+    }
+
+    return mergeReplaySnapshots(history, [snapshot]);
+  }
+
+  function normalizeTrailPoint(point) {
+    if (!point) {
+      return null;
+    }
+
+    const timestampValue = point.timestamp ?? point.fetched_at ?? point.fetchedAt ?? null;
+    const latitude = Number(point.latitude);
+    const longitude = Number(point.longitude);
+    const timestamp =
+      typeof timestampValue === "number" ? timestampValue : new Date(timestampValue).getTime();
+
+    if (
+      !Number.isFinite(latitude) ||
+      !Number.isFinite(longitude) ||
+      !Number.isFinite(timestamp)
+    ) {
+      return null;
+    }
+
+    return {
+      latitude,
+      longitude,
+      altitude: point.altitude ?? null,
+      velocity: point.velocity ?? null,
+      vertical_rate: point.vertical_rate ?? point.verticalRate ?? null,
+      timestamp,
+    };
+  }
+
+  function mergeTrailPoints(primaryPoints, secondaryPoints) {
+    const merged = new Map();
+
+    for (const point of [...primaryPoints, ...secondaryPoints]) {
+      const normalizedPoint = normalizeTrailPoint(point);
+      if (!normalizedPoint) {
+        continue;
+      }
+
+      merged.set(normalizedPoint.timestamp, normalizedPoint);
+    }
+
+    return [...merged.values()].sort((left, right) => left.timestamp - right.timestamp);
   }
 
   function buildSessionLabel(timestamp) {
@@ -1357,6 +1628,7 @@
   }
 
   $: normalizedQuery = filters.query.trim().toLowerCase();
+  $: searchQuery = filters.query.trim();
   $: minimumAltitude = Number(filters.minAltitude);
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
   $: minimumSpeed = Number(filters.minSpeed);
@@ -1483,14 +1755,21 @@
   $: canStepReplayBackward =
     replaySourceSnapshots.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
   $: canStepReplayForward = replaySourceSnapshots.length > 1 && replaySnapshotIndex !== -1;
-  $: if (selectedIcao24 && !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)) {
+  $: showSearchSuggestions =
+    searchQuery.length >= 2 &&
+    (remoteSearchStatus !== "idle" || remoteSearchResults.length > 0 || remoteSearchError);
+  $: if (
+    selectedIcao24 &&
+    pendingSearchSelection !== selectedIcao24 &&
+    !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)
+  ) {
     selectedIcao24 = null;
   }
   $: selectedFlight = selectedIcao24
     ? sortedFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
     : null;
   $: selectedOperatorCode = selectedFlight ? deriveOperatorCode(selectedFlight) || "N/A" : "N/A";
-  $: selectedFlightTrail = activeMonitoringSession
+  $: replaySelectedFlightTrail = activeReplaySnapshot
     ? replaySourceSnapshots.flatMap((snapshot) => {
         const flight = snapshot.flights.find((candidate) => candidate.icao24 === selectedIcao24);
         if (!flight) {
@@ -1508,12 +1787,18 @@
           },
         ];
       })
-    : getTrailPoints(flightHistory, selectedIcao24);
+    : [];
+  $: localSelectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
+  $: selectedFlightTrail = activeReplaySnapshot
+    ? replaySelectedFlightTrail
+    : mergeTrailPoints(selectedFlightTrailRemote, localSelectedFlightTrail);
   $: selectedFlightAnnotation = selectedIcao24
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
+  $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
+  $: replayArchiveBboxKey = buildBboxKey(state.bbox);
   $: mapStyleLabel = {
     standard: "Map",
     dark: "Dark",
@@ -1530,11 +1815,56 @@
     lastSelectedFlightDetailsKey = selectedFlightDetailsKey;
     loadSelectedFlightDetails(selectedFlight);
   }
+  $: if (!selectedFlightTrailKey) {
+    lastSelectedFlightTrailKey = null;
+    selectedFlightTrailRemote = [];
+    selectedFlightTrailStatus = "idle";
+    selectedFlightTrailError = null;
+  }
+  $: if (
+    selectedFlightTrailKey &&
+    selectedFlightTrailKey !== lastSelectedFlightTrailKey &&
+    !activeReplaySnapshot
+  ) {
+    lastSelectedFlightTrailKey = selectedFlightTrailKey;
+    loadSelectedFlightTrail(selectedFlight);
+  }
   $: if (!selectedFlight) {
     followAircraft = false;
   }
   $: if (activeReplaySnapshot && followAircraft) {
     followAircraft = false;
+  }
+  $: if (replayArchiveBboxKey && replayArchiveBboxKey !== lastArchivedReplayBboxKey) {
+    lastArchivedReplayBboxKey = replayArchiveBboxKey;
+    if (typeof window !== "undefined") {
+      if (replayHydrationTimer) {
+        window.clearTimeout(replayHydrationTimer);
+      }
+
+      replayHydrationTimer = window.setTimeout(() => {
+        replayHydrationTimer = null;
+        hydrateReplayHistory(state.bbox);
+      }, 220);
+    }
+  }
+  $: if (typeof window !== "undefined") {
+    searchQuery;
+    if (searchDebounceTimer) {
+      window.clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = null;
+    }
+
+    if (searchQuery.length < 2) {
+      remoteSearchResults = [];
+      remoteSearchStatus = "idle";
+      remoteSearchError = null;
+    } else {
+      searchDebounceTimer = window.setTimeout(() => {
+        searchDebounceTimer = null;
+        loadRemoteSearchResults(searchQuery);
+      }, 260);
+    }
   }
   $: if (state.fetchedAt && state.fetchedAt !== lastAlertCheckKey && !activeReplaySnapshot) {
     lastAlertCheckKey = state.fetchedAt;
@@ -1615,16 +1945,47 @@
           </div>
         </div>
 
-        <label class="search-field">
-          <span class="search-icon">⌕</span>
-          <input
-            bind:this={searchInput}
-            bind:value={filters.query}
-            type="text"
-            placeholder="Find flights, airports and more"
-            title="Search by callsign, ICAO24, origin country, or operator code"
-          />
-        </label>
+        <div class="search-shell">
+          <label class="search-field">
+            <span class="search-icon">⌕</span>
+            <input
+              bind:this={searchInput}
+              bind:value={filters.query}
+              type="text"
+              placeholder="Find flights, airports and more"
+              title="Search by callsign, ICAO24, origin country, or operator code"
+            />
+          </label>
+
+          {#if showSearchSuggestions}
+            <div class="search-suggestions">
+              {#if remoteSearchStatus === "loading"}
+                <p class="search-hint">Searching archived traffic…</p>
+              {:else if remoteSearchError}
+                <p class="search-hint search-hint-error">{remoteSearchError}</p>
+              {:else if remoteSearchResults.length}
+                {#each remoteSearchResults as result}
+                  <button
+                    class="search-result"
+                    type="button"
+                    on:click={() => selectSearchResult(result)}
+                  >
+                    <strong>{result.callsign ?? result.registration ?? result.icao24.toUpperCase()}</strong>
+                    <span>
+                      {result.registration ?? result.icao24.toUpperCase()}
+                      {#if result.type_code}
+                        · {result.type_code}
+                      {/if}
+                      · {result.origin_country ?? "Unknown"}
+                    </span>
+                  </button>
+                {/each}
+              {:else}
+                <p class="search-hint">No recent archived flights match this query.</p>
+              {/if}
+            </div>
+          {/if}
+        </div>
 
         <div class="center-actions">
           <div class="traffic-counter">
@@ -1647,6 +2008,14 @@
 
       {#if state.warning && (!state.flights.length || !["rate_limit", "cooldown"].includes(state.reason))}
         <div class="warning-banner">{state.warning}</div>
+      {/if}
+
+      {#if archivedReplayError}
+        <div class="warning-banner">{archivedReplayError}</div>
+      {/if}
+
+      {#if selectedFlightTrailError && selectedFlight}
+        <div class="warning-banner">{selectedFlightTrailError}</div>
       {/if}
 
       {#if alertToast}
@@ -1953,6 +2322,11 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   }
 
+  .search-shell {
+    position: relative;
+    min-width: 0;
+  }
+
   .search-icon {
     color: rgba(35, 40, 48, 0.6);
     font-size: 0.95rem;
@@ -1971,6 +2345,62 @@
 
   .search-field input::placeholder {
     color: rgba(35, 40, 48, 0.5);
+  }
+
+  .search-suggestions {
+    position: absolute;
+    top: calc(100% + 0.45rem);
+    left: 0;
+    right: 0;
+    display: grid;
+    gap: 0.32rem;
+    padding: 0.4rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(27, 30, 35, 0.98) 0%, rgba(14, 16, 20, 0.98) 100%);
+    box-shadow:
+      0 18px 32px rgba(0, 0, 0, 0.26),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .search-hint {
+    margin: 0;
+    padding: 0.6rem 0.7rem;
+    font-size: 0.78rem;
+    color: rgba(214, 222, 231, 0.8);
+  }
+
+  .search-hint-error {
+    color: #ffd8d8;
+  }
+
+  .search-result {
+    display: grid;
+    gap: 0.14rem;
+    width: 100%;
+    padding: 0.72rem 0.74rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 11px;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.03);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .search-result strong {
+    font-size: 0.84rem;
+    color: #f6f8fb;
+  }
+
+  .search-result span {
+    font-size: 0.72rem;
+    color: rgba(194, 206, 219, 0.7);
+  }
+
+  .search-result:hover {
+    border-color: rgba(255, 211, 79, 0.24);
+    background: rgba(255, 211, 79, 0.06);
   }
 
   .center-actions {

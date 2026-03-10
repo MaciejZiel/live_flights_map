@@ -1965,6 +1965,8 @@
   $: globalBoardSummary = globalTrafficBoard.meta?.sectors_synced
     ? `${globalTrafficBoard.meta.sectors_synced}/${globalTrafficBoard.meta.sectors_total} sectors synced`
     : "Global board";
+  $: showMobileStartHint =
+    isMobileViewport && !selectedFlight && !mobileSidebarOpen && !mobileUtilityOpen;
   $: replayPanelBadge = activeReplaySnapshot
     ? "Replay"
     : activeMonitoringSession
@@ -2320,6 +2322,17 @@
         <div class="alert-toast">{alertToast.message}</div>
       {/if}
     </div>
+
+    {#if showMobileStartHint}
+      <section class="overlay-card mobile-start-hint">
+        <span>Tryb mobilny</span>
+        <strong>Panele sa schowane. Kliknij `Traffic` albo `Tools` u gory.</strong>
+        <div class="mobile-start-actions">
+          <button class="widget-footer-button" type="button" on:click={toggleMobileSidebar}>Open traffic</button>
+          <button class="widget-footer-button" type="button" on:click={toggleMobileUtility}>Open tools</button>
+        </div>
+      </section>
+    {/if}
 
     <aside class:open={mobileUtilityOpen} class="overlay-card radar-left-panel">
       <div class="utility-header">
@@ -3419,6 +3432,38 @@
     width: min(40rem, calc(100vw - 2rem));
   }
 
+  .mobile-start-hint {
+    position: absolute;
+    top: 9.25rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1180;
+    width: min(22rem, calc(100vw - 1.5rem));
+    display: none;
+    gap: 0.42rem;
+    padding: 0.9rem;
+    text-align: left;
+  }
+
+  .mobile-start-hint span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: rgba(185, 194, 206, 0.78);
+  }
+
+  .mobile-start-hint strong {
+    color: #f4f7fb;
+    font-size: 0.92rem;
+    line-height: 1.35;
+  }
+
+  .mobile-start-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
   .error-banner,
   .warning-banner,
   .alert-toast {
@@ -4386,6 +4431,10 @@
   }
 
   @media (max-width: 960px) {
+    .mobile-start-hint {
+      display: grid;
+    }
+
     .radar-left-panel {
       top: 4.65rem;
       right: 0.75rem;

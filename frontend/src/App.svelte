@@ -53,6 +53,11 @@
     normalizeUserPreferences,
     saveUserPreferences,
   } from "./lib/utils/userPreferences.js";
+  import {
+    buildAirportReportCsv,
+    buildPrintableRadarReport,
+    buildTrafficReportCsv,
+  } from "./lib/utils/reporting.js";
 
   let state = {
     status: "idle",
@@ -143,6 +148,8 @@
   let lastInspectorScrollFlightKey = null;
   let shareFeedback = "";
   let shareFeedbackTimer = null;
+  let reportFeedback = "";
+  let reportFeedbackTimer = null;
   let watchlist = [];
   let watchModeEnabled = false;
   let flightAnnotations = {};
@@ -288,6 +295,9 @@
       }
       if (shareFeedbackTimer) {
         window.clearTimeout(shareFeedbackTimer);
+      }
+      if (reportFeedbackTimer) {
+        window.clearTimeout(reportFeedbackTimer);
       }
       if (alertToastTimer) {
         window.clearTimeout(alertToastTimer);
@@ -1592,6 +1602,95 @@
       shareFeedback = "";
       shareFeedbackTimer = null;
     }, 1800);
+  }
+
+  function setReportFeedback(message) {
+    reportFeedback = message;
+    if (reportFeedbackTimer) {
+      window.clearTimeout(reportFeedbackTimer);
+    }
+
+    reportFeedbackTimer = window.setTimeout(() => {
+      reportFeedback = "";
+      reportFeedbackTimer = null;
+    }, 2200);
+  }
+
+  function downloadTextFile(filename, content, contentType = "text/plain;charset=utf-8") {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const blob = new Blob([content], { type: contentType });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    window.URL.revokeObjectURL(url);
+  }
+
+  function exportVisibleTrafficCsv() {
+    const csv = buildTrafficReportCsv(filteredFlights);
+    const timestamp = new Date().toISOString().replaceAll(":", "-");
+    downloadTextFile(`live-traffic-${timestamp}.csv`, csv, "text/csv;charset=utf-8");
+    setReportFeedback("Traffic CSV ready");
+  }
+
+  function exportSelectedAirportCsv() {
+    if (!selectedAirport || !selectedAirportDashboard) {
+      return;
+    }
+
+    const airportCode = normalizeAirportKey(selectedAirport).toLowerCase();
+    const csv = buildAirportReportCsv(selectedAirport, selectedAirportDashboard);
+    const timestamp = new Date().toISOString().replaceAll(":", "-");
+    downloadTextFile(
+      `airport-board-${airportCode}-${timestamp}.csv`,
+      csv,
+      "text/csv;charset=utf-8"
+    );
+    setReportFeedback("Airport CSV ready");
+  }
+
+  function printVisibleTrafficReport() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const reportWindow = window.open("", "_blank", "noopener,noreferrer,width=1200,height=900");
+    if (!reportWindow) {
+      setReportFeedback("Popup blocked");
+      return;
+    }
+
+    const html = buildPrintableRadarReport({
+      title: activeReplaySnapshot ? "Replay traffic report" : "Live traffic report",
+      generatedAt: new Intl.DateTimeFormat("en-GB", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        timeZoneName: "short",
+      }).format(new Date()),
+      summaryRows: [
+        { label: "Visible traffic", value: String(visibleTrackedCount) },
+        { label: "Airborne", value: String(airborneCount) },
+        { label: "Ground", value: String(groundCount) },
+        { label: "Map style", value: mapStyleLabel },
+        { label: "Filters", value: String(activeFilterCount) },
+      ],
+      flights: filteredFlights.slice(0, 120),
+    });
+
+    reportWindow.document.open();
+    reportWindow.document.write(html);
+    reportWindow.document.close();
+    reportWindow.focus();
+    reportWindow.print();
+    setReportFeedback("Print report opened");
   }
 
   function pushAlertEvent(message) {
@@ -4013,6 +4112,10 @@
       {#if alertToast}
         <div class="alert-toast">{alertToast.message}</div>
       {/if}
+
+      {#if reportFeedback}
+        <div class="alert-toast">{reportFeedback}</div>
+      {/if}
     </div>
 
     {#if showMobileStartHint}
@@ -4654,6 +4757,31 @@
               Profiles now sync filters, bookmarks, notes and replay sessions to the backend workspace store while local cache stays as fallback.
             </p>
           </section>
+
+          <details class="utility-drawer" open>
+            <summary>
+              <span>Reports</span>
+              <strong>CSV</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <p class="drawer-caption">
+                Export the current radar picture as CSV or open a print-friendly report snapshot.
+              </p>
+              <div class="local-tool-actions">
+                <button class="widget-footer-button" type="button" on:click={exportVisibleTrafficCsv}>
+                  Export visible traffic CSV
+                </button>
+                <button class="widget-footer-button" type="button" on:click={printVisibleTrafficReport}>
+                  Print traffic report
+                </button>
+                {#if selectedAirport && selectedAirportDashboard}
+                  <button class="widget-footer-button" type="button" on:click={exportSelectedAirportCsv}>
+                    Export airport board CSV
+                  </button>
+                {/if}
+              </div>
+            </div>
+          </details>
 
           <details class="utility-drawer" open={workspaceProfiles.length > 0}>
             <summary>

@@ -283,6 +283,45 @@
     dispatch("select", { flight: entry.flight });
   }
 
+  function findNearestFlightToClick(clickEvent) {
+    if (!map || !flights?.length) {
+      return null;
+    }
+
+    const clickPoint =
+      clickEvent?.containerPoint ??
+      (clickEvent?.originalEvent ? map.mouseEventToContainerPoint(clickEvent.originalEvent) : null);
+    if (!clickPoint) {
+      return null;
+    }
+
+    let bestMatch = null;
+    let bestDistanceSquared = Infinity;
+    const maxDistancePixels = 26;
+
+    for (const flight of flights) {
+      if (!Number.isFinite(flight?.latitude) || !Number.isFinite(flight?.longitude)) {
+        continue;
+      }
+
+      const flightPoint = map.latLngToContainerPoint([flight.latitude, flight.longitude]);
+      const dx = flightPoint.x - clickPoint.x;
+      const dy = flightPoint.y - clickPoint.y;
+      const distanceSquared = dx * dx + dy * dy;
+
+      if (distanceSquared < bestDistanceSquared) {
+        bestDistanceSquared = distanceSquared;
+        bestMatch = flight;
+      }
+    }
+
+    if (!bestMatch || bestDistanceSquared > maxDistancePixels ** 2) {
+      return null;
+    }
+
+    return bestMatch;
+  }
+
   function projectPoint(latitude, longitude, bearingDegrees, distanceMeters) {
     const earthRadiusMeters = 6371000;
     const angularDistance = distanceMeters / earthRadiusMeters;
@@ -687,6 +726,14 @@
     }, 10 * 60 * 1000);
     container.addEventListener("click", handleMarkerElementClick, true);
     map.on("click", (event) => {
+      const nearbyFlight = findNearestFlightToClick(event);
+      if (nearbyFlight) {
+        const entry = markerRegistry.get(nearbyFlight.icao24);
+        entry?.marker?.openPopup();
+        dispatch("select", { flight: nearbyFlight });
+        return;
+      }
+
       const target = event.originalEvent?.target;
       if (
         target instanceof Element &&

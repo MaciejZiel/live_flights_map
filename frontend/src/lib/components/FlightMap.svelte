@@ -17,6 +17,7 @@
   export let initialViewport = null;
   export let fullscreenRequestId = 0;
   export let viewPresetRequest = null;
+  export let focusRequest = null;
 
   const dispatch = createEventDispatcher();
   let shell;
@@ -32,6 +33,7 @@
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
+  let lastFocusRequestId = null;
   let lastRouteFocusKey = null;
   const viewPresets = {
     poland: [
@@ -215,6 +217,17 @@
       padding: [24, 24],
       animate: true,
       duration: 1,
+    });
+  }
+
+  function applyFocusRequest(request) {
+    if (!map || !request?.center) {
+      return;
+    }
+
+    map.flyTo(request.center, request.zoom ?? Math.max(map.getZoom(), 8.2), {
+      animate: true,
+      duration: 1.1,
     });
   }
 
@@ -506,6 +519,11 @@
   ) {
     lastViewPresetRequestId = viewPresetRequest.id;
     applyViewPreset(viewPresetRequest.presetKey);
+  }
+
+  $: if (map && focusRequest?.id && focusRequest.id !== lastFocusRequestId) {
+    lastFocusRequestId = focusRequest.id;
+    applyFocusRequest(focusRequest);
   }
 
   $: syncTrailLayer();

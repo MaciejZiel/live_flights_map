@@ -15,6 +15,7 @@
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import {
     fetchFlightDetails,
+    fetchGlobalTrafficBoard,
     fetchFlightTrail,
     fetchReplayHistory,
     searchFlights,
@@ -68,6 +69,7 @@
   let searchInput;
   let fullscreenRequestId = 0;
   let viewPresetRequest = null;
+  let flightFocusRequest = null;
   let now = Date.now();
   let flightHistory = new Map();
   let lastHistoryFetchKey = null;
@@ -79,6 +81,7 @@
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
   let mobileUtilityOpen = false;
+  let inspectorScroll;
   let sidebarMode = "traffic";
   let utilityPanelMode = "overview";
   let inspectorTab = "details";
@@ -87,6 +90,7 @@
   let lastReplaySnapshotKey = null;
   let replayPlaybackActive = false;
   let replayPlaybackTimer = null;
+  let lastInspectorScrollFlightKey = null;
   let shareFeedback = "";
   let shareFeedbackTimer = null;
   let watchlist = [];
@@ -127,6 +131,19 @@
   let remoteSearchRequestId = 0;
   let searchDebounceTimer = null;
   let pendingSearchSelection = null;
+  let selectedFlightSnapshot = null;
+  let globalTrafficBoard = {
+    status: "idle",
+    flights: [],
+    error: null,
+    fetchedAt: null,
+    count: 0,
+    warning: null,
+    source: "idle",
+    meta: {},
+  };
+  let globalTrafficBoardRequestId = 0;
+  let globalTrafficBoardTimer = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -155,6 +172,10 @@
     syncThemeClass(theme);
     preferencesReady = true;
     flightsStore.start();
+    refreshGlobalTrafficBoard();
+    globalTrafficBoardTimer = window.setInterval(() => {
+      refreshGlobalTrafficBoard();
+    }, 90000);
     window.addEventListener("keydown", handleKeyboardShortcut);
     const mobileViewportQuery = window.matchMedia("(max-width: 960px)");
     const syncViewportMode = (event) => {
@@ -186,6 +207,9 @@
       }
       if (searchDebounceTimer) {
         window.clearTimeout(searchDebounceTimer);
+      }
+      if (globalTrafficBoardTimer) {
+        window.clearInterval(globalTrafficBoardTimer);
       }
       unsubscribe();
       flightsStore.stop();
@@ -297,17 +321,109 @@
       .slice(0, limit);
   }
 
+  function buildSelectedFlightSnapshot(flight) {
+    if (!flight?.icao24) {
+      return null;
+    }
+
+    return {
+      ...flight,
+      icao24: String(flight.icao24).trim().toLowerCase(),
+    };
+  }
+
+  function shouldRefreshSelectedFlightSnapshot(currentSnapshot, nextFlight) {
+    if (!nextFlight?.icao24) {
+      return false;
+    }
+
+    if (!currentSnapshot || currentSnapshot.icao24 !== nextFlight.icao24) {
+      return true;
+    }
+
+    return (
+      currentSnapshot.callsign !== nextFlight.callsign ||
+      currentSnapshot.registration !== nextFlight.registration ||
+      currentSnapshot.type_code !== nextFlight.type_code ||
+      currentSnapshot.origin_country !== nextFlight.origin_country ||
+      currentSnapshot.latitude !== nextFlight.latitude ||
+      currentSnapshot.longitude !== nextFlight.longitude ||
+      currentSnapshot.altitude !== nextFlight.altitude ||
+      currentSnapshot.velocity !== nextFlight.velocity ||
+      currentSnapshot.vertical_rate !== nextFlight.vertical_rate ||
+      currentSnapshot.true_track !== nextFlight.true_track ||
+      currentSnapshot.last_contact !== nextFlight.last_contact ||
+      currentSnapshot.on_ground !== nextFlight.on_ground ||
+      currentSnapshot.fetched_at !== nextFlight.fetched_at ||
+      currentSnapshot.tracking_count !== nextFlight.tracking_count
+    );
+  }
+
+  function getKnownFlightByIcao24(icao24) {
+    const normalizedIcao24 = String(icao24 ?? "").trim().toLowerCase();
+    if (!normalizedIcao24) {
+      return null;
+    }
+
+    return (
+      sortedFlights.find((flight) => flight.icao24 === normalizedIcao24) ??
+      replayFlights.find((flight) => flight.icao24 === normalizedIcao24) ??
+      state.flights.find((flight) => flight.icao24 === normalizedIcao24) ??
+      globalTrafficBoard.flights.find((flight) => flight.icao24 === normalizedIcao24) ??
+      remoteSearchResults.find((flight) => flight.icao24 === normalizedIcao24) ??
+      watchedFlightEntries.find((entry) => entry.icao24 === normalizedIcao24)?.flight ??
+      (selectedFlightSnapshot?.icao24 === normalizedIcao24 ? selectedFlightSnapshot : null)
+    );
+  }
+
+  function openFlightInspector(flight, options = {}) {
+    const snapshot = buildSelectedFlightSnapshot(flight);
+    if (!snapshot) {
+      return;
+    }
+
+    if (options.pendingSearchSelection !== undefined) {
+      pendingSearchSelection = options.pendingSearchSelection;
+    }
+
+    selectedFlightSnapshot = snapshot;
+    selectedIcao24 = snapshot.icao24;
+    sidebarMode = "traffic";
+    inspectorTab = options.inspectorTab ?? "details";
+
+    if (options.exitReplay) {
+      replayPlaybackActive = false;
+      activeMonitoringSessionId = null;
+      replaySnapshotCursor = null;
+    }
+
+    if (
+      options.focusMap &&
+      Number.isFinite(snapshot.latitude) &&
+      Number.isFinite(snapshot.longitude)
+    ) {
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        center: [snapshot.latitude, snapshot.longitude],
+        zoom: Math.max(mapViewport?.zoom ?? 7.1, options.zoom ?? 8.2),
+      };
+    }
+
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
+    }
+  }
+
   function handleBoundsChange(event) {
     flightsStore.setBbox(event.detail.bbox);
   }
 
   function handleFlightSelect(event) {
-    selectedIcao24 = event.detail.flight.icao24;
-    inspectorTab = "details";
-    if (isMobileViewport) {
-      mobileSidebarOpen = true;
-      mobileUtilityOpen = false;
-    }
+    openFlightInspector(event.detail.flight, {
+      focusMap: false,
+      exitReplay: false,
+    });
   }
 
   function handleViewportChange(event) {
@@ -694,8 +810,25 @@
     watchlist = watchlist.filter((value) => value !== icao24);
   }
 
-  function selectWatchedFlight(icao24) {
-    selectedIcao24 = icao24;
+  function selectWatchedFlight(target) {
+    const flight =
+      typeof target === "string" ? getKnownFlightByIcao24(target) : buildSelectedFlightSnapshot(target);
+
+    if (flight) {
+      openFlightInspector(flight, {
+        focusMap: true,
+        zoom: 8.2,
+        exitReplay: true,
+      });
+      return;
+    }
+
+    const fallbackIcao24 = typeof target === "string" ? target.trim().toLowerCase() : null;
+    if (!fallbackIcao24) {
+      return;
+    }
+
+    selectedIcao24 = fallbackIcao24;
     sidebarMode = "traffic";
     inspectorTab = "details";
     if (isMobileViewport) {
@@ -971,25 +1104,57 @@
     }
   }
 
+  async function refreshGlobalTrafficBoard() {
+    const requestId = ++globalTrafficBoardRequestId;
+    globalTrafficBoard = {
+      ...globalTrafficBoard,
+      status: globalTrafficBoard.flights.length ? "refreshing" : "loading",
+      error: null,
+    };
+
+    try {
+      const payload = await fetchGlobalTrafficBoard({ limit: 6 });
+      if (requestId !== globalTrafficBoardRequestId) {
+        return;
+      }
+
+      globalTrafficBoard = {
+        status: "success",
+        flights: payload.flights ?? [],
+        error: null,
+        fetchedAt: payload.fetched_at ?? null,
+        count: payload.count ?? (payload.flights?.length ?? 0),
+        warning: payload.meta?.warning ?? null,
+        source: payload.meta?.source ?? "live",
+        meta: payload.meta ?? {},
+      };
+    } catch (error) {
+      if (requestId !== globalTrafficBoardRequestId) {
+        return;
+      }
+
+      const message =
+        error instanceof Error ? error.message : "Failed to load the global traffic board.";
+      globalTrafficBoard = {
+        ...globalTrafficBoard,
+        status: globalTrafficBoard.flights.length ? "success" : "error",
+        error: globalTrafficBoard.flights.length ? null : message,
+        warning: globalTrafficBoard.flights.length ? message : null,
+      };
+    }
+  }
+
   function selectSearchResult(result) {
     if (!result || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
       return;
     }
 
-    pendingSearchSelection = result.icao24;
-    selectedIcao24 = result.icao24;
-    replayPlaybackActive = false;
-    activeMonitoringSessionId = null;
-    replaySnapshotCursor = null;
-    mapViewport = {
-      center: [result.latitude, result.longitude],
-      zoom: Math.max(mapViewport?.zoom ?? 7.1, 8.4),
-    };
-    sidebarMode = "traffic";
-    if (isMobileViewport) {
-      mobileSidebarOpen = true;
-      mobileUtilityOpen = false;
-    }
+    openFlightInspector(result, {
+      focusMap: true,
+      zoom: 8.4,
+      exitReplay: true,
+      pendingSearchSelection: result.icao24,
+    });
 
     filters = {
       ...filters,
@@ -1762,7 +1927,8 @@
     .filter((entry) => entry.flight)
     .map((entry) => entry.flight)
     .slice(0, 4);
-  $: leaderboardFlights = sortFlights(filteredFlights, "speed_desc", mapViewport).slice(0, 6);
+  $: visibleLeaderboardFlights = sortFlights(filteredFlights, "speed_desc", mapViewport).slice(0, 6);
+  $: leaderboardFlights = globalTrafficBoard.flights ?? [];
   $: airborneCount = filteredFlights.filter((flight) => !flight.on_ground).length;
   $: groundCount = Math.max(0, filteredFlights.length - airborneCount);
   $: averageSpeedKmh = filteredFlights.length
@@ -1789,7 +1955,16 @@
   $: activeAlertEvents = alertEvents.slice(0, 4);
   $: compactLeaderboardFlights = leaderboardFlights.slice(0, 3);
   $: countryActivity = buildCountryActivity(filteredFlights, 3);
-  $: leadFeedFlight = compactLeaderboardFlights[0] ?? null;
+  $: leadFeedFlight = visibleLeaderboardFlights[0] ?? null;
+  $: globalBoardStatusLabel =
+    globalTrafficBoard.status === "loading" || globalTrafficBoard.status === "refreshing"
+      ? "SYNC"
+      : globalTrafficBoard.source === "cache"
+        ? "CACHE"
+        : "WORLD";
+  $: globalBoardSummary = globalTrafficBoard.meta?.sectors_synced
+    ? `${globalTrafficBoard.meta.sectors_synced}/${globalTrafficBoard.meta.sectors_total} sectors synced`
+    : "Global board";
   $: replayPanelBadge = activeReplaySnapshot
     ? "Replay"
     : activeMonitoringSession
@@ -1814,15 +1989,20 @@
   $: showSearchSuggestions =
     searchQuery.length >= 2 &&
     (remoteSearchStatus !== "idle" || remoteSearchResults.length > 0 || remoteSearchError);
+  $: selectedFlightLiveCandidate = selectedIcao24 ? getKnownFlightByIcao24(selectedIcao24) : null;
   $: if (
     selectedIcao24 &&
-    pendingSearchSelection !== selectedIcao24 &&
-    !filteredFlights.some((flight) => flight.icao24 === selectedIcao24)
+    selectedFlightLiveCandidate &&
+    shouldRefreshSelectedFlightSnapshot(selectedFlightSnapshot, selectedFlightLiveCandidate)
   ) {
-    selectedIcao24 = null;
+    selectedFlightSnapshot = {
+      ...(selectedFlightSnapshot ?? {}),
+      ...selectedFlightLiveCandidate,
+    };
   }
   $: selectedFlight = selectedIcao24
-    ? sortedFlights.find((flight) => flight.icao24 === selectedIcao24) ?? null
+    ? selectedFlightLiveCandidate ??
+      (selectedFlightSnapshot?.icao24 === selectedIcao24 ? selectedFlightSnapshot : null)
     : null;
   $: selectedOperatorCode = selectedFlight ? deriveOperatorCode(selectedFlight) || "N/A" : "N/A";
   $: replaySelectedFlightTrail = activeReplaySnapshot
@@ -1899,6 +2079,17 @@
   $: if (!selectedFlight) {
     followAircraft = false;
     selectedTagDraft = "";
+  }
+  $: if (!selectedIcao24) {
+    selectedFlightSnapshot = null;
+    lastInspectorScrollFlightKey = null;
+  }
+  $: if (selectedIcao24 && selectedIcao24 !== lastInspectorScrollFlightKey && inspectorScroll) {
+    lastInspectorScrollFlightKey = selectedIcao24;
+    inspectorScroll.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
   $: if (activeReplaySnapshot && followAircraft) {
     followAircraft = false;
@@ -1997,6 +2188,7 @@
         initialViewport={mapViewport}
         fullscreenRequestId={fullscreenRequestId}
         viewPresetRequest={viewPresetRequest}
+        focusRequest={flightFocusRequest}
         on:boundschange={handleBoundsChange}
         on:viewportchange={handleViewportChange}
         on:select={handleFlightSelect}
@@ -2184,40 +2376,47 @@
         </button>
       </div>
 
+      <section class="widget-card persistent-tracked-widget">
+        <div class="widget-header">
+          <div class="widget-heading">
+            <strong>Most tracked flights</strong>
+            <span class="live-pill">{globalBoardStatusLabel}</span>
+          </div>
+        </div>
+
+        <p class="widget-caption">
+          {globalTrafficBoard.warning ?? globalTrafficBoard.error ?? globalBoardSummary}
+        </p>
+
+        {#if compactLeaderboardFlights.length}
+          <div class="widget-list">
+            {#each compactLeaderboardFlights as flight, index}
+              <button class="widget-row" type="button" on:click={() => selectWatchedFlight(flight)}>
+                <span class="widget-rank">{index + 1}.</span>
+                <span class="widget-main">
+                  <strong>{flight.callsign ?? flight.icao24}</strong>
+                  <span class="widget-codes">
+                    <small>{flight.icao24.toUpperCase()}</small>
+                    {#if deriveOperatorCode(flight)}
+                      <small>{deriveOperatorCode(flight)}</small>
+                    {/if}
+                  </span>
+                  <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
+                </span>
+                <span class="widget-highlight">
+                  <strong>{flight.tracking_count ? `${flight.tracking_count}x` : "LIVE"}</strong>
+                  <small>{formatSpeed(flight.velocity).replace(" km/h", "")}</small>
+                </span>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="widget-empty">Waiting for global sectors to sync.</p>
+        {/if}
+      </section>
+
       <div class="panel-stack">
         {#if utilityPanelMode === "overview"}
-          <section class="widget-card">
-            <div class="widget-header">
-              <div class="widget-heading">
-                <strong>Most tracked flights</strong>
-                <span class="live-pill">LIVE</span>
-              </div>
-            </div>
-
-            {#if compactLeaderboardFlights.length}
-              <div class="widget-list">
-                {#each compactLeaderboardFlights as flight, index}
-                  <button class="widget-row" type="button" on:click={() => selectWatchedFlight(flight.icao24)}>
-                    <span class="widget-rank">{index + 1}.</span>
-                    <span class="widget-main">
-                      <strong>{flight.callsign ?? flight.icao24}</strong>
-                      <span class="widget-codes">
-                        <small>{flight.icao24.toUpperCase()}</small>
-                        {#if deriveOperatorCode(flight)}
-                          <small>{deriveOperatorCode(flight)}</small>
-                        {/if}
-                      </span>
-                      <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
-                    </span>
-                    <span class="widget-highlight">{formatSpeed(flight.velocity).replace(" km/h", "")}</span>
-                  </button>
-                {/each}
-              </div>
-            {:else}
-              <p class="widget-empty">Waiting for flights in the active map view.</p>
-            {/if}
-          </section>
-
           <section class="widget-card filter-card">
             <div class="widget-header">
               <div class="widget-heading">
@@ -2592,6 +2791,7 @@
             aria-label="Close selected aircraft"
             on:click={() => {
               selectedIcao24 = null;
+              selectedFlightSnapshot = null;
               if (isMobileViewport) {
                 closeMobileSidebar();
               }
@@ -2622,7 +2822,7 @@
         {/if}
       </div>
 
-      <div class="inspector-scroll">
+      <div bind:this={inspectorScroll} class="inspector-scroll">
         {#if selectedFlight}
           <div class="inspector-tab-row" role="tablist" aria-label="Selected aircraft sections">
             <button
@@ -3255,7 +3455,7 @@
     bottom: 5.9rem;
     width: min(18rem, calc(100vw - 23rem));
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     gap: 0.72rem;
     padding: 0.78rem;
     background:
@@ -3502,6 +3702,12 @@
     color: #b3bcc8;
   }
 
+  .widget-caption {
+    margin: 0;
+    font-size: 0.7rem;
+    color: rgba(193, 202, 214, 0.78);
+  }
+
   .filter-form-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3607,9 +3813,21 @@
   }
 
   .widget-highlight {
+    display: grid;
+    justify-items: end;
+    gap: 0.12rem;
+    min-width: 3.1rem;
+  }
+
+  .widget-highlight strong {
     font-size: 0.88rem;
     font-weight: 900;
     color: #f5b908;
+  }
+
+  .widget-highlight small {
+    font-size: 0.64rem;
+    color: #aeb8c6;
   }
 
   .mini-stat-list {

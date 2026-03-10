@@ -319,6 +319,101 @@ class FlightArchiveService:
             "results": results,
         }
 
+    def list_hot_flights(
+        self,
+        limit: int,
+        lookback_minutes: int,
+    ) -> dict[str, object]:
+        normalized_limit = min(max(limit, 1), 100)
+        normalized_minutes = max(lookback_minutes, 5)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(minutes=normalized_minutes)
+        ).isoformat()
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    """
+                    WITH ranked_positions AS (
+                        SELECT
+                            positions.icao24,
+                            positions.callsign,
+                            positions.registration,
+                            positions.type_code,
+                            positions.origin_country,
+                            positions.latitude,
+                            positions.longitude,
+                            positions.altitude,
+                            positions.velocity,
+                            positions.vertical_rate,
+                            positions.true_track,
+                            positions.last_contact,
+                            positions.on_ground,
+                            positions.fetched_at,
+                            COUNT(*) OVER (
+                                PARTITION BY positions.icao24
+                            ) AS tracking_count,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY positions.icao24
+                                ORDER BY positions.fetched_at DESC
+                            ) AS row_number
+                        FROM positions
+                        WHERE positions.fetched_at >= ?
+                    )
+                    SELECT
+                        icao24,
+                        callsign,
+                        registration,
+                        type_code,
+                        origin_country,
+                        latitude,
+                        longitude,
+                        altitude,
+                        velocity,
+                        vertical_rate,
+                        true_track,
+                        last_contact,
+                        on_ground,
+                        fetched_at,
+                        tracking_count
+                    FROM ranked_positions
+                    WHERE row_number = 1
+                    ORDER BY tracking_count DESC, fetched_at DESC
+                    LIMIT ?
+                    """,
+                    (cutoff_timestamp, normalized_limit),
+                ).fetchall()
+            finally:
+                connection.close()
+
+        flights = [
+            {
+                "icao24": row["icao24"],
+                "callsign": row["callsign"],
+                "registration": row["registration"],
+                "type_code": row["type_code"],
+                "origin_country": row["origin_country"],
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "altitude": row["altitude"],
+                "velocity": row["velocity"],
+                "vertical_rate": row["vertical_rate"],
+                "true_track": row["true_track"],
+                "last_contact": row["last_contact"],
+                "on_ground": bool(row["on_ground"]),
+                "fetched_at": row["fetched_at"],
+                "tracking_count": row["tracking_count"],
+            }
+            for row in rows
+        ]
+
+        return {
+            "count": len(flights),
+            "lookback_minutes": normalized_minutes,
+            "flights": flights,
+        }
+
     def _initialize_database(self) -> None:
         self.archive_path.parent.mkdir(parents=True, exist_ok=True)
         connection = self._connect()
@@ -360,6 +455,8 @@ class FlightArchiveService:
                     ON snapshots (bbox_key, fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_positions_icao24_time
                     ON positions (icao24, fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_positions_fetched_time
+                    ON positions (fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_positions_callsign_time
                     ON positions (callsign, fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_positions_registration_time

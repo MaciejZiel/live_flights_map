@@ -6,6 +6,7 @@ from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
 from .services.flight_archive import FlightArchiveService
 from .services.flight_details import FlightDetailsService
+from .services.global_traffic_board import GlobalTrafficBoardService
 from .services.flight_snapshot import FlightSnapshotService
 from .services.opensky import OpenSkyClient
 from .services.planespotting import PlanespottingClient
@@ -55,6 +56,12 @@ def create_app() -> Flask:
         archive_service=archive_service,
     )
     app.extensions["flight_archive_service"] = archive_service
+    app.extensions["global_traffic_board_service"] = GlobalTrafficBoardService(
+        snapshot_service=app.extensions["flight_snapshot_service"],
+        archive_service=archive_service,
+        cache_ttl=app.config["GLOBAL_TRAFFIC_BOARD_CACHE_TTL"],
+        lookback_minutes=app.config["GLOBAL_TRAFFIC_BOARD_LOOKBACK_MINUTES"],
+    )
     app.extensions["flight_details_service"] = FlightDetailsService(
         route_client=ADSBLolRouteClient(
             base_url=app.config["ADSB_LOL_ROUTE_API_URL"],

@@ -144,3 +144,13 @@ export async function searchFlights(query, options = {}) {
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
   return parseApiResponse(response, "Failed to search archived flights.");
 }
+
+export async function fetchGlobalTrafficBoard(options = {}) {
+  const url = createApiUrl("/api/traffic/leaderboard");
+  if (options.limit) {
+    url.searchParams.set("limit", String(options.limit));
+  }
+
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load the global traffic board.");
+}

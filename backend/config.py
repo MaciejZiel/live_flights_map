@@ -26,6 +26,12 @@ class Config:
     FLIGHT_SEARCH_LOOKBACK_HOURS = float(
         os.getenv("FLIGHT_SEARCH_LOOKBACK_HOURS", "6")
     )
+    GLOBAL_TRAFFIC_BOARD_CACHE_TTL = float(
+        os.getenv("GLOBAL_TRAFFIC_BOARD_CACHE_TTL", "75")
+    )
+    GLOBAL_TRAFFIC_BOARD_LOOKBACK_MINUTES = int(
+        os.getenv("GLOBAL_TRAFFIC_BOARD_LOOKBACK_MINUTES", "120")
+    )
 
     OPENSKY_BASE_URL = os.getenv(
         "OPENSKY_BASE_URL",

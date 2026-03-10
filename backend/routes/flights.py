@@ -193,6 +193,23 @@ def search_flights():
     )
 
 
+@api.get("/traffic/leaderboard")
+def global_traffic_leaderboard():
+    try:
+        limit = _parse_optional_int("limit", default=8)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    service = current_app.extensions["global_traffic_board_service"]
+
+    try:
+        payload = service.get_board(limit=limit)
+    except FlightProviderError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    return jsonify(payload)
+
+
 @api.get("/flights/stream")
 def stream_flights():
     try:

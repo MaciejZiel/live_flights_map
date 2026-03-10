@@ -5,6 +5,7 @@ import {
   formatFlightStatus,
   formatHeading,
   formatSpeed,
+  formatVerticalRate,
 } from "../utils/flightFormatters.js";
 
 const POSITION_ANIMATION_MS = 1400;
@@ -32,6 +33,39 @@ function buildTooltipContent(flight) {
         <span>${escapeHtml(formatAltitude(flight.altitude))}</span>
         <span>${escapeHtml(formatSpeed(flight.velocity))}</span>
         <span>${escapeHtml(formatHeading(flight.true_track))}</span>
+      </div>
+    </div>
+  `;
+}
+
+function buildPopupContent(flight) {
+  return `
+    <div class="aircraft-popup-card">
+      <div class="aircraft-popup-head">
+        <strong>${escapeHtml(getMarkerLabel(flight))}</strong>
+        <span>${escapeHtml(formatFlightStatus(flight))}</span>
+      </div>
+      <div class="aircraft-popup-meta">
+        <span>${escapeHtml(flight.registration ?? flight.icao24?.toUpperCase() ?? "Unknown")}</span>
+        <span>${escapeHtml(flight.origin_country ?? "Unknown")}</span>
+      </div>
+      <div class="aircraft-popup-grid">
+        <div>
+          <small>ALT</small>
+          <strong>${escapeHtml(formatAltitude(flight.altitude))}</strong>
+        </div>
+        <div>
+          <small>SPD</small>
+          <strong>${escapeHtml(formatSpeed(flight.velocity))}</strong>
+        </div>
+        <div>
+          <small>HDG</small>
+          <strong>${escapeHtml(formatHeading(flight.true_track))}</strong>
+        </div>
+        <div>
+          <small>V/S</small>
+          <strong>${escapeHtml(formatVerticalRate(flight.vertical_rate))}</strong>
+        </div>
       </div>
     </div>
   `;
@@ -138,6 +172,7 @@ function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, d
     )
   );
   entry.marker.setTooltipContent(buildTooltipContent(flight));
+  entry.marker.setPopupContent(buildPopupContent(flight));
   entry.marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
 }
 
@@ -168,6 +203,12 @@ function createMarkerEntry(
     offset: [0, -18],
     opacity: 1,
     className: "aircraft-hover-tooltip",
+  }).bindPopup(buildPopupContent(flight), {
+    autoPan: true,
+    autoClose: false,
+    closeButton: false,
+    className: "aircraft-stats-popup",
+    offset: [0, -16],
   });
 
   const entry = {
@@ -186,6 +227,7 @@ function createMarkerEntry(
 
   marker.on("click", (event) => {
     L.DomEvent.stop(event.originalEvent ?? event);
+    marker.openPopup();
     if (onSelect) {
       onSelect(entry.flight);
     }

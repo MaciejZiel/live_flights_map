@@ -1021,6 +1021,93 @@
     display: none;
   }
 
+  :global(.leaflet-popup.aircraft-stats-popup .leaflet-popup-content-wrapper) {
+    padding: 0;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(24, 27, 33, 0.98) 0%, rgba(11, 13, 17, 0.98) 100%);
+    box-shadow:
+      0 18px 32px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  :global(.leaflet-popup.aircraft-stats-popup .leaflet-popup-content) {
+    margin: 0;
+  }
+
+  :global(.leaflet-popup.aircraft-stats-popup .leaflet-popup-tip) {
+    background: rgba(11, 13, 17, 0.98);
+  }
+
+  :global(.aircraft-popup-card) {
+    display: grid;
+    gap: 0.56rem;
+    min-width: 14rem;
+    padding: 0.8rem 0.88rem;
+    color: #edf4fb;
+  }
+
+  :global(.aircraft-popup-head) {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  :global(.aircraft-popup-head strong) {
+    font-size: 0.92rem;
+    color: #f8fbff;
+  }
+
+  :global(.aircraft-popup-head span) {
+    padding: 0.2rem 0.48rem;
+    border-radius: 999px;
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  :global(.aircraft-popup-meta) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.55rem;
+    color: rgba(198, 209, 221, 0.78);
+    font-size: 0.72rem;
+  }
+
+  :global(.aircraft-popup-grid) {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  :global(.aircraft-popup-grid div) {
+    display: grid;
+    gap: 0.12rem;
+    padding: 0.48rem 0.52rem;
+    border-radius: 11px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  :global(.aircraft-popup-grid small) {
+    color: rgba(171, 186, 201, 0.68);
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  :global(.aircraft-popup-grid strong) {
+    color: #eff4fa;
+    font-size: 0.76rem;
+    line-height: 1.2;
+  }
+
   :global(.aircraft-hover-card) {
     display: grid;
     gap: 0.2rem;

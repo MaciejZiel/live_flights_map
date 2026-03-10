@@ -15,6 +15,8 @@
     country: "Country match",
     registration: "Registration match",
     type_code: "Aircraft type match",
+    airport: "Airport proximity",
+    area: "Saved area match",
   };
 
   function submitRule() {

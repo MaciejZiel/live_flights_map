@@ -14,6 +14,7 @@
   export let onRetry = () => {};
   export let onToggleWeather = () => {};
   export let onToggleBookmark = () => {};
+  export let onAddAlert = () => {};
 
   let activeTab = "overview";
   let lastAirportKey = null;
@@ -103,6 +104,9 @@
       <div class="airport-actions">
         <button class:active={weatherLayerEnabled} class="airport-action" type="button" on:click={onToggleWeather}>
           {weatherLayerEnabled ? "Weather on" : "Weather off"}
+        </button>
+        <button class="airport-action" type="button" on:click={onAddAlert}>
+          Alert
         </button>
         <button class:active={bookmarked} class="airport-action" type="button" on:click={onToggleBookmark}>
           {bookmarked ? "Bookmarked" : "Bookmark"}

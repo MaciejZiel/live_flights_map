@@ -1486,6 +1486,12 @@
     if (type === "type_code") {
       return "Type";
     }
+    if (type === "airport") {
+      return "Airport";
+    }
+    if (type === "area") {
+      return "Area";
+    }
 
     return "Rule";
   }
@@ -1497,7 +1503,9 @@
     }
 
     const duplicate = alertRules.some(
-      (existingRule) => existingRule.type === rule.type && existingRule.query.toLowerCase() === normalizedQuery
+      (existingRule) =>
+        existingRule.type === rule.type &&
+        existingRule.query.toLowerCase() === normalizedQuery
     );
     if (duplicate) {
       return;
@@ -1508,6 +1516,7 @@
         id: crypto.randomUUID(),
         type: rule.type,
         query: rule.query.trim(),
+        payload: rule.payload ?? null,
       },
       ...alertRules,
     ].slice(0, 12);
@@ -1619,6 +1628,25 @@
 
         if (rule.type === "type_code") {
           return (flight.type_code ?? "").toLowerCase().includes(normalizedQuery);
+        }
+
+        if (rule.type === "airport") {
+          const radiusKm = Number(rule.payload?.radiusKm ?? 48);
+          return (
+            Number.isFinite(rule.payload?.latitude) &&
+            Number.isFinite(rule.payload?.longitude) &&
+            calculateDistanceKm(
+              flight.latitude,
+              flight.longitude,
+              {
+                center: [rule.payload.latitude, rule.payload.longitude],
+              }
+            ) <= radiusKm
+          );
+        }
+
+        if (rule.type === "area") {
+          return isFlightInsideBbox(flight, rule.payload?.bbox ?? null);
         }
 
         return flight.icao24.includes(normalizedQuery);
@@ -1736,6 +1764,26 @@
     });
   }
 
+  function addSelectedAirportAlert() {
+    if (!selectedAirport) {
+      return;
+    }
+
+    if (!Number.isFinite(selectedAirport.latitude) || !Number.isFinite(selectedAirport.longitude)) {
+      return;
+    }
+
+    addAlertRule({
+      type: "airport",
+      query: normalizeAirportKey(selectedAirport),
+      payload: {
+        latitude: selectedAirport.latitude,
+        longitude: selectedAirport.longitude,
+        radiusKm: 48,
+      },
+    });
+  }
+
   function addEntityContextAlert() {
     if (!selectedEntityContext) {
       return;
@@ -1750,7 +1798,14 @@
     }
 
     if (selectedEntityContext.entity_type === "location") {
-      pushAlertEvent(`Monitoring focus saved for ${selectedEntityContext.label ?? "selected area"}.`);
+      addAlertRule({
+        type: "area",
+        query: selectedEntityContext.label ?? selectedEntityContext.entity_key ?? "saved area",
+        payload: {
+          bbox: selectedEntityContext.bbox ?? null,
+        },
+      });
+      return;
     }
   }
 
@@ -4730,6 +4785,9 @@
           </div>
         {:else if selectedAirport}
           <div class="rail-actions">
+            <button class="rail-toggle" type="button" on:click={addSelectedAirportAlert}>
+              Alert
+            </button>
             <button
               class:active={selectedAirportBookmarked}
               class="rail-toggle"
@@ -5008,6 +5066,7 @@
               weatherLayerEnabled = !weatherLayerEnabled;
             }}
             onToggleBookmark={() => toggleEntityBookmark(selectedAirport)}
+            onAddAlert={addSelectedAirportAlert}
           />
         {:else if selectedEntityContext}
           <section class="panel aircraft-workflow-panel">

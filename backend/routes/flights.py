@@ -291,7 +291,43 @@ def airport_weather(airport_code: str):
 @api.get("/workspace/profiles")
 def list_workspace_profiles():
     service = current_app.extensions["workspace_service"]
-    return jsonify(service.list_profiles())
+    account_id = _normalize_text(request.args.get("account_id"))
+    try:
+        return jsonify(service.list_profiles(account_id=account_id))
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+
+@api.get("/workspace/accounts")
+def list_workspace_accounts():
+    service = current_app.extensions["workspace_service"]
+    return jsonify(service.list_accounts())
+
+
+@api.post("/workspace/accounts")
+def create_workspace_account():
+    try:
+        payload = _parse_json_body()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    display_name = _normalize_text(
+        payload.get("display_name") if isinstance(payload, dict) else None
+    )
+    if not display_name:
+        return jsonify({"error": "Missing 'display_name'."}), 400
+
+    email = _normalize_text(payload.get("email") if isinstance(payload, dict) else None)
+
+    try:
+        account_payload = current_app.extensions["workspace_service"].create_account(
+            display_name,
+            email=email,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(account_payload), 201
 
 
 @api.post("/workspace/profiles")
@@ -307,11 +343,15 @@ def create_workspace_profile():
     role = _normalize_text(payload.get("role") if isinstance(payload, dict) else None)
     if not role:
         role = "analyst"
+    account_id = _normalize_text(
+        payload.get("account_id") if isinstance(payload, dict) else None
+    )
 
     try:
         profile = current_app.extensions["workspace_service"].create_profile(
             display_name,
             role=role,
+            account_id=account_id,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
@@ -322,7 +362,14 @@ def create_workspace_profile():
 @api.get("/workspace/state")
 def get_workspace_state():
     profile_id = _normalize_text(request.args.get("profile_id"))
-    payload = current_app.extensions["workspace_service"].get_workspace_state(profile_id)
+    account_id = _normalize_text(request.args.get("account_id"))
+    try:
+        payload = current_app.extensions["workspace_service"].get_workspace_state(
+            profile_id=profile_id,
+            account_id=account_id,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(payload)
 
 
@@ -341,12 +388,15 @@ def save_workspace_state():
     if state is not None and not isinstance(state, dict):
         return jsonify({"error": "Expected 'state' to be a JSON object."}), 400
 
-    return jsonify(
-        current_app.extensions["workspace_service"].save_workspace_state(
+    try:
+        payload = current_app.extensions["workspace_service"].save_workspace_state(
             profile_id=profile_id,
             state=state,
         )
-    )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify(payload)
 
 
 @api.get("/traffic/leaderboard")

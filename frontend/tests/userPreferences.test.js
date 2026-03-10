@@ -11,6 +11,7 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
       airportFlow: "departures",
       trafficCategory: "cargo",
     },
+    workspaceAccountId: "ops-account",
     selectedAirportCode: "waw",
     replayWindowMinutes: 180,
     replayPlaybackSpeed: 1.5,
@@ -33,6 +34,7 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
     recentActivity: "any",
     dimFilteredTraffic: true,
   });
+  assert.equal(normalized.workspaceAccountId, "ops-account");
   assert.equal(normalized.selectedAirportCode, "WAW");
   assert.equal(normalized.replayWindowMinutes, 180);
   assert.equal(normalized.replayPlaybackSpeed, 1.5);

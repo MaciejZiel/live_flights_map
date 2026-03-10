@@ -185,28 +185,52 @@ export async function fetchAirportWeather(stationCode) {
   return parseApiResponse(response, "Failed to load airport weather.");
 }
 
-export async function fetchWorkspaceProfiles() {
+export async function fetchWorkspaceProfiles(accountId = null) {
   const url = createApiUrl("/api/workspace/profiles");
+  if (accountId) {
+    url.searchParams.set("account_id", String(accountId));
+  }
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
   return parseApiResponse(response, "Failed to load workspace profiles.");
 }
 
-export async function createWorkspaceProfile(displayName, role = "analyst") {
+export async function fetchWorkspaceAccounts() {
+  const url = createApiUrl("/api/workspace/accounts");
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load workspace accounts.");
+}
+
+export async function createWorkspaceAccount(displayName, email = "") {
+  const url = createApiUrl("/api/workspace/accounts");
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ display_name: displayName, email }),
+  });
+  return parseApiResponse(response, "Failed to create a workspace account.");
+}
+
+export async function createWorkspaceProfile(displayName, role = "analyst", accountId = null) {
   const url = createApiUrl("/api/workspace/profiles");
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ display_name: displayName, role }),
+    body: JSON.stringify({ display_name: displayName, role, account_id: accountId }),
   });
   return parseApiResponse(response, "Failed to create a workspace profile.");
 }
 
-export async function fetchWorkspaceState(profileId) {
+export async function fetchWorkspaceState(profileId, options = {}) {
   const url = createApiUrl("/api/workspace/state");
   if (profileId) {
     url.searchParams.set("profile_id", profileId);
+  }
+  if (options.accountId) {
+    url.searchParams.set("account_id", String(options.accountId));
   }
 
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);

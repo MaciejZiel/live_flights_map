@@ -77,6 +77,7 @@ class DiagnosticsService:
         return self._summarize_sqlite(
             path=self.workspace_service.workspace_path,
             count_queries={
+                "account_rows": "SELECT COUNT(*) FROM accounts",
                 "profile_rows": "SELECT COUNT(*) FROM profiles",
                 "state_rows": "SELECT COUNT(*) FROM workspace_state",
             },

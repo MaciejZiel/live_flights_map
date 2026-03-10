@@ -150,6 +150,10 @@ export function normalizeUserPreferences(value) {
     savedEntities: Array.isArray(value.savedEntities) ? value.savedEntities : [],
     weatherLayerEnabled: sanitizeBoolean(value.weatherLayerEnabled, false),
     showAirportMarkers: sanitizeBoolean(value.showAirportMarkers, true),
+    workspaceAccountId:
+      typeof value.workspaceAccountId === "string" && value.workspaceAccountId.trim()
+        ? value.workspaceAccountId.trim()
+        : null,
     selectedAirportCode:
       typeof value.selectedAirportCode === "string" && value.selectedAirportCode.trim()
         ? value.selectedAirportCode.trim().toUpperCase()

@@ -18,6 +18,7 @@
   import SavedViewsPanel from "./lib/components/SavedViewsPanel.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import {
+    createWorkspaceAccount,
     createWorkspaceProfile,
     fetchAirportDashboard,
     fetchAirports,
@@ -26,6 +27,7 @@
     fetchGlobalTrafficBoard,
     fetchFlightTrail,
     fetchReplayHistory,
+    fetchWorkspaceAccounts,
     fetchWorkspaceProfiles,
     fetchWorkspaceState,
     saveWorkspaceState,
@@ -136,6 +138,8 @@
   let sortBy = "altitude_desc";
   let theme = "dark";
   let onboardingDismissed = false;
+  let workspaceAccounts = [];
+  let activeWorkspaceAccountId = null;
   let workspaceProfiles = [];
   let activeWorkspaceProfileId = null;
   let workspaceSyncStatus = "idle";
@@ -144,6 +148,8 @@
   let workspaceHydrating = false;
   let workspaceReady = false;
   let workspaceSaveTimer = null;
+  let workspaceAccountDraft = "";
+  let workspaceAccountEmailDraft = "";
   let workspaceProfileDraft = "";
   let workspaceProfileRoleDraft = "analyst";
   let isMobileViewport = false;
@@ -272,6 +278,8 @@
       savedEntities = savedPreferences.savedEntities ?? savedEntities;
       weatherLayerEnabled = savedPreferences.weatherLayerEnabled ?? weatherLayerEnabled;
       showAirportMarkers = savedPreferences.showAirportMarkers ?? showAirportMarkers;
+      activeWorkspaceAccountId =
+        savedPreferences.workspaceAccountId ?? activeWorkspaceAccountId;
       selectedAirportCode = savedPreferences.selectedAirportCode ?? selectedAirportCode;
       replayWindowMinutes = savedPreferences.replayWindowMinutes ?? replayWindowMinutes;
       replayPlaybackSpeed = savedPreferences.replayPlaybackSpeed ?? replayPlaybackSpeed;
@@ -735,27 +743,6 @@
     };
   }
 
-  function hasMeaningfulWorkspaceState(workspaceState) {
-    if (!workspaceState || typeof workspaceState !== "object") {
-      return false;
-    }
-
-    return Boolean(
-      Object.keys(workspaceState.filters ?? {}).length ||
-        (workspaceState.filterPresets ?? []).length ||
-        (workspaceState.watchlist ?? []).length ||
-        (workspaceState.savedEntities ?? []).length ||
-        (workspaceState.monitoringSessions ?? []).length ||
-        (workspaceState.savedViews ?? []).length ||
-        Object.keys(workspaceState.flightAnnotations ?? {}).length ||
-        (workspaceState.alertRules ?? []).length ||
-        workspaceState.mapStyle !== "standard" ||
-        workspaceState.theme !== "dark" ||
-        workspaceState.weatherLayerEnabled ||
-        workspaceState.showAirportMarkers === false
-    );
-  }
-
   function applyWorkspaceState(workspaceState) {
     const normalizedWorkspaceState = normalizeUserPreferences(workspaceState);
     if (!normalizedWorkspaceState) {
@@ -793,7 +780,7 @@
       normalizedWorkspaceState.replayPlaybackSpeed ?? replayPlaybackSpeed;
   }
 
-  async function loadWorkspaceProfile(profileId) {
+  async function loadWorkspaceProfile(profileId, options = {}) {
     if (!profileId) {
       return;
     }
@@ -803,12 +790,14 @@
     workspaceSyncError = null;
 
     try {
-      const payload = await fetchWorkspaceState(profileId);
+      const payload = await fetchWorkspaceState(profileId, {
+        accountId: options.accountId ?? activeWorkspaceAccountId,
+      });
+      activeWorkspaceAccountId =
+        payload.account?.id ?? options.accountId ?? activeWorkspaceAccountId;
       activeWorkspaceProfileId = payload.profile?.id ?? profileId;
       workspaceUpdatedAt = payload.updated_at ?? null;
-      if (hasMeaningfulWorkspaceState(payload.state)) {
-        applyWorkspaceState(payload.state);
-      }
+      applyWorkspaceState(payload.state);
       workspaceSyncStatus = "success";
       workspaceReady = true;
     } catch (error) {
@@ -819,16 +808,89 @@
     }
   }
 
+  async function refreshWorkspaceAccounts(preferredAccountId = activeWorkspaceAccountId) {
+    const accountsPayload = await fetchWorkspaceAccounts();
+    workspaceAccounts = accountsPayload.accounts ?? [];
+
+    if (
+      preferredAccountId &&
+      workspaceAccounts.some((account) => account.id === preferredAccountId)
+    ) {
+      activeWorkspaceAccountId = preferredAccountId;
+      return preferredAccountId;
+    }
+
+    activeWorkspaceAccountId = workspaceAccounts[0]?.id ?? null;
+    return activeWorkspaceAccountId;
+  }
+
+  async function loadWorkspaceProfiles(accountId, options = {}) {
+    const resolvedAccountId = accountId ?? activeWorkspaceAccountId;
+    if (!resolvedAccountId) {
+      workspaceProfiles = [];
+      activeWorkspaceProfileId = null;
+      workspaceReady = false;
+      return;
+    }
+
+    const profilesPayload = await fetchWorkspaceProfiles(resolvedAccountId);
+    workspaceProfiles = profilesPayload.profiles ?? [];
+    activeWorkspaceAccountId =
+      profilesPayload.account?.id ?? resolvedAccountId;
+    const profileToLoad =
+      options.profileId ??
+      workspaceProfiles.find((profile) => profile.id === activeWorkspaceProfileId)?.id ??
+      workspaceProfiles[0]?.id ??
+      null;
+
+    if (profileToLoad) {
+      await loadWorkspaceProfile(profileToLoad, {
+        accountId: activeWorkspaceAccountId,
+      });
+      return;
+    }
+
+    activeWorkspaceProfileId = null;
+    workspaceReady = false;
+    workspaceSyncStatus = "idle";
+  }
+
+  async function loadWorkspaceAccount(accountId) {
+    if (!accountId) {
+      return;
+    }
+
+    if (workspaceSaveTimer && typeof window !== "undefined") {
+      window.clearTimeout(workspaceSaveTimer);
+      workspaceSaveTimer = null;
+    }
+
+    workspaceSyncStatus = "loading";
+    workspaceSyncError = null;
+    workspaceHydrating = true;
+    activeWorkspaceAccountId = accountId;
+    activeWorkspaceProfileId = null;
+    workspaceReady = false;
+
+    try {
+      await loadWorkspaceProfiles(accountId);
+    } catch (error) {
+      workspaceSyncStatus = "error";
+      workspaceSyncError = error instanceof Error ? error.message : "Failed to load workspace account.";
+    } finally {
+      workspaceHydrating = false;
+    }
+  }
+
   async function initializeWorkspace() {
     workspaceSyncStatus = "loading";
     workspaceSyncError = null;
 
     try {
-      const profilesPayload = await fetchWorkspaceProfiles();
-      workspaceProfiles = profilesPayload.profiles ?? [];
-      const initialProfileId = workspaceProfiles[0]?.id ?? null;
-      if (initialProfileId) {
-        await loadWorkspaceProfile(initialProfileId);
+      const preferredAccountId = await refreshWorkspaceAccounts(activeWorkspaceAccountId);
+
+      if (preferredAccountId) {
+        await loadWorkspaceAccount(preferredAccountId);
       } else {
         workspaceSyncStatus = "idle";
       }
@@ -838,21 +900,43 @@
     }
   }
 
+  async function createWorkspaceAccountAndDesk() {
+    const normalizedName = workspaceAccountDraft.trim();
+    const normalizedEmail = workspaceAccountEmailDraft.trim();
+    if (!normalizedName) {
+      return;
+    }
+
+    try {
+      const payload = await createWorkspaceAccount(normalizedName, normalizedEmail);
+      workspaceAccountDraft = "";
+      workspaceAccountEmailDraft = "";
+      await refreshWorkspaceAccounts(payload.account.id);
+      await loadWorkspaceAccount(payload.account.id);
+    } catch (error) {
+      workspaceSyncStatus = "error";
+      workspaceSyncError = error instanceof Error ? error.message : "Failed to create a workspace account.";
+    }
+  }
+
   async function createWorkspaceDesk() {
     const normalizedName = workspaceProfileDraft.trim();
-    if (!normalizedName) {
+    if (!normalizedName || !activeWorkspaceAccountId) {
       return;
     }
 
     try {
       const payload = await createWorkspaceProfile(
         normalizedName,
-        workspaceProfileRoleDraft
+        workspaceProfileRoleDraft,
+        activeWorkspaceAccountId
       );
       workspaceProfileDraft = "";
       workspaceProfileRoleDraft = "analyst";
-      workspaceProfiles = [payload.profile, ...workspaceProfiles];
-      await loadWorkspaceProfile(payload.profile.id);
+      await refreshWorkspaceAccounts(activeWorkspaceAccountId);
+      await loadWorkspaceProfiles(activeWorkspaceAccountId, {
+        profileId: payload.profile.id,
+      });
     } catch (error) {
       workspaceSyncStatus = "error";
       workspaceSyncError = error instanceof Error ? error.message : "Failed to create a workspace profile.";
@@ -3925,6 +4009,7 @@
   }
   $: if (preferencesReady) {
     syncThemeClass(theme);
+    activeWorkspaceAccountId;
     saveUserPreferences({
       filters,
       mapStyle,
@@ -3943,6 +4028,7 @@
       savedEntities,
       weatherLayerEnabled,
       showAirportMarkers,
+      workspaceAccountId: activeWorkspaceAccountId,
       selectedAirportCode,
       replayWindowMinutes,
       replayPlaybackSpeed,
@@ -4752,7 +4838,7 @@
               </div>
             </div>
             <p class="widget-empty">
-              Profiles now sync filters, bookmarks, notes and replay sessions to the backend workspace store while local cache stays as fallback.
+              Accounts and desk profiles now sync filters, bookmarks, notes and replay sessions to the backend workspace store while local cache stays as fallback.
             </p>
           </section>
 
@@ -4787,17 +4873,29 @@
           <details class="utility-drawer" open={false}>
             <summary>
               <span>Profiles</span>
-              <strong>{workspaceProfiles.length}</strong>
+              <strong>{workspaceAccounts.length}/{workspaceProfiles.length}</strong>
             </summary>
             <div class="utility-drawer-body">
               <WorkspaceProfilesPanel
+                accounts={workspaceAccounts}
+                activeAccountId={activeWorkspaceAccountId}
                 profiles={workspaceProfiles}
                 activeProfileId={activeWorkspaceProfileId}
                 syncStatus={workspaceSyncStatus}
                 updatedAt={workspaceUpdatedAt}
+                accountDraftName={workspaceAccountDraft}
+                accountDraftEmail={workspaceAccountEmailDraft}
                 draftName={workspaceProfileDraft}
                 draftRole={workspaceProfileRoleDraft}
                 syncError={workspaceSyncError}
+                onSelectAccount={loadWorkspaceAccount}
+                onAccountDraftChange={(value) => {
+                  workspaceAccountDraft = value;
+                }}
+                onAccountEmailChange={(value) => {
+                  workspaceAccountEmailDraft = value;
+                }}
+                onCreateAccount={createWorkspaceAccountAndDesk}
                 onSelectProfile={loadWorkspaceProfile}
                 onDraftChange={(value) => {
                   workspaceProfileDraft = value;

@@ -79,6 +79,7 @@
     aircraftType: "",
     country: "",
     operator: "",
+    route: "",
     trafficState: "all",
     trafficCategory: "all",
     headingBand: "any",
@@ -359,6 +360,7 @@
       aircraftType: "",
       country: "",
       operator: "",
+      route: "",
       trafficState: "all",
       trafficCategory: "all",
       headingBand: "any",
@@ -374,6 +376,7 @@
       normalizedFilters.aircraftType.trim(),
       normalizedFilters.country.trim(),
       normalizedFilters.operator.trim(),
+      normalizedFilters.route.trim(),
       normalizedFilters.trafficState !== "all",
       normalizedFilters.trafficCategory !== "all",
       normalizedFilters.headingBand !== "any",
@@ -986,6 +989,30 @@
       return flights.filter((flight) => isFlightInsideBbox(flight, entity.bbox));
     }
 
+    if (entity.entity_type === "route") {
+      const target = String(entity.entity_key ?? entity.label ?? "").trim().toLowerCase();
+      if (!target) {
+        return [];
+      }
+
+      return flights.filter((flight) =>
+        [
+          flight.route_label,
+          flight.route_verbose,
+          flight.airport_codes,
+          flight.iata_codes,
+          flight.origin,
+          flight.destination,
+          flight.origin_iata,
+          flight.origin_icao,
+          flight.destination_iata,
+          flight.destination_icao,
+        ]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(target))
+      );
+    }
+
     return [];
   }
 
@@ -1187,6 +1214,7 @@
     const sharedAircraftType = params.get("typeCode");
     const sharedCountry = params.get("country");
     const sharedOperator = params.get("operator");
+    const sharedRoute = params.get("route");
     const sharedTrafficState = params.get("flightState");
     const sharedCategory = params.get("category");
     const sharedHeadingBand = params.get("heading");
@@ -1230,6 +1258,10 @@
 
     if (sharedOperator !== null) {
       nextFilters.operator = sharedOperator;
+    }
+
+    if (sharedRoute !== null) {
+      nextFilters.route = sharedRoute;
     }
 
     if (["all", "airborne", "ground"].includes(sharedTrafficState)) {
@@ -1332,6 +1364,12 @@
       params.set("operator", filters.operator.trim());
     } else {
       params.delete("operator");
+    }
+
+    if (filters.route.trim()) {
+      params.set("route", filters.route.trim());
+    } else {
+      params.delete("route");
     }
 
     if (filters.trafficState !== "all") {
@@ -2249,6 +2287,10 @@
       };
       openEntityContext(result);
     } else if (result.entity_type === "route") {
+      filters = {
+        ...filters,
+        route: result.entity_key ?? result.label ?? "",
+      };
       openEntityContext(result);
     } else {
       openEntityContext(result);
@@ -2324,6 +2366,7 @@
       aircraftType: "",
       country: "",
       operator: "",
+      route: "",
       trafficState: "all",
       trafficCategory: "all",
       headingBand: "any",
@@ -2417,6 +2460,11 @@
 
     if (tokenKey === "operator") {
       filters = { ...filters, operator: "" };
+      return;
+    }
+
+    if (tokenKey === "route") {
+      filters = { ...filters, route: "" };
       return;
     }
 
@@ -2932,9 +2980,49 @@
   }
 
   function deriveOperatorCode(flight) {
+    const explicitCode = (flight?.operator_code ?? flight?.airline_code ?? "").trim().toUpperCase();
+    if (explicitCode) {
+      return explicitCode;
+    }
+
     const rawCallsign = (flight.callsign ?? "").trim().toUpperCase();
     const match = rawCallsign.match(/^[A-Z]{3}/);
     return match ? match[0] : "";
+  }
+
+  function getFlightSearchFields(flight) {
+    return [
+      flight?.icao24,
+      flight?.callsign,
+      flight?.registration,
+      flight?.type_code,
+      flight?.origin_country,
+      flight?.operator_code,
+      flight?.airline_code,
+      flight?.flight_number,
+      flight?.route_label,
+      flight?.route_verbose,
+      flight?.airport_codes,
+      flight?.iata_codes,
+      flight?.origin,
+      flight?.destination,
+      flight?.origin_iata,
+      flight?.origin_icao,
+      flight?.origin_name,
+      flight?.destination_iata,
+      flight?.destination_icao,
+      flight?.destination_name,
+    ]
+      .filter(Boolean)
+      .map((value) => String(value).toLowerCase());
+  }
+
+  function matchesFlightSearch(flight, query) {
+    if (!query) {
+      return true;
+    }
+
+    return getFlightSearchFields(flight).some((value) => value.includes(query));
   }
 
   function matchesHeadingBand(track, band) {
@@ -3071,6 +3159,7 @@
   $: normalizedAircraftTypeFilter = filters.aircraftType.trim().toLowerCase();
   $: normalizedCountryFilter = filters.country.trim().toLowerCase();
   $: normalizedOperatorFilter = filters.operator.trim().toLowerCase();
+  $: normalizedRouteFilter = filters.route.trim().toLowerCase();
   $: activeMonitoringSession =
     monitoringSessions.find((session) => session.id === activeMonitoringSessionId) ?? null;
   $: activeWorkspaceProfile =
@@ -3085,12 +3174,7 @@
   $: activeFilterCount = countActiveFilters(filters);
   $: filteredFlights = replayFlights.filter((flight) => {
     const operatorCode = deriveOperatorCode(flight).toLowerCase();
-    const matchesQuery =
-      !normalizedQuery ||
-      flight.icao24.includes(normalizedQuery) ||
-      (flight.callsign ?? "").toLowerCase().includes(normalizedQuery) ||
-      (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery) ||
-      operatorCode.includes(normalizedQuery);
+    const matchesQuery = matchesFlightSearch(flight, normalizedQuery);
 
     const matchesAltitude =
       !hasMinimumAltitude ||
@@ -3111,7 +3195,28 @@
       (flight.origin_country ?? "").toLowerCase().includes(normalizedCountryFilter);
 
     const matchesOperator =
-      !normalizedOperatorFilter || operatorCode.includes(normalizedOperatorFilter);
+      !normalizedOperatorFilter ||
+      operatorCode.includes(normalizedOperatorFilter) ||
+      (flight.airline_code ?? "").toLowerCase().includes(normalizedOperatorFilter);
+
+    const matchesRoute =
+      !normalizedRouteFilter ||
+      [
+        flight.route_label,
+        flight.route_verbose,
+        flight.airport_codes,
+        flight.iata_codes,
+        flight.origin,
+        flight.destination,
+        flight.origin_iata,
+        flight.origin_icao,
+        flight.origin_name,
+        flight.destination_iata,
+        flight.destination_icao,
+        flight.destination_name,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(normalizedRouteFilter));
 
     const matchesTrafficState =
       filters.trafficState === "all" ||
@@ -3146,6 +3251,7 @@
       matchesAircraftType &&
       matchesCountry &&
       matchesOperator &&
+      matchesRoute &&
       matchesTrafficState &&
       matchesCategory &&
       matchesHeading &&
@@ -3216,6 +3322,7 @@
       : null,
     filters.country.trim() ? { key: "country", label: `Country: ${filters.country.trim()}` } : null,
     filters.operator.trim() ? { key: "operator", label: `Operator: ${filters.operator.trim().toUpperCase()}` } : null,
+    filters.route.trim() ? { key: "route", label: `Route/airport: ${filters.route.trim().toUpperCase()}` } : null,
     filters.trafficState !== "all"
       ? {
           key: "trafficState",
@@ -3980,6 +4087,21 @@
                     filters = {
                       ...filters,
                       operator: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
+                <span>Route / airport</span>
+                <input
+                  type="text"
+                  value={filters.route}
+                  placeholder="WAW, EHAM, WAW-JFK"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      route: event.currentTarget.value,
                     };
                   }}
                 />

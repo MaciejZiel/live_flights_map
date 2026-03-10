@@ -18,10 +18,23 @@
     return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
   }
 
-  function deriveOperatorCode(callsign) {
-    const normalizedCallsign = (callsign ?? "").trim().toUpperCase();
+  function deriveOperatorCode(flight) {
+    const explicitCode = (flight?.operator_code ?? flight?.airline_code ?? "").trim().toUpperCase();
+    if (explicitCode) {
+      return explicitCode;
+    }
+
+    const normalizedCallsign = (flight?.callsign ?? "").trim().toUpperCase();
     const match = normalizedCallsign.match(/^[A-Z]{3}/);
     return match ? match[0] : "N/A";
+  }
+
+  function buildFlightSubtitle(flight) {
+    return (
+      flight?.route_label ??
+      flight?.iata_codes ??
+      [flight?.origin_country ?? "Unknown", deriveOperatorCode(flight)].filter(Boolean).join(" · ")
+    );
   }
 
   $: boardFlights = flights;
@@ -37,7 +50,7 @@
     <button class="featured-card" type="button" on:click={() => onSelectFlight(featuredFlight.icao24)}>
       <span class="featured-kicker">Fastest in view</span>
       <strong>{featuredFlight.callsign ?? featuredFlight.icao24}</strong>
-      <p>{featuredFlight.origin_country ?? "Unknown"} · {deriveOperatorCode(featuredFlight.callsign)}</p>
+      <p>{buildFlightSubtitle(featuredFlight)}</p>
       <div class="featured-metrics">
         <span>
           <strong>{formatSpeed(featuredFlight.velocity)}</strong>
@@ -64,7 +77,7 @@
           <span class="board-rank">{index + 1}</span>
           <span class="board-main">
             <strong>{flight.callsign ?? flight.icao24}</strong>
-            <span>{flight.origin_country ?? "Unknown"} · {deriveOperatorCode(flight.callsign)}</span>
+            <span>{buildFlightSubtitle(flight)}</span>
           </span>
           <span class="board-metric">
             <strong>{formatAltitude(flight.altitude)}</strong>

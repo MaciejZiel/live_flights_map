@@ -94,6 +94,7 @@ function sanitizeFilters(value) {
     aircraftType: sanitizeString(value.aircraftType),
     country: sanitizeString(value.country),
     operator: sanitizeString(value.operator),
+    route: sanitizeString(value.route),
     trafficState: sanitizeOption(
       sanitizeString(value.trafficState, "all"),
       TRAFFIC_STATE_OPTIONS,

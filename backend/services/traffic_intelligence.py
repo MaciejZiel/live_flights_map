@@ -537,6 +537,122 @@ class TrafficIntelligenceService:
             if row["route_label"] or row["airport_codes"] or row["iata_codes"]
         ]
 
+    def enrich_flights(
+        self,
+        flights: list[dict[str, object]],
+    ) -> list[dict[str, object]]:
+        normalized_ids = []
+        seen_ids = set()
+        for flight in flights:
+            icao24 = self._normalize_text(
+                flight.get("icao24") if isinstance(flight, dict) else None,
+                uppercase=False,
+            )
+            if not icao24 or icao24 in seen_ids:
+                continue
+            seen_ids.add(icao24)
+            normalized_ids.append(icao24)
+
+        if not normalized_ids:
+            return flights
+
+        placeholders = ", ".join("?" for _ in normalized_ids)
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    f"""
+                    SELECT
+                        icao24,
+                        callsign,
+                        registration,
+                        type_code,
+                        operator_code,
+                        airline_code,
+                        flight_number,
+                        route_label,
+                        route_verbose,
+                        airport_codes,
+                        iata_codes,
+                        origin_icao,
+                        origin_iata,
+                        origin_name,
+                        destination_icao,
+                        destination_iata,
+                        destination_name,
+                        updated_at
+                    FROM enriched_flights
+                    WHERE icao24 IN ({placeholders})
+                    """,
+                    normalized_ids,
+                ).fetchall()
+            finally:
+                connection.close()
+
+        enrichments = {row["icao24"]: row for row in rows}
+        enriched_flights = []
+
+        for flight in flights:
+            if not isinstance(flight, dict):
+                enriched_flights.append(flight)
+                continue
+
+            icao24 = self._normalize_text(flight.get("icao24"), uppercase=False)
+            enrichment = enrichments.get(icao24)
+            if not enrichment:
+                enriched_flights.append(flight)
+                continue
+
+            enriched_flights.append(
+                {
+                    **flight,
+                    "callsign": flight.get("callsign") or enrichment["callsign"],
+                    "registration": flight.get("registration")
+                    or enrichment["registration"],
+                    "type_code": flight.get("type_code") or enrichment["type_code"],
+                    "operator_code": enrichment["operator_code"]
+                    or flight.get("operator_code"),
+                    "airline_code": enrichment["airline_code"]
+                    or flight.get("airline_code")
+                    or enrichment["operator_code"],
+                    "flight_number": enrichment["flight_number"]
+                    or flight.get("flight_number"),
+                    "route_label": enrichment["route_label"]
+                    or flight.get("route_label")
+                    or enrichment["iata_codes"]
+                    or enrichment["airport_codes"],
+                    "route_verbose": enrichment["route_verbose"]
+                    or flight.get("route_verbose"),
+                    "airport_codes": enrichment["airport_codes"]
+                    or flight.get("airport_codes"),
+                    "iata_codes": enrichment["iata_codes"] or flight.get("iata_codes"),
+                    "origin_icao": enrichment["origin_icao"]
+                    or flight.get("origin_icao"),
+                    "origin_iata": enrichment["origin_iata"]
+                    or flight.get("origin_iata"),
+                    "origin_name": enrichment["origin_name"]
+                    or flight.get("origin_name"),
+                    "destination_icao": enrichment["destination_icao"]
+                    or flight.get("destination_icao"),
+                    "destination_iata": enrichment["destination_iata"]
+                    or flight.get("destination_iata"),
+                    "destination_name": enrichment["destination_name"]
+                    or flight.get("destination_name"),
+                    "origin": enrichment["origin_iata"]
+                    or enrichment["origin_icao"]
+                    or enrichment["origin_name"]
+                    or flight.get("origin"),
+                    "destination": enrichment["destination_iata"]
+                    or enrichment["destination_icao"]
+                    or enrichment["destination_name"]
+                    or flight.get("destination"),
+                    "intelligence_updated_at": enrichment["updated_at"],
+                }
+            )
+
+        return enriched_flights
+
     def list_airport_movements(
         self,
         airport_codes: list[str],

@@ -89,6 +89,39 @@ def _parse_json_body() -> dict[str, object]:
     return payload
 
 
+def _enrich_live_payload(payload: dict[str, object]) -> dict[str, object]:
+    flights = payload.get("flights")
+    if not isinstance(flights, list) or not flights:
+        return payload
+
+    service = current_app.extensions.get("traffic_intelligence_service")
+    if service is None:
+        return payload
+
+    try:
+        enriched_flights = service.enrich_flights(flights)
+    except Exception:
+        return payload
+
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        meta = {
+            **meta,
+            "intelligence_enriched": sum(
+                1
+                for flight in enriched_flights
+                if isinstance(flight, dict) and flight.get("intelligence_updated_at")
+            ),
+        }
+
+    return {
+        **payload,
+        "flights": enriched_flights,
+        "count": len(enriched_flights),
+        **({"meta": meta} if isinstance(meta, dict) else {}),
+    }
+
+
 @api.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = current_app.config[
@@ -113,7 +146,7 @@ def list_flights():
     except FlightProviderError as exc:
         return jsonify({"error": str(exc)}), 502
 
-    return jsonify(flights_payload)
+    return jsonify(_enrich_live_payload(flights_payload))
 
 
 @api.get("/flights/<icao24>/details")
@@ -319,7 +352,7 @@ def global_traffic_leaderboard():
     except FlightProviderError as exc:
         return jsonify({"error": str(exc)}), 502
 
-    return jsonify(payload)
+    return jsonify(_enrich_live_payload(payload))
 
 
 @api.get("/flights/stream")
@@ -339,7 +372,7 @@ def stream_flights():
         while True:
             try:
                 flights_payload = service.get_flights(bbox=bbox)
-                yield _build_sse_event("snapshot", flights_payload)
+                yield _build_sse_event("snapshot", _enrich_live_payload(flights_payload))
             except FlightProviderError as exc:
                 yield _build_sse_event("upstream_error", {"error": str(exc)})
 

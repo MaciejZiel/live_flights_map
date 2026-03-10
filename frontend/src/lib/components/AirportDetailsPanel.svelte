@@ -5,6 +5,9 @@
   export let dashboard = null;
   export let status = "idle";
   export let error = null;
+  export let weather = null;
+  export let weatherStatus = "idle";
+  export let weatherError = null;
   export let weatherLayerEnabled = false;
   export let bookmarked = false;
   export let onSelectFlight = () => {};
@@ -55,6 +58,15 @@
       1,
       ...entries.map((entry) => Math.max(entry.arrivals ?? 0, entry.departures ?? 0))
     );
+  }
+
+  function getWeatherValue(...values) {
+    for (const value of values) {
+      if (value !== null && value !== undefined && value !== "") {
+        return value;
+      }
+    }
+    return null;
   }
 
   $: if (airport?.entity_key !== lastAirportKey) {
@@ -207,6 +219,49 @@
           </div>
         {:else}
           <p class="airport-copy">No recent airport history has been archived yet.</p>
+        {/if}
+      </section>
+
+      <section class="airport-section">
+        <div class="section-header">
+          <strong>Airport weather</strong>
+          <span>{weatherStatus === "success" ? "METAR" : weatherStatus === "loading" || weatherStatus === "refreshing" ? "Loading" : "Pending"}</span>
+        </div>
+
+        {#if weather}
+          <div class="weather-grid">
+            <article>
+              <span>Raw METAR</span>
+              <strong>{getWeatherValue(weather.rawOb, weather.raw_text, "Unavailable")}</strong>
+            </article>
+            <article>
+              <span>Temperature</span>
+              <strong>{getWeatherValue(weather.temp, weather.tempC, weather.temperature) ?? "n/a"}{#if getWeatherValue(weather.temp, weather.tempC, weather.temperature) !== null}°C{/if}</strong>
+            </article>
+            <article>
+              <span>Wind</span>
+              <strong>
+                {#if getWeatherValue(weather.wdir, weather.windDir, weather.wind_direction) !== null}
+                  {getWeatherValue(weather.wdir, weather.windDir, weather.wind_direction)}°
+                {:else}
+                  Variable
+                {/if}
+                {" "}
+                {getWeatherValue(weather.wspd, weather.windSpeed, weather.wind_speed) ?? "n/a"} kt
+              </strong>
+            </article>
+            <article>
+              <span>Visibility</span>
+              <strong>{getWeatherValue(weather.visib, weather.visibility) ?? "n/a"} sm</strong>
+            </article>
+          </div>
+          <p class="airport-copy">
+            {weatherLayerEnabled ? "Weather radar overlay is active on the main map." : "Enable Weather radar to compare the METAR with the live precipitation layer on the map."}
+          </p>
+        {:else if weatherError}
+          <p class="airport-copy">{weatherError}</p>
+        {:else}
+          <p class="airport-copy">Waiting for the latest METAR for this airport.</p>
         {/if}
       </section>
     {:else if activeTab === "arrivals"}
@@ -364,7 +419,8 @@
   }
 
   .airport-stat-grid,
-  .pill-grid {
+  .pill-grid,
+  .weather-grid {
     display: grid;
     gap: 0.5rem;
   }
@@ -373,7 +429,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .weather-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .airport-stat-grid article,
+  .weather-grid article,
   .airport-section {
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 16px;
@@ -387,7 +448,16 @@
     padding: 0.76rem 0.82rem;
   }
 
+  .weather-grid article {
+    display: grid;
+    gap: 0.16rem;
+    padding: 0.72rem 0.76rem;
+    border-radius: 13px;
+    background: rgba(255, 255, 255, 0.03);
+  }
+
   .airport-stat-grid span,
+  .weather-grid span,
   .section-header span {
     font-size: 0.67rem;
     text-transform: uppercase;
@@ -396,6 +466,7 @@
   }
 
   .airport-stat-grid strong,
+  .weather-grid strong,
   .section-header strong {
     color: #f5f7fb;
   }
@@ -534,6 +605,7 @@
   @media (max-width: 720px) {
     .airport-stat-grid,
     .pill-grid,
+    .weather-grid,
     .airport-tab-row {
       grid-template-columns: 1fr;
     }

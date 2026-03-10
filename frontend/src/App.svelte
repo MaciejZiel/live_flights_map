@@ -20,6 +20,7 @@
     createWorkspaceProfile,
     fetchAirportDashboard,
     fetchAirports,
+    fetchAirportWeather,
     fetchFlightDetails,
     fetchGlobalTrafficBoard,
     fetchFlightTrail,
@@ -191,7 +192,11 @@
   let selectedAirportDashboard = null;
   let selectedAirportStatus = "idle";
   let selectedAirportError = null;
+  let selectedAirportWeather = null;
+  let selectedAirportWeatherStatus = "idle";
+  let selectedAirportWeatherError = null;
   let selectedAirportRequestId = 0;
+  let selectedAirportWeatherRequestId = 0;
   let lastSelectedAirportKey = null;
 
   onMount(() => {
@@ -1673,6 +1678,41 @@
     }
   }
 
+  async function loadSelectedAirportWeather(airport) {
+    const stationCode = String(airport?.icao ?? airport?.entity_key ?? "")
+      .trim()
+      .toUpperCase();
+    if (!stationCode) {
+      selectedAirportWeather = null;
+      selectedAirportWeatherStatus = "idle";
+      selectedAirportWeatherError = null;
+      return;
+    }
+
+    const requestId = ++selectedAirportWeatherRequestId;
+    selectedAirportWeatherStatus = selectedAirportWeather ? "refreshing" : "loading";
+    selectedAirportWeatherError = null;
+
+    try {
+      const payload = await fetchAirportWeather(stationCode);
+      if (requestId !== selectedAirportWeatherRequestId || selectedAirportCode !== normalizeAirportKey(airport)) {
+        return;
+      }
+
+      selectedAirportWeather = payload;
+      selectedAirportWeatherStatus = "success";
+      selectedAirportWeatherError = null;
+    } catch (error) {
+      if (requestId !== selectedAirportWeatherRequestId || selectedAirportCode !== normalizeAirportKey(airport)) {
+        return;
+      }
+
+      selectedAirportWeatherStatus = selectedAirportWeather ? "success" : "error";
+      selectedAirportWeatherError =
+        error instanceof Error ? error.message : "Failed to load airport weather.";
+    }
+  }
+
   async function loadRemoteSearchResults(query) {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length < 2) {
@@ -2842,6 +2882,9 @@
     selectedAirportDashboard = null;
     selectedAirportStatus = "idle";
     selectedAirportError = null;
+    selectedAirportWeather = null;
+    selectedAirportWeatherStatus = "idle";
+    selectedAirportWeatherError = null;
   }
   $: if (selectedAirportCode && !selectedAirport && selectedAirportCode !== lastSelectedAirportKey) {
     lastSelectedAirportKey = selectedAirportCode;
@@ -2853,6 +2896,7 @@
   ) {
     lastSelectedAirportKey = normalizeAirportKey(selectedAirport);
     loadSelectedAirportDashboard(selectedAirport);
+    loadSelectedAirportWeather(selectedAirport);
   }
   $: if (!selectedIcao24) {
     selectedFlightSnapshot = null;
@@ -4226,6 +4270,9 @@
             dashboard={selectedAirportDashboard}
             status={selectedAirportStatus}
             error={selectedAirportError}
+            weather={selectedAirportWeather}
+            weatherStatus={selectedAirportWeatherStatus}
+            weatherError={selectedAirportWeatherError}
             weatherLayerEnabled={weatherLayerEnabled}
             bookmarked={selectedAirportBookmarked}
             onSelectFlight={selectWatchedFlight}

@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
+  import FlightNotesPanel from "./lib/components/FlightNotesPanel.svelte";
   import AirportDetailsPanel from "./lib/components/AirportDetailsPanel.svelte";
   import EntitySearchPanel from "./lib/components/EntitySearchPanel.svelte";
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
@@ -4963,144 +4964,6 @@
             </div>
           </details>
 
-          {#if selectedFlight}
-            <details class="utility-drawer" open={selectedFlightAnnotation.tags.length > 0 || Boolean(selectedFlightAnnotation.notes.trim())}>
-              <summary>
-                <span>Selected aircraft notes</span>
-                <strong>{selectedFlightAnnotation.tags.length}</strong>
-              </summary>
-              <div class="utility-drawer-body">
-                <p class="drawer-caption">
-                  Private notes and quick local alerts for {selectedFlightCallsignLabel}.
-                </p>
-
-                <div class="local-tool-actions">
-                  <button class="widget-footer-button" type="button" on:click={toggleSelectedFlightWatchlist}>
-                    {watchlist.includes(selectedFlight.icao24) ? "Remove tracked aircraft" : "Bookmark aircraft"}
-                  </button>
-                  {#if selectedFlight.callsign}
-                    <button
-                      class="widget-footer-button"
-                      type="button"
-                      on:click={() =>
-                        addAlertRule({
-                          type: "callsign",
-                          query: selectedFlight.callsign,
-                        })}
-                    >
-                      Alert by callsign
-                    </button>
-                  {/if}
-                  {#if selectedOperatorCode !== "N/A"}
-                    <button
-                      class="widget-footer-button"
-                      type="button"
-                      on:click={() =>
-                        addAlertRule({
-                          type: "airline",
-                          query: selectedOperatorCode,
-                        })}
-                    >
-                      Alert by airline
-                    </button>
-                  {/if}
-                  {#if selectedFlight.registration}
-                    <button
-                      class="widget-footer-button"
-                      type="button"
-                      on:click={() =>
-                        addAlertRule({
-                          type: "registration",
-                          query: selectedFlight.registration,
-                        })}
-                    >
-                      Alert by registration
-                    </button>
-                  {/if}
-                  {#if selectedFlight.type_code}
-                    <button
-                      class="widget-footer-button"
-                      type="button"
-                      on:click={() =>
-                        addAlertRule({
-                          type: "type_code",
-                          query: selectedFlight.type_code,
-                        })}
-                    >
-                      Alert by type
-                    </button>
-                  {/if}
-                  <button
-                    class="widget-footer-button"
-                    type="button"
-                    on:click={() =>
-                      addAlertRule({
-                        type: "icao24",
-                        query: selectedFlight.icao24,
-                      })}
-                  >
-                    Alert by ICAO24
-                  </button>
-                </div>
-
-                <section class="panel aircraft-notes-panel">
-                  <div class="workflow-header">
-                    <div>
-                      <p class="workflow-eyebrow">Local workspace</p>
-                      <h2>Aircraft notes</h2>
-                    </div>
-                    <span class="workflow-status">Saved in browser</span>
-                  </div>
-
-                  <label class="notes-field">
-                    <span>Notes</span>
-                    <textarea
-                      rows="7"
-                      placeholder="Why this aircraft matters, route patterns, interesting behaviour..."
-                      value={selectedFlightAnnotation.notes}
-                      on:input={(event) => updateSelectedFlightNotes(event.currentTarget.value)}
-                    ></textarea>
-                  </label>
-
-                  <div class="tag-editor">
-                    <div class="tag-editor-header">
-                      <span>Tags</span>
-                      <small>{selectedFlightAnnotation.tags.length} saved</small>
-                    </div>
-
-                    {#if selectedFlightAnnotation.tags.length}
-                      <div class="tag-list">
-                        {#each selectedFlightAnnotation.tags as tag}
-                          <button class="tag-pill" type="button" on:click={() => removeSelectedFlightTag(tag)}>
-                            <span>{tag}</span>
-                            <strong>×</strong>
-                          </button>
-                        {/each}
-                      </div>
-                    {:else}
-                      <p class="notes-empty">No tags yet. Add route, airline, mission or spotting notes.</p>
-                    {/if}
-
-                    <div class="tag-input-row">
-                      <input
-                        type="text"
-                        placeholder="cargo, retro livery, frequent arrival..."
-                        value={selectedTagDraft}
-                        on:input={(event) => {
-                          selectedTagDraft = event.currentTarget.value;
-                        }}
-                        on:keydown={(event) => event.key === "Enter" && submitSelectedFlightTag()}
-                      />
-                      <button class="workflow-button primary" type="button" on:click={submitSelectedFlightTag}>
-                        Add tag
-                      </button>
-                    </div>
-                  </div>
-                </section>
-              </div>
-            </details>
-          {/if}
-
           <details class="utility-drawer" open={false}>
             <summary>
               <span>Guide and shortcuts</span>
@@ -5350,6 +5213,14 @@
             >
               Tracking
             </button>
+            <button
+              class:active={inspectorTab === "notes"}
+              class="inspector-tab"
+              type="button"
+              on:click={() => openInspectorTab("notes")}
+            >
+              Notes
+            </button>
           </div>
 
           {#if inspectorTab === "details"}
@@ -5540,6 +5411,46 @@
                 </div>
               {/if}
             </section>
+          {:else if inspectorTab === "notes"}
+            <FlightNotesPanel
+              flight={selectedFlight}
+              annotation={selectedFlightAnnotation}
+              tagDraft={selectedTagDraft}
+              operatorCode={selectedOperatorCode}
+              bookmarked={watchlist.includes(selectedFlight.icao24)}
+              onToggleBookmark={toggleSelectedFlightWatchlist}
+              onAddCallsignAlert={() =>
+                addAlertRule({
+                  type: "callsign",
+                  query: selectedFlight.callsign,
+                })}
+              onAddAirlineAlert={() =>
+                addAlertRule({
+                  type: "airline",
+                  query: selectedOperatorCode,
+                })}
+              onAddRegistrationAlert={() =>
+                addAlertRule({
+                  type: "registration",
+                  query: selectedFlight.registration,
+                })}
+              onAddTypeAlert={() =>
+                addAlertRule({
+                  type: "type_code",
+                  query: selectedFlight.type_code,
+                })}
+              onAddIcao24Alert={() =>
+                addAlertRule({
+                  type: "icao24",
+                  query: selectedFlight.icao24,
+                })}
+              onNotesChange={updateSelectedFlightNotes}
+              onTagDraftChange={(value) => {
+                selectedTagDraft = value;
+              }}
+              onSubmitTag={submitSelectedFlightTag}
+              onRemoveTag={removeSelectedFlightTag}
+            />
           {/if}
         {:else if selectedAirport}
           <AirportDetailsPanel
@@ -6860,7 +6771,7 @@
 
   .inspector-tab-row {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.38rem;
   }
 
@@ -6882,8 +6793,7 @@
     border-color: transparent;
   }
 
-  .aircraft-workflow-panel,
-  .aircraft-notes-panel {
+  .aircraft-workflow-panel {
     display: grid;
     gap: 0.75rem;
   }
@@ -6900,8 +6810,7 @@
   }
 
   .workflow-header h2,
-  .workflow-header p,
-  .notes-empty {
+  .workflow-header p {
     margin: 0;
   }
 
@@ -6933,9 +6842,7 @@
   }
 
   .workflow-metrics article,
-  .workflow-facts div,
-  .notes-field textarea,
-  .tag-editor {
+  .workflow-facts div {
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 14px;
     background:
@@ -6953,9 +6860,7 @@
   }
 
   .workflow-metrics span,
-  .workflow-facts span,
-  .notes-field span,
-  .tag-editor-header span {
+  .workflow-facts span {
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.14em;
@@ -6968,9 +6873,7 @@
     font-size: 0.95rem;
   }
 
-  .workflow-metrics small,
-  .tag-editor-header small,
-  .notes-empty {
+  .workflow-metrics small {
     color: rgba(190, 203, 217, 0.74);
     font-size: 0.76rem;
   }
@@ -7055,80 +6958,6 @@
   .workflow-button:disabled {
     opacity: 0.55;
     cursor: not-allowed;
-  }
-
-  .notes-field {
-    display: grid;
-    gap: 0.34rem;
-  }
-
-  .notes-field textarea {
-    min-height: 10rem;
-    padding: 0.82rem 0.86rem;
-    color: #eef3f8;
-    box-sizing: border-box;
-  }
-
-  .tag-editor {
-    display: grid;
-    gap: 0.65rem;
-    padding: 0.78rem 0.82rem;
-  }
-
-  .tag-editor-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.6rem;
-    align-items: center;
-  }
-
-  .tag-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.38rem;
-  }
-
-  .tag-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.38rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.34rem 0.4rem 0.34rem 0.62rem;
-    font: inherit;
-    font-size: 0.73rem;
-    font-weight: 700;
-    color: #eef3f8;
-    background: rgba(255, 255, 255, 0.04);
-    cursor: pointer;
-  }
-
-  .tag-pill strong {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.05rem;
-    height: 1.05rem;
-    border-radius: 999px;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-  }
-
-  .tag-input-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.45rem;
-  }
-
-  .tag-input-row input {
-    width: 100%;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 0.72rem 0.76rem;
-    font: inherit;
-    color: #eef3f8;
-    background: rgba(255, 255, 255, 0.04);
-    box-sizing: border-box;
   }
 
   .bottom-dock {
@@ -7384,7 +7213,6 @@
     .filter-form-grid,
     .preset-save-row,
     .preset-card,
-    .tag-input-row,
     .utility-fact-grid,
     .workflow-metrics,
     .inspector-tab-row,

@@ -36,6 +36,7 @@
     formatFlightStatus,
     formatHeading,
     formatSpeed,
+    formatVerticalRate,
   } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
   import {
@@ -57,7 +58,7 @@
     bbox: null,
   };
 
-  const unsubscribe = flightsStore.subscribe((value) => {
+  function handleFlightsStoreChange(value) {
     state = value;
 
     if (value.fetchedAt && value.fetchedAt !== lastHistoryFetchKey) {
@@ -69,7 +70,7 @@
       snapshotHistory = pushReplaySnapshot(snapshotHistory, value);
       lastReplaySnapshotKey = value.fetchedAt;
     }
-  });
+  }
 
   let filters = {
     query: "",
@@ -203,6 +204,7 @@
   let selectedAirportRequestId = 0;
   let selectedAirportWeatherRequestId = 0;
   let lastSelectedAirportKey = null;
+  const unsubscribe = flightsStore.subscribe(handleFlightsStoreChange);
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();

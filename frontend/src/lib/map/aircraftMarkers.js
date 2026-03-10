@@ -151,6 +151,9 @@ function createMarkerEntry(
   onSelect
 ) {
   const marker = L.marker([flight.latitude, flight.longitude], {
+    interactive: true,
+    bubblingMouseEvents: false,
+    riseOnHover: true,
     icon: createAircraftIcon(
       flight.true_track ?? 0,
       selectedIcao24 === flight.icao24,
@@ -181,7 +184,8 @@ function createMarkerEntry(
     marker.closeTooltip();
   });
 
-  marker.on("click", () => {
+  marker.on("click", (event) => {
+    L.DomEvent.stop(event.originalEvent ?? event);
     if (onSelect) {
       onSelect(entry.flight);
     }

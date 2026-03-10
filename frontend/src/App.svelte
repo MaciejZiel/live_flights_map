@@ -186,6 +186,7 @@
   let globalTrafficBoardRequestId = 0;
   let globalTrafficBoardTimer = null;
   let savedEntities = [];
+  let suppressSelectionClearUntil = 0;
   let airportFeed = {
     status: "idle",
     airports: [],
@@ -747,6 +748,7 @@
     selectedAirportError = null;
     selectedEntityContext = null;
     inspectorTab = options.inspectorTab ?? "details";
+    suppressSelectionClearUntil = Date.now() + (options.selectionHoldMs ?? 220);
 
     if (options.exitReplay) {
       replayPlaybackActive = false;
@@ -877,12 +879,19 @@
 
   function handleFlightSelect(event) {
     openFlightInspector(event.detail.flight, {
-      focusMap: false,
+      focusMap: true,
+      zoom: Math.max(mapViewport?.zoom ?? 7.1, 8.2),
       exitReplay: false,
+      inspectorTab: "details",
+      selectionHoldMs: 260,
     });
   }
 
   function handleMapBackgroundClick() {
+    if (Date.now() < suppressSelectionClearUntil) {
+      return;
+    }
+
     if (!selectedIcao24 && !selectedAirportCode && !selectedEntityContext) {
       return;
     }
@@ -2813,6 +2822,14 @@
         selectedOperatorCode !== "N/A" ? selectedOperatorCode : selectedFlight.origin_country ?? "Unknown",
       ].filter(Boolean).join(" · ")
     : null;
+  $: selectedFlightQuickMetrics = selectedFlight
+    ? [
+        { label: "ALT", value: formatAltitude(selectedFlight.altitude) },
+        { label: "SPD", value: formatSpeed(selectedFlight.velocity) },
+        { label: "HDG", value: formatHeading(selectedFlight.true_track) },
+        { label: "V/S", value: formatVerticalRate(selectedFlight.vertical_rate) },
+      ]
+    : [];
   $: selectedFlightQuickStatus = selectedFlight
     ? activeReplaySnapshot
       ? "Replay focus"
@@ -4056,6 +4073,17 @@
             </p>
           {:else if selectedEntityContext}
             <p class="rail-subtitle">{selectedEntityContext.subtitle ?? "Selected search entity"}</p>
+          {/if}
+
+          {#if selectedFlightQuickMetrics.length}
+            <div class="rail-metric-row" aria-label="Selected aircraft live metrics">
+              {#each selectedFlightQuickMetrics as metric}
+                <span class="rail-metric-chip">
+                  <small>{metric.label}</small>
+                  <strong>{metric.value}</strong>
+                </span>
+              {/each}
+            </div>
           {/if}
         </div>
         {#if selectedFlight}
@@ -5346,6 +5374,37 @@
     color: #aeb8c6;
     font-size: 0.76rem;
     line-height: 1.4;
+  }
+
+  .rail-metric-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+    margin-top: 0.58rem;
+  }
+
+  .rail-metric-chip {
+    display: inline-grid;
+    gap: 0.14rem;
+    min-width: 4.55rem;
+    padding: 0.46rem 0.58rem 0.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .rail-metric-chip small {
+    color: rgba(171, 186, 201, 0.68);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .rail-metric-chip strong {
+    color: #eff4fa;
+    font-size: 0.78rem;
+    line-height: 1.2;
   }
 
   .rail-count {

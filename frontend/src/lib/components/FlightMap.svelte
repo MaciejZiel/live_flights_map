@@ -297,7 +297,6 @@
 
     event.preventDefault();
     event.stopPropagation();
-    entry.marker.openPopup();
     dispatch("select", { flight: entry.flight });
   }
 
@@ -746,8 +745,6 @@
     map.on("click", (event) => {
       const nearbyFlight = findNearestFlightToClick(event);
       if (nearbyFlight) {
-        const entry = markerRegistry.get(nearbyFlight.icao24);
-        entry?.marker?.openPopup();
         dispatch("select", { flight: nearbyFlight });
         return;
       }

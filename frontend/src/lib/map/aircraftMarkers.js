@@ -71,6 +71,25 @@ function buildPopupContent(flight) {
   `;
 }
 
+function syncMarkerOverlayState(entry, selected) {
+  if (!entry?.marker) {
+    return;
+  }
+
+  if (selected) {
+    entry.marker.closeTooltip();
+    if (!entry.marker.isPopupOpen()) {
+      entry.marker.openPopup();
+    }
+    return;
+  }
+
+  entry.marker.closeTooltip();
+  if (entry.marker.isPopupOpen()) {
+    entry.marker.closePopup();
+  }
+}
+
 function easeOutCubic(progress) {
   return 1 - (1 - progress) ** 3;
 }
@@ -160,6 +179,7 @@ function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, d
   const nextLatLng = [flight.latitude, flight.longitude];
 
   entry.flight = flight;
+  entry.selected = selected;
   animateMarkerPosition(entry, nextLatLng);
   entry.marker.setIcon(
     createAircraftIcon(
@@ -179,6 +199,8 @@ function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, d
   if (markerElement) {
     markerElement.dataset.icao24 = flight.icao24;
   }
+
+  syncMarkerOverlayState(entry, selected);
 }
 
 function createMarkerEntry(
@@ -219,20 +241,26 @@ function createMarkerEntry(
   const entry = {
     marker,
     flight,
+    selected: selectedIcao24 === flight.icao24,
     animationFrame: null,
   };
 
   marker.on("mouseover", () => {
+    if (entry.selected) {
+      return;
+    }
     marker.openTooltip();
   });
 
   marker.on("mouseout", () => {
+    if (entry.selected) {
+      return;
+    }
     marker.closeTooltip();
   });
 
   marker.on("click", (event) => {
     L.DomEvent.stop(event.originalEvent ?? event);
-    marker.openPopup();
     if (onSelect) {
       onSelect(entry.flight);
     }
@@ -247,6 +275,7 @@ function createMarkerEntry(
   if (markerElement) {
     markerElement.dataset.icao24 = flight.icao24;
   }
+  syncMarkerOverlayState(entry, entry.selected);
   return entry;
 }
 

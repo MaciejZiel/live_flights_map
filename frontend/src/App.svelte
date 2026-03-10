@@ -114,6 +114,7 @@
   let selectedFlightTrailError = null;
   let selectedFlightTrailRequestId = 0;
   let lastSelectedFlightTrailKey = null;
+  let selectedTagDraft = "";
   let archivedReplayStatus = "idle";
   let archivedReplayError = null;
   let archivedReplayRequestId = 0;
@@ -1045,6 +1046,16 @@
     };
   }
 
+  function submitSelectedFlightTag() {
+    const normalizedTag = selectedTagDraft.trim();
+    if (!normalizedTag) {
+      return;
+    }
+
+    addSelectedFlightTag(normalizedTag);
+    selectedTagDraft = "";
+  }
+
   function resetFilters() {
     filters = {
       query: "",
@@ -1819,6 +1830,17 @@
   $: selectedFlightAnnotation = selectedIcao24
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
+  $: selectedFlightTrailFirstPoint = selectedFlightTrail[0] ?? null;
+  $: selectedFlightTrailLastPoint = selectedFlightTrail[selectedFlightTrail.length - 1] ?? null;
+  $: selectedFlightAlertRuleCount = selectedFlight
+    ? alertRules.filter(
+        (rule) =>
+          (rule.type === "icao24" && rule.query.toLowerCase() === selectedFlight.icao24) ||
+          (rule.type === "callsign" &&
+            selectedFlight.callsign &&
+            rule.query.toLowerCase() === selectedFlight.callsign.toLowerCase())
+      ).length
+    : 0;
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
   $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
@@ -1855,6 +1877,7 @@
   }
   $: if (!selectedFlight) {
     followAircraft = false;
+    selectedTagDraft = "";
   }
   $: if (activeReplaySnapshot && followAircraft) {
     followAircraft = false;
@@ -2571,18 +2594,202 @@
 
       <div class="inspector-scroll">
         {#if selectedFlight}
-          <FlightDetailsPanel
-            flight={selectedFlight}
-            details={selectedFlightDetails}
-            detailsStatus={selectedFlightDetailsStatus}
-            detailsError={selectedFlightDetailsError}
-            followAircraft={followAircraft}
-            isBookmarked={watchlist.includes(selectedFlight.icao24)}
-            trailPoints={selectedFlightTrail}
-            onToggleFollow={toggleFollowAircraft}
-            onToggleBookmark={toggleSelectedFlightWatchlist}
-            onRetryDetails={retrySelectedFlightDetails}
-          />
+          <div class="inspector-tab-row" role="tablist" aria-label="Selected aircraft sections">
+            <button
+              class:active={inspectorTab === "details"}
+              class="inspector-tab"
+              type="button"
+              on:click={() => openInspectorTab("details")}
+            >
+              Details
+            </button>
+            <button
+              class:active={inspectorTab === "tracking"}
+              class="inspector-tab"
+              type="button"
+              on:click={() => openInspectorTab("tracking")}
+            >
+              Tracking
+            </button>
+            <button
+              class:active={inspectorTab === "notes"}
+              class="inspector-tab"
+              type="button"
+              on:click={() => openInspectorTab("notes")}
+            >
+              Notes
+            </button>
+          </div>
+
+          {#if inspectorTab === "details"}
+            <FlightDetailsPanel
+              flight={selectedFlight}
+              details={selectedFlightDetails}
+              detailsStatus={selectedFlightDetailsStatus}
+              detailsError={selectedFlightDetailsError}
+              followAircraft={followAircraft}
+              isBookmarked={watchlist.includes(selectedFlight.icao24)}
+              trailPoints={selectedFlightTrail}
+              onToggleFollow={toggleFollowAircraft}
+              onToggleBookmark={toggleSelectedFlightWatchlist}
+              onRetryDetails={retrySelectedFlightDetails}
+            />
+          {:else if inspectorTab === "tracking"}
+            <section class="panel aircraft-workflow-panel">
+              <div class="workflow-header">
+                <div>
+                  <p class="workflow-eyebrow">Active aircraft</p>
+                  <h2>Tracking workflow</h2>
+                </div>
+                <span class="workflow-status">
+                  {#if selectedFlightTrailStatus === "loading" || selectedFlightTrailStatus === "refreshing"}
+                    Syncing trail
+                  {:else if selectedFlightTrail.length}
+                    Trail ready
+                  {:else}
+                    Live only
+                  {/if}
+                </span>
+              </div>
+
+              <div class="workflow-metrics">
+                <article>
+                  <span>Trail points</span>
+                  <strong>{selectedFlightTrail.length}</strong>
+                  <small>
+                    {#if selectedFlightTrailLastPoint}
+                      Last point {new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit" }).format(new Date(selectedFlightTrailLastPoint.timestamp))}
+                    {:else}
+                      Waiting for archived path
+                    {/if}
+                  </small>
+                </article>
+                <article>
+                  <span>Alerts</span>
+                  <strong>{selectedFlightAlertRuleCount}</strong>
+                  <small>
+                    {selectedFlight.callsign ?? selectedFlight.icao24}
+                  </small>
+                </article>
+              </div>
+
+              <div class="workflow-facts">
+                <div>
+                  <span>Observation window</span>
+                  <strong>
+                    {#if selectedFlightTrailFirstPoint && selectedFlightTrailLastPoint}
+                      {new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit" }).format(new Date(selectedFlightTrailFirstPoint.timestamp))}
+                      -
+                      {new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit" }).format(new Date(selectedFlightTrailLastPoint.timestamp))}
+                    {:else}
+                      Waiting for trail
+                    {/if}
+                  </strong>
+                </div>
+                <div>
+                  <span>Monitoring</span>
+                  <strong>{watchlist.includes(selectedFlight.icao24) ? "Bookmarked" : "Not bookmarked"}</strong>
+                </div>
+                <div>
+                  <span>Replay archive</span>
+                  <strong>{replaySourceSnapshots.length} snapshots</strong>
+                </div>
+              </div>
+
+              <div class="workflow-actions">
+                {#if selectedFlight.callsign}
+                  <button
+                    class="workflow-button"
+                    type="button"
+                    on:click={() =>
+                      addAlertRule({
+                        type: "callsign",
+                        query: selectedFlight.callsign,
+                      })}
+                  >
+                    Alert by callsign
+                  </button>
+                {/if}
+                <button
+                  class="workflow-button"
+                  type="button"
+                  on:click={() =>
+                    addAlertRule({
+                      type: "icao24",
+                      query: selectedFlight.icao24,
+                    })}
+                >
+                  Alert by ICAO24
+                </button>
+                <button class="workflow-button" type="button" on:click={toggleSelectedFlightWatchlist}>
+                  {watchlist.includes(selectedFlight.icao24) ? "Remove bookmark" : "Bookmark aircraft"}
+                </button>
+                <button
+                  class="workflow-button primary"
+                  type="button"
+                  disabled={snapshotHistory.length < 2}
+                  on:click={saveCurrentMonitoringSession}
+                >
+                  Save monitoring session
+                </button>
+              </div>
+            </section>
+          {:else}
+            <section class="panel aircraft-notes-panel">
+              <div class="workflow-header">
+                <div>
+                  <p class="workflow-eyebrow">Local workspace</p>
+                  <h2>Aircraft notes</h2>
+                </div>
+                <span class="workflow-status">Saved in browser</span>
+              </div>
+
+              <label class="notes-field">
+                <span>Notes</span>
+                <textarea
+                  rows="7"
+                  placeholder="Why this aircraft matters, route patterns, interesting behaviour..."
+                  value={selectedFlightAnnotation.notes}
+                  on:input={(event) => updateSelectedFlightNotes(event.currentTarget.value)}
+                ></textarea>
+              </label>
+
+              <div class="tag-editor">
+                <div class="tag-editor-header">
+                  <span>Tags</span>
+                  <small>{selectedFlightAnnotation.tags.length} saved</small>
+                </div>
+
+                {#if selectedFlightAnnotation.tags.length}
+                  <div class="tag-list">
+                    {#each selectedFlightAnnotation.tags as tag}
+                      <button class="tag-pill" type="button" on:click={() => removeSelectedFlightTag(tag)}>
+                        <span>{tag}</span>
+                        <strong>×</strong>
+                      </button>
+                    {/each}
+                  </div>
+                {:else}
+                  <p class="notes-empty">No tags yet. Add route, airline, mission or spotting notes.</p>
+                {/if}
+
+                <div class="tag-input-row">
+                  <input
+                    type="text"
+                    placeholder="cargo, retro livery, frequent arrival..."
+                    value={selectedTagDraft}
+                    on:input={(event) => {
+                      selectedTagDraft = event.currentTarget.value;
+                    }}
+                    on:keydown={(event) => event.key === "Enter" && submitSelectedFlightTag()}
+                  />
+                  <button class="workflow-button primary" type="button" on:click={submitSelectedFlightTag}>
+                    Add tag
+                  </button>
+                </div>
+              </div>
+            </section>
+          {/if}
         {:else if sidebarMode === "watchlist"}
           <WatchlistPanel
             entries={watchedFlightEntries}
@@ -3541,6 +3748,225 @@
     cursor: pointer;
   }
 
+  .inspector-tab-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.38rem;
+  }
+
+  .inspector-tab {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.48rem 0.3rem;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 800;
+    color: #d0d9e4;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+  }
+
+  .inspector-tab.active {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
+  }
+
+  .aircraft-workflow-panel,
+  .aircraft-notes-panel {
+    display: grid;
+    gap: 0.75rem;
+  }
+
+  .workflow-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: start;
+  }
+
+  .workflow-header h2,
+  .workflow-header p,
+  .notes-empty {
+    margin: 0;
+  }
+
+  .workflow-eyebrow {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: rgba(190, 203, 217, 0.62);
+    margin-bottom: 0.2rem;
+  }
+
+  .workflow-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.34rem 0.62rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #f8de88;
+    background: rgba(245, 185, 8, 0.12);
+    border: 1px solid rgba(245, 185, 8, 0.22);
+  }
+
+  .workflow-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .workflow-metrics article,
+  .workflow-facts div,
+  .notes-field textarea,
+  .tag-editor {
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    background:
+      linear-gradient(180deg, rgba(31, 34, 39, 0.98) 0%, rgba(19, 21, 25, 0.98) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.02),
+      0 14px 26px rgba(0, 0, 0, 0.2);
+  }
+
+  .workflow-metrics article,
+  .workflow-facts div {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.74rem 0.78rem;
+  }
+
+  .workflow-metrics span,
+  .workflow-facts span,
+  .notes-field span,
+  .tag-editor-header span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(171, 186, 202, 0.62);
+  }
+
+  .workflow-metrics strong,
+  .workflow-facts strong {
+    color: #f1f5fa;
+    font-size: 0.95rem;
+  }
+
+  .workflow-metrics small,
+  .tag-editor-header small,
+  .notes-empty {
+    color: rgba(190, 203, 217, 0.74);
+    font-size: 0.76rem;
+  }
+
+  .workflow-facts {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .workflow-actions {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .workflow-button {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 14px;
+    padding: 0.78rem 0.84rem;
+    font: inherit;
+    font-weight: 700;
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+  }
+
+  .workflow-button.primary {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
+  }
+
+  .workflow-button:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .notes-field {
+    display: grid;
+    gap: 0.34rem;
+  }
+
+  .notes-field textarea {
+    min-height: 10rem;
+    padding: 0.82rem 0.86rem;
+    color: #eef3f8;
+    box-sizing: border-box;
+  }
+
+  .tag-editor {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0.78rem 0.82rem;
+  }
+
+  .tag-editor-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    align-items: center;
+  }
+
+  .tag-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+  }
+
+  .tag-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.38rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.34rem 0.4rem 0.34rem 0.62rem;
+    font: inherit;
+    font-size: 0.73rem;
+    font-weight: 700;
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+  }
+
+  .tag-pill strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.05rem;
+    height: 1.05rem;
+    border-radius: 999px;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .tag-input-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.45rem;
+  }
+
+  .tag-input-row input {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 0.72rem 0.76rem;
+    font: inherit;
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.04);
+    box-sizing: border-box;
+  }
+
   .bottom-dock {
     left: 50%;
     bottom: 0.95rem;
@@ -3782,7 +4208,11 @@
 
     .filter-form-grid,
     .preset-save-row,
-    .preset-card {
+    .preset-card,
+    .tag-input-row,
+    .workflow-metrics,
+    .inspector-tab-row,
+    .workflow-header {
       grid-template-columns: 1fr;
       display: grid;
     }

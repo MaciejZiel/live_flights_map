@@ -21,7 +21,12 @@
     searchFlights,
   } from "./lib/api/flights.js";
   import { flightsStore } from "./lib/stores/flights.js";
-  import { formatAltitude, formatHeading, formatSpeed } from "./lib/utils/flightFormatters.js";
+  import {
+    formatAltitude,
+    formatFlightStatus,
+    formatHeading,
+    formatSpeed,
+  } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
   import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
 
@@ -319,6 +324,22 @@
       }))
       .sort((left, right) => right.count - left.count || right.averageSpeed - left.averageSpeed)
       .slice(0, limit);
+  }
+
+  function formatAirportCode(airport) {
+    return airport?.iata ?? airport?.icao ?? airport?.location ?? "?";
+  }
+
+  function formatQuickRoute(airports) {
+    if (!airports?.length) {
+      return null;
+    }
+
+    if (airports.length === 1) {
+      return formatAirportCode(airports[0]);
+    }
+
+    return `${formatAirportCode(airports[0])} -> ${formatAirportCode(airports[airports.length - 1])}`;
   }
 
   function buildSelectedFlightSnapshot(flight) {
@@ -1980,6 +2001,9 @@
       ? "Loading archived snapshots for the current airspace"
       : `${replaySourceSnapshots.length} snapshots ready for replay`;
   $: statusLabel = getStatusLabel(state);
+  $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
+  $: confidenceLabel = getConfidenceLabel(state);
+  $: transportLabel = state.transport === "sse" ? "Stream" : "Polling";
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
     : "52.23, 21.01";
@@ -2007,6 +2031,30 @@
       (selectedFlightSnapshot?.icao24 === selectedIcao24 ? selectedFlightSnapshot : null)
     : null;
   $: selectedOperatorCode = selectedFlight ? deriveOperatorCode(selectedFlight) || "N/A" : "N/A";
+  $: selectedFlightCallsignLabel = selectedFlight
+    ? selectedFlight.callsign ?? selectedFlight.registration ?? selectedFlight.icao24.toUpperCase()
+    : null;
+  $: selectedFlightQuickRoute =
+    formatQuickRoute(selectedRouteAirports) ??
+    selectedFlightDetails?.route?.iata_codes ??
+    selectedFlightDetails?.route?.airport_codes ??
+    null;
+  $: selectedFlightQuickSubtitle = selectedFlight
+    ? selectedFlightQuickRoute ??
+      [
+        selectedFlight.registration ?? selectedFlight.icao24.toUpperCase(),
+        selectedOperatorCode !== "N/A" ? selectedOperatorCode : selectedFlight.origin_country ?? "Unknown",
+      ].filter(Boolean).join(" · ")
+    : null;
+  $: selectedFlightQuickStatus = selectedFlight
+    ? activeReplaySnapshot
+      ? "Replay focus"
+      : selectedFlightDetailsStatus === "loading" || selectedFlightDetailsStatus === "refreshing"
+        ? "Syncing details"
+        : formatFlightStatus(selectedFlight)
+    : null;
+  $: showRadarStatusStrip = !isMobileViewport;
+  $: showSelectedFlightQuickCard = !isMobileViewport && Boolean(selectedFlight);
   $: replaySelectedFlightTrail = activeReplaySnapshot
     ? replaySourceSnapshots.flatMap((snapshot) => {
         const flight = snapshot.flights.find((candidate) => candidate.icao24 === selectedIcao24);
@@ -2322,6 +2370,104 @@
         <div class="alert-toast">{alertToast.message}</div>
       {/if}
     </div>
+
+    {#if showRadarStatusStrip}
+      <section class="overlay-card radar-status-strip" aria-label="Radar status">
+        <div class="status-cluster">
+          <span class="status-strip-pill primary">{statusLabel}</span>
+          <span class="status-strip-pill">{freshnessLabel}</span>
+          <span class="status-strip-pill">{confidenceLabel} confidence</span>
+          <span class="status-strip-pill">{transportLabel}</span>
+        </div>
+
+        <div class="status-cluster">
+          <span class="status-strip-pill">Center {mapCenterLabel}</span>
+          <span class="status-strip-pill">Zoom {zoomLabel}</span>
+          <span class="status-strip-pill">
+            {activeReplaySnapshot ? `Replay ${replaySnapshotIndex + 1}/${replaySourceSnapshots.length}` : `${visibleTrackedCount} aircraft`}
+          </span>
+        </div>
+
+        <div class="status-actions">
+          {#if activeReplaySnapshot}
+            <button class="status-action" type="button" on:click={returnToLiveReplay}>Back to live</button>
+          {/if}
+          <button class="status-action" type="button" on:click={copyShareLink}>
+            {shareFeedback || "Copy link"}
+          </button>
+        </div>
+      </section>
+    {/if}
+
+    {#if showSelectedFlightQuickCard}
+      <section class="overlay-card selected-flight-quick-card" aria-label="Selected flight quick card">
+        <div class="quick-card-header">
+          <div class="quick-card-copy">
+            <span class="quick-card-eyebrow">{selectedFlightQuickStatus}</span>
+            <strong>{selectedFlightCallsignLabel}</strong>
+            <p>{selectedFlightQuickSubtitle}</p>
+          </div>
+
+          <div class="quick-card-header-actions">
+            <span class="quick-card-badge">{selectedFlightDetails?.route?.plausible === false ? "Route check" : selectedFlightQuickRoute ? "Route ready" : "Live only"}</span>
+            <button
+              class="quick-card-close"
+              type="button"
+              aria-label="Close selected aircraft"
+              on:click={() => {
+                selectedIcao24 = null;
+                selectedFlightSnapshot = null;
+              }}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div class="quick-card-metrics">
+          <article>
+            <span>Altitude</span>
+            <strong>{formatAltitude(selectedFlight.altitude)}</strong>
+          </article>
+          <article>
+            <span>Speed</span>
+            <strong>{formatSpeed(selectedFlight.velocity)}</strong>
+          </article>
+          <article>
+            <span>Heading</span>
+            <strong>{formatHeading(selectedFlight.true_track)}</strong>
+          </article>
+          <article>
+            <span>Trail</span>
+            <strong>{selectedFlightTrail.length ? `${selectedFlightTrail.length} pts` : "Live"}</strong>
+          </article>
+        </div>
+
+        <div class="quick-card-actions">
+          <button class:active={followAircraft} class="quick-action-button" type="button" on:click={toggleFollowAircraft}>
+            {followAircraft ? "Following" : "Follow"}
+          </button>
+          <button class:active={watchlist.includes(selectedFlight.icao24)} class="quick-action-button" type="button" on:click={toggleSelectedFlightWatchlist}>
+            {watchlist.includes(selectedFlight.icao24) ? "Bookmarked" : "Bookmark"}
+          </button>
+          <button class="quick-action-button" type="button" on:click={() => openInspectorTab("details")}>
+            Details
+          </button>
+          <button class="quick-action-button" type="button" on:click={() => openInspectorTab("tracking")}>
+            Tracking
+          </button>
+          {#if activeReplaySnapshot}
+            <button class="quick-action-button primary" type="button" on:click={returnToLiveReplay}>
+              Back to live
+            </button>
+          {:else}
+            <button class="quick-action-button primary" type="button" on:click={copyShareLink}>
+              {shareFeedback || "Share"}
+            </button>
+          {/if}
+        </div>
+      </section>
+    {/if}
 
     {#if showMobileStartHint}
       <section class="overlay-card mobile-start-hint">
@@ -3464,6 +3610,197 @@
     flex-wrap: wrap;
   }
 
+  .radar-status-strip,
+  .selected-flight-quick-card {
+    position: absolute;
+    z-index: 1120;
+  }
+
+  .radar-status-strip {
+    top: 9.15rem;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(44rem, calc(100vw - 42rem));
+    min-width: 33rem;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.55rem 0.68rem;
+  }
+
+  .status-cluster,
+  .status-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+  }
+
+  .status-actions {
+    justify-content: flex-end;
+  }
+
+  .status-strip-pill,
+  .status-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.95rem;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+  }
+
+  .status-strip-pill {
+    color: #dbe4ee;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .status-strip-pill.primary {
+    color: #171a1f;
+    border-color: transparent;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .status-action {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #f4f7fb;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    font: inherit;
+  }
+
+  .selected-flight-quick-card {
+    left: 50%;
+    bottom: 6.65rem;
+    transform: translateX(-50%);
+    width: min(33rem, calc(100vw - 44rem));
+    min-width: 22rem;
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.82rem;
+  }
+
+  .quick-card-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .quick-card-copy {
+    display: grid;
+    gap: 0.18rem;
+    min-width: 0;
+  }
+
+  .quick-card-eyebrow {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: rgba(184, 194, 206, 0.72);
+  }
+
+  .quick-card-copy strong {
+    color: #f7f9fc;
+    font-size: 1.08rem;
+    line-height: 1.05;
+  }
+
+  .quick-card-copy p {
+    margin: 0;
+    color: #b5bfcb;
+    font-size: 0.76rem;
+  }
+
+  .quick-card-header-actions {
+    display: flex;
+    gap: 0.45rem;
+    align-items: start;
+  }
+
+  .quick-card-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.85rem;
+    padding: 0 0.65rem;
+    border-radius: 999px;
+    font-size: 0.69rem;
+    font-weight: 800;
+    color: #f8dd8d;
+    background: rgba(245, 185, 8, 0.12);
+    border: 1px solid rgba(245, 185, 8, 0.18);
+  }
+
+  .quick-card-close {
+    width: 1.9rem;
+    height: 1.9rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    font: inherit;
+    font-size: 1rem;
+    color: #f5f8fc;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+  }
+
+  .quick-card-metrics {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .quick-card-metrics article {
+    display: grid;
+    gap: 0.16rem;
+    padding: 0.66rem 0.7rem;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .quick-card-metrics span {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: rgba(180, 191, 203, 0.72);
+  }
+
+  .quick-card-metrics strong {
+    color: #f4f7fb;
+    font-size: 0.82rem;
+  }
+
+  .quick-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+  }
+
+  .quick-action-button {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.52rem 0.8rem;
+    font: inherit;
+    font-size: 0.73rem;
+    font-weight: 800;
+    color: #e8eef6;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+  }
+
+  .quick-action-button.active,
+  .quick-action-button.primary {
+    color: #171a1f;
+    border-color: transparent;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
   .error-banner,
   .warning-banner,
   .alert-toast {
@@ -4426,6 +4763,16 @@
 
     .topbar-ribbon {
       width: min(32rem, calc(100vw - 24rem));
+      min-width: 0;
+    }
+
+    .radar-status-strip {
+      width: min(30rem, calc(100vw - 24rem));
+      min-width: 0;
+    }
+
+    .selected-flight-quick-card {
+      width: min(27rem, calc(100vw - 28rem));
       min-width: 0;
     }
   }

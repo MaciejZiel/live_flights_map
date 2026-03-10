@@ -148,6 +148,8 @@
       <button class:active={activeTab === "overview"} type="button" on:click={() => (activeTab = "overview")}>Overview</button>
       <button class:active={activeTab === "arrivals"} type="button" on:click={() => (activeTab = "arrivals")}>Arrivals</button>
       <button class:active={activeTab === "departures"} type="button" on:click={() => (activeTab = "departures")}>Departures</button>
+      <button class:active={activeTab === "ground"} type="button" on:click={() => (activeTab = "ground")}>Ground</button>
+      <button class:active={activeTab === "weather"} type="button" on:click={() => (activeTab = "weather")}>Weather</button>
     </div>
 
     {#if activeTab === "overview"}
@@ -181,26 +183,6 @@
 
       <section class="airport-section">
         <div class="section-header">
-          <strong>Ground traffic</strong>
-          <span>{onGround.length} on field</span>
-        </div>
-
-        {#if onGround.length}
-          <div class="pill-grid">
-            {#each onGround.slice(0, 8) as flight}
-              <button class="movement-pill" type="button" on:click={() => onSelectFlight(flight)}>
-                <strong>{formatFlightTitle(flight)}</strong>
-                <span>{flight.type_code ?? "Type n/a"}</span>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="airport-copy">No on-ground aircraft were archived around this airport.</p>
-        {/if}
-      </section>
-
-      <section class="airport-section">
-        <div class="section-header">
           <strong>Traffic history</strong>
           <span>{history.length} hours</span>
         </div>
@@ -222,6 +204,53 @@
         {/if}
       </section>
 
+    {:else if activeTab === "ground"}
+      <section class="airport-section">
+        <div class="section-header">
+          <strong>Ground traffic</strong>
+          <span>{onGround.length} on field</span>
+        </div>
+
+        {#if onGround.length}
+          <div class="pill-grid">
+            {#each onGround as flight}
+              <button class="movement-pill" type="button" on:click={() => onSelectFlight(flight)}>
+                <strong>{formatFlightTitle(flight)}</strong>
+                <span>{flight.type_code ?? "Type n/a"}</span>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="airport-copy">No on-ground aircraft were archived around this airport.</p>
+        {/if}
+      </section>
+
+      <section class="airport-section">
+        <div class="section-header">
+          <strong>Local airspace</strong>
+          <span>{nearby.length} live</span>
+        </div>
+
+        {#if nearby.length}
+          <div class="movement-list">
+            {#each nearby as flight}
+              <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
+                <span class="movement-main">
+                  <strong>{formatFlightTitle(flight)}</strong>
+                  <small>{formatMovementCopy(flight, "overview")}</small>
+                </span>
+                <span class="movement-meta">
+                  <strong>{formatAltitude(flight.altitude)}</strong>
+                  <small>{formatSpeed(flight.velocity)}</small>
+                </span>
+              </button>
+            {/each}
+          </div>
+        {:else}
+          <p class="airport-copy">No local live traffic is visible for this airport area right now.</p>
+        {/if}
+      </section>
+    {:else if activeTab === "weather"}
       <section class="airport-section">
         <div class="section-header">
           <strong>Airport weather</strong>

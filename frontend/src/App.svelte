@@ -88,7 +88,7 @@
   let mobileUtilityOpen = false;
   let inspectorScroll;
   let sidebarMode = "traffic";
-  let utilityPanelMode = "overview";
+  let utilityPanelMode = "radar";
   let inspectorTab = "details";
   let snapshotHistory = [];
   let replaySnapshotCursor = null;
@@ -1419,7 +1419,7 @@
 
   function showOnboardingTips() {
     onboardingDismissed = false;
-    utilityPanelMode = "guide";
+    utilityPanelMode = "tools";
   }
 
   function buildBboxKey(bbox) {
@@ -2024,6 +2024,14 @@
     : archivedReplayStatus === "loading" || archivedReplayStatus === "refreshing"
       ? "Loading archived snapshots for the current airspace"
       : `${replaySourceSnapshots.length} snapshots ready for replay`;
+  $: utilityPanelTitle =
+    utilityPanelMode === "radar" ? "Radar" : utilityPanelMode === "replay" ? "Replay" : "Tools";
+  $: utilityPanelEyebrow =
+    utilityPanelMode === "radar"
+      ? "Core controls"
+      : utilityPanelMode === "replay"
+        ? "Archive controls"
+        : "Secondary tools";
   $: statusLabel = getStatusLabel(state);
   $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
   $: confidenceLabel = getConfidenceLabel(state);
@@ -2077,8 +2085,6 @@
         ? "Syncing details"
         : formatFlightStatus(selectedFlight)
     : null;
-  $: showRadarStatusStrip = !isMobileViewport;
-  $: showSelectedFlightQuickCard = !isMobileViewport && Boolean(selectedFlight);
   $: replaySelectedFlightTrail = activeReplaySnapshot
     ? replaySourceSnapshots.flatMap((snapshot) => {
         const flight = snapshot.flights.find((candidate) => candidate.icao24 === selectedIcao24);
@@ -2339,39 +2345,6 @@
           {/if}
         </div>
       </div>
-
-      <div class="overlay-card topbar-ribbon">
-        <div class="ribbon-row">
-          <button class="ribbon-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast jets</button>
-          <button class="ribbon-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
-          <button class="ribbon-chip" type="button" on:click={() => applyQuickFilter("recent")}>Recent only</button>
-          <button
-            class:active={!filters.hideGroundTraffic}
-            class="ribbon-chip"
-            type="button"
-            on:click={() => {
-              filters = {
-                ...filters,
-                hideGroundTraffic: !filters.hideGroundTraffic,
-              };
-            }}
-          >
-            Ground traffic
-          </button>
-          <button class="ribbon-chip ribbon-chip-reset" type="button" on:click={resetFilters}>Reset</button>
-        </div>
-
-        {#if activeFilterTokens.length}
-          <div class="filter-token-row">
-            {#each activeFilterTokens as token}
-              <button class="filter-token" type="button" on:click={() => clearFilterToken(token.key)}>
-                <span>{token.label}</span>
-                <strong>×</strong>
-              </button>
-            {/each}
-          </div>
-        {/if}
-      </div>
     </header>
 
     <div class="floating-messages">
@@ -2396,101 +2369,6 @@
       {/if}
     </div>
 
-    {#if showRadarStatusStrip}
-      <section class="overlay-card radar-status-strip" aria-label="Radar status">
-        <div class="status-cluster">
-          <span class="status-strip-pill primary">{statusLabel}</span>
-          <span class="status-strip-pill">{freshnessLabel}</span>
-          <span class="status-strip-pill">{confidenceLabel} confidence</span>
-          <span class="status-strip-pill">{transportLabel}</span>
-        </div>
-
-        <div class="status-cluster">
-          <span class="status-strip-pill">Center {mapCenterLabel}</span>
-          <span class="status-strip-pill">Zoom {zoomLabel}</span>
-          <span class="status-strip-pill">
-            {activeReplaySnapshot ? `Replay ${replaySnapshotIndex + 1}/${replaySourceSnapshots.length}` : `${visibleTrackedCount} aircraft`}
-          </span>
-        </div>
-
-        <div class="status-actions">
-          {#if activeReplaySnapshot}
-            <button class="status-action" type="button" on:click={returnToLiveReplay}>Back to live</button>
-          {/if}
-          <button class="status-action" type="button" on:click={copyShareLink}>
-            {shareFeedback || "Copy link"}
-          </button>
-        </div>
-      </section>
-    {/if}
-
-    {#if showSelectedFlightQuickCard}
-      <section class="overlay-card selected-flight-quick-card" aria-label="Selected flight quick card">
-        <div class="quick-card-header">
-          <div class="quick-card-copy">
-            <span class="quick-card-eyebrow">{selectedFlightQuickStatus}</span>
-            <strong>{selectedFlightCallsignLabel}</strong>
-            <p>{selectedFlightQuickSubtitle}</p>
-          </div>
-
-          <div class="quick-card-header-actions">
-            <span class="quick-card-badge">{selectedFlightDetails?.route?.plausible === false ? "Route check" : selectedFlightQuickRoute ? "Route ready" : "Live only"}</span>
-            <button
-              class="quick-card-close"
-              type="button"
-              aria-label="Close selected aircraft"
-              on:click={() => clearSelectedFlight()}
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        <div class="quick-card-metrics">
-          <article>
-            <span>Altitude</span>
-            <strong>{formatAltitude(selectedFlight.altitude)}</strong>
-          </article>
-          <article>
-            <span>Speed</span>
-            <strong>{formatSpeed(selectedFlight.velocity)}</strong>
-          </article>
-          <article>
-            <span>Heading</span>
-            <strong>{formatHeading(selectedFlight.true_track)}</strong>
-          </article>
-          <article>
-            <span>Trail</span>
-            <strong>{selectedFlightTrail.length ? `${selectedFlightTrail.length} pts` : "Live"}</strong>
-          </article>
-        </div>
-
-        <div class="quick-card-actions">
-          <button class:active={followAircraft} class="quick-action-button" type="button" on:click={toggleFollowAircraft}>
-            {followAircraft ? "Following" : "Follow"}
-          </button>
-          <button class:active={watchlist.includes(selectedFlight.icao24)} class="quick-action-button" type="button" on:click={toggleSelectedFlightWatchlist}>
-            {watchlist.includes(selectedFlight.icao24) ? "Bookmarked" : "Bookmark"}
-          </button>
-          <button class="quick-action-button" type="button" on:click={() => openInspectorTab("details")}>
-            Details
-          </button>
-          <button class="quick-action-button" type="button" on:click={() => openInspectorTab("tracking")}>
-            Tracking
-          </button>
-          {#if activeReplaySnapshot}
-            <button class="quick-action-button primary" type="button" on:click={returnToLiveReplay}>
-              Back to live
-            </button>
-          {:else}
-            <button class="quick-action-button primary" type="button" on:click={copyShareLink}>
-              {shareFeedback || "Share"}
-            </button>
-          {/if}
-        </div>
-      </section>
-    {/if}
-
     {#if showMobileStartHint}
       <section class="overlay-card mobile-start-hint">
         <span>Tryb mobilny</span>
@@ -2505,8 +2383,8 @@
     <aside class:open={mobileUtilityOpen} class="overlay-card radar-left-panel">
       <div class="utility-header">
         <div class="utility-heading">
-          <span>Radar controls</span>
-          <strong>{utilityPanelMode === "overview" ? "Overview" : utilityPanelMode === "replay" ? "Replay" : utilityPanelMode === "workspace" ? "Workspace" : "Guide"}</strong>
+          <span>{utilityPanelEyebrow}</span>
+          <strong>{utilityPanelTitle}</strong>
         </div>
         <div class="utility-meta">
           <span class="utility-pill">{statusLabel}</span>
@@ -2516,14 +2394,14 @@
 
       <div class="utility-tabs" role="tablist" aria-label="Radar utility sections">
         <button
-          class:active={utilityPanelMode === "overview"}
+          class:active={utilityPanelMode === "radar"}
           class="utility-tab"
           type="button"
           on:click={() => {
-            utilityPanelMode = "overview";
+            utilityPanelMode = "radar";
           }}
         >
-          Overview
+          Radar
         </button>
         <button
           class:active={utilityPanelMode === "replay"}
@@ -2536,24 +2414,14 @@
           Replay
         </button>
         <button
-          class:active={utilityPanelMode === "workspace"}
+          class:active={utilityPanelMode === "tools"}
           class="utility-tab"
           type="button"
           on:click={() => {
-            utilityPanelMode = "workspace";
+            utilityPanelMode = "tools";
           }}
         >
-          Workspace
-        </button>
-        <button
-          class:active={utilityPanelMode === "guide"}
-          class="utility-tab"
-          type="button"
-          on:click={() => {
-            utilityPanelMode = "guide";
-          }}
-        >
-          Guide
+          Tools
         </button>
       </div>
 
@@ -2597,13 +2465,46 @@
       </section>
 
       <div class="panel-stack">
-        {#if utilityPanelMode === "overview"}
+        {#if utilityPanelMode === "radar"}
+          <section class="widget-card utility-summary-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Radar snapshot</strong>
+                <span class="live-pill utility-state-pill">{transportLabel}</span>
+              </div>
+            </div>
+
+            <div class="utility-fact-grid">
+              <article>
+                <span>Status</span>
+                <strong>{statusLabel}</strong>
+                <small>{freshnessLabel}</small>
+              </article>
+              <article>
+                <span>Confidence</span>
+                <strong>{confidenceLabel}</strong>
+                <small>{activeReplaySnapshot ? "Replay frame" : "Live feed"}</small>
+              </article>
+              <article>
+                <span>Map center</span>
+                <strong>{mapCenterLabel}</strong>
+                <small>Zoom {zoomLabel}</small>
+              </article>
+              <article>
+                <span>Traffic</span>
+                <strong>{visibleTrackedCount}</strong>
+                <small>{airborneCount} airborne · {groundCount} ground</small>
+              </article>
+            </div>
+          </section>
+
           <section class="widget-card filter-card">
             <div class="widget-header">
               <div class="widget-heading">
                 <strong>Radar filters</strong>
                 <span class="live-pill utility-state-pill">{activeFilterCount}</span>
               </div>
+              <button class="widget-mini-action" type="button" on:click={resetFilters}>Reset</button>
             </div>
 
             <div class="filter-chip-row">
@@ -2860,12 +2761,6 @@
             </button>
           </section>
 
-          <ComparisonPanel
-            flights={comparisonFlights}
-            selectedIcao24={selectedIcao24}
-            onSelectFlight={selectWatchedFlight}
-          />
-
           <button class="widget-footer-bar" type="button" on:click={() => openSidebarMode("watchlist")}>
             <span>Bookmarks</span>
             <strong>{watchlist.length}</strong>
@@ -2895,61 +2790,118 @@
             onTogglePlayback={toggleReplayPlayback}
           />
 
-          <MonitoringSessionsPanel
-            sessions={monitoringSessions}
-            activeSessionId={activeMonitoringSessionId}
-            onSaveSession={saveCurrentMonitoringSession}
-            onLoadSession={loadMonitoringSession}
-            onDeleteSession={deleteMonitoringSession}
-          />
-        {:else if utilityPanelMode === "workspace"}
-          <SavedViewsPanel
-            views={savedViews}
-            activeViewId={activeSavedViewId}
-            currentName={savedViewName}
-            onNameChange={(value) => {
-              savedViewName = value;
-            }}
-            onSaveView={saveCurrentView}
-            onLoadView={loadSavedView}
-            onDeleteView={deleteSavedView}
-          />
-
-          <AlertPanel
-            rules={alertRules}
-            events={alertEvents}
-            onAddRule={addAlertRule}
-            onRemoveRule={removeAlertRule}
-            onClearEvents={clearAlertEvents}
-          />
+          <details class="utility-drawer" open={Boolean(activeMonitoringSession) || monitoringSessions.length > 0}>
+            <summary>
+              <span>Monitoring sessions</span>
+              <strong>{monitoringSessions.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <p class="drawer-caption">Saved replay sessions stay available on this device.</p>
+              <MonitoringSessionsPanel
+                sessions={monitoringSessions}
+                activeSessionId={activeMonitoringSessionId}
+                onSaveSession={saveCurrentMonitoringSession}
+                onLoadSession={loadMonitoringSession}
+                onDeleteSession={deleteMonitoringSession}
+              />
+            </div>
+          </details>
         {:else}
-          {#if !onboardingDismissed}
-            <OnboardingPanel onDismiss={dismissOnboarding} />
-          {:else}
-            <section class="widget-card utility-summary-card">
-              <div class="widget-header">
-                <div class="widget-heading">
-                  <strong>Quick start hidden</strong>
-                  <span class="live-pill utility-state-pill">Guide</span>
-                </div>
+          <section class="widget-card utility-summary-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Secondary tools</strong>
+                <span class="live-pill utility-state-pill">LOCAL</span>
               </div>
-              <p class="widget-empty">Bring back the onboarding tips at any time.</p>
-              <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
-                Show tips again
-              </button>
-            </section>
-          {/if}
+            </div>
+            <p class="widget-empty">
+              Browser-saved views, notes, alerts and guides stay here so the live radar remains clean.
+            </p>
+          </section>
 
-          <LegendPanel />
-          <ShortcutsPanel />
+          <details class="utility-drawer" open={!onboardingDismissed}>
+            <summary>
+              <span>Guide and shortcuts</span>
+              <strong>{onboardingDismissed ? "Hidden" : "Open"}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              {#if !onboardingDismissed}
+                <OnboardingPanel onDismiss={dismissOnboarding} />
+              {:else}
+                <section class="widget-card utility-summary-card utility-compact-card">
+                  <div class="widget-header">
+                    <div class="widget-heading">
+                      <strong>Quick start hidden</strong>
+                      <span class="live-pill utility-state-pill">Guide</span>
+                    </div>
+                  </div>
+                  <p class="widget-empty">Bring back the onboarding tips at any time.</p>
+                  <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
+                    Show tips again
+                  </button>
+                </section>
+              {/if}
+
+              <LegendPanel />
+              <ShortcutsPanel />
+            </div>
+          </details>
+
+          <details class="utility-drawer" open={savedViews.length > 0}>
+            <summary>
+              <span>Saved views</span>
+              <strong>{savedViews.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <p class="drawer-caption">Saved in this browser for quick jumps back to your favorite airspace.</p>
+              <SavedViewsPanel
+                views={savedViews}
+                activeViewId={activeSavedViewId}
+                currentName={savedViewName}
+                onNameChange={(value) => {
+                  savedViewName = value;
+                }}
+                onSaveView={saveCurrentView}
+                onLoadView={loadSavedView}
+                onDeleteView={deleteSavedView}
+              />
+            </div>
+          </details>
+
+          <details class="utility-drawer" open={alertRules.length > 0 || activeAlertEvents.length > 0}>
+            <summary>
+              <span>Alerts</span>
+              <strong>{alertRules.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <p class="drawer-caption">Alert rules are kept locally until we move them into account-backed workflows.</p>
+              <AlertPanel
+                rules={alertRules}
+                events={alertEvents}
+                onAddRule={addAlertRule}
+                onRemoveRule={removeAlertRule}
+                onClearEvents={clearAlertEvents}
+              />
+            </div>
+          </details>
+
+          <details class="utility-drawer" open={comparisonFlights.length > 1}>
+            <summary>
+              <span>Aircraft comparison</span>
+              <strong>{comparisonFlights.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <p class="drawer-caption">Comparison stays available, but no longer competes with live radar by default.</p>
+              <ComparisonPanel
+                flights={comparisonFlights}
+                selectedIcao24={selectedIcao24}
+                onSelectFlight={selectWatchedFlight}
+              />
+            </div>
+          </details>
         {/if}
       </div>
     </aside>
-
-    <button class="overlay-card view-chip" type="button" on:click={cycleMapStyle}>
-      <span>View</span>
-      <strong>{mapStyleLabel}</strong>
-    </button>
 
     {#if isMobileViewport && mobileUtilityOpen}
       <button class="sidebar-backdrop utility-backdrop" type="button" aria-label="Close tools panel" on:click={closeMobileUtility}></button>
@@ -2962,18 +2914,37 @@
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
       <div class="rail-header">
         <div class="rail-brand">
-          <span>{selectedFlight ? "Tracking" : sidebarMode === "watchlist" ? "Saved aircraft" : "Click any aircraft"}</span>
-          <strong>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : sidebarMode === "watchlist" ? "Bookmarks" : "Visible traffic"}</strong>
+          <span>{selectedFlight ? selectedFlightQuickStatus : sidebarMode === "watchlist" ? "Saved aircraft" : "Click any aircraft"}</span>
+          <strong>{selectedFlight ? selectedFlightCallsignLabel : sidebarMode === "watchlist" ? "Bookmarks" : "Visible traffic"}</strong>
+          {#if selectedFlightQuickSubtitle}
+            <p class="rail-subtitle">{selectedFlightQuickSubtitle}</p>
+          {/if}
         </div>
         {#if selectedFlight}
-          <button
-            class="rail-close"
-            type="button"
-            aria-label="Close selected aircraft"
-            on:click={() => clearSelectedFlight({ closeSidebar: true })}
-          >
-            ×
-          </button>
+          <div class="rail-actions">
+            <button class:active={followAircraft} class="rail-toggle" type="button" on:click={toggleFollowAircraft}>
+              {followAircraft ? "Following" : "Follow"}
+            </button>
+            <button
+              class:active={watchlist.includes(selectedFlight.icao24)}
+              class="rail-toggle"
+              type="button"
+              on:click={toggleSelectedFlightWatchlist}
+            >
+              {watchlist.includes(selectedFlight.icao24) ? "Bookmarked" : "Bookmark"}
+            </button>
+            <button class="rail-toggle" type="button" on:click={copyShareLink}>
+              {shareFeedback || "Share"}
+            </button>
+            <button
+              class="rail-close"
+              type="button"
+              aria-label="Close selected aircraft"
+              on:click={() => clearSelectedFlight({ closeSidebar: true })}
+            >
+              ×
+            </button>
+          </div>
         {:else}
           <div class="rail-actions">
             <button
@@ -3015,14 +2986,6 @@
               on:click={() => openInspectorTab("tracking")}
             >
               Tracking
-            </button>
-            <button
-              class:active={inspectorTab === "notes"}
-              class="inspector-tab"
-              type="button"
-              on:click={() => openInspectorTab("notes")}
-            >
-              Notes
             </button>
           </div>
 
@@ -3139,61 +3102,69 @@
                 </button>
               </div>
             </section>
-          {:else}
-            <section class="panel aircraft-notes-panel">
-              <div class="workflow-header">
-                <div>
-                  <p class="workflow-eyebrow">Local workspace</p>
-                  <h2>Aircraft notes</h2>
-                </div>
-                <span class="workflow-status">Saved in browser</span>
-              </div>
 
-              <label class="notes-field">
-                <span>Notes</span>
-                <textarea
-                  rows="7"
-                  placeholder="Why this aircraft matters, route patterns, interesting behaviour..."
-                  value={selectedFlightAnnotation.notes}
-                  on:input={(event) => updateSelectedFlightNotes(event.currentTarget.value)}
-                ></textarea>
-              </label>
-
-              <div class="tag-editor">
-                <div class="tag-editor-header">
-                  <span>Tags</span>
-                  <small>{selectedFlightAnnotation.tags.length} saved</small>
-                </div>
-
-                {#if selectedFlightAnnotation.tags.length}
-                  <div class="tag-list">
-                    {#each selectedFlightAnnotation.tags as tag}
-                      <button class="tag-pill" type="button" on:click={() => removeSelectedFlightTag(tag)}>
-                        <span>{tag}</span>
-                        <strong>×</strong>
-                      </button>
-                    {/each}
+            <details class="inspector-drawer">
+              <summary>
+                <span>Private notes</span>
+                <strong>{selectedFlightAnnotation.tags.length}</strong>
+              </summary>
+              <div class="utility-drawer-body">
+                <section class="panel aircraft-notes-panel">
+                  <div class="workflow-header">
+                    <div>
+                      <p class="workflow-eyebrow">Local workspace</p>
+                      <h2>Aircraft notes</h2>
+                    </div>
+                    <span class="workflow-status">Saved in browser</span>
                   </div>
-                {:else}
-                  <p class="notes-empty">No tags yet. Add route, airline, mission or spotting notes.</p>
-                {/if}
 
-                <div class="tag-input-row">
-                  <input
-                    type="text"
-                    placeholder="cargo, retro livery, frequent arrival..."
-                    value={selectedTagDraft}
-                    on:input={(event) => {
-                      selectedTagDraft = event.currentTarget.value;
-                    }}
-                    on:keydown={(event) => event.key === "Enter" && submitSelectedFlightTag()}
-                  />
-                  <button class="workflow-button primary" type="button" on:click={submitSelectedFlightTag}>
-                    Add tag
-                  </button>
-                </div>
+                  <label class="notes-field">
+                    <span>Notes</span>
+                    <textarea
+                      rows="7"
+                      placeholder="Why this aircraft matters, route patterns, interesting behaviour..."
+                      value={selectedFlightAnnotation.notes}
+                      on:input={(event) => updateSelectedFlightNotes(event.currentTarget.value)}
+                    ></textarea>
+                  </label>
+
+                  <div class="tag-editor">
+                    <div class="tag-editor-header">
+                      <span>Tags</span>
+                      <small>{selectedFlightAnnotation.tags.length} saved</small>
+                    </div>
+
+                    {#if selectedFlightAnnotation.tags.length}
+                      <div class="tag-list">
+                        {#each selectedFlightAnnotation.tags as tag}
+                          <button class="tag-pill" type="button" on:click={() => removeSelectedFlightTag(tag)}>
+                            <span>{tag}</span>
+                            <strong>×</strong>
+                          </button>
+                        {/each}
+                      </div>
+                    {:else}
+                      <p class="notes-empty">No tags yet. Add route, airline, mission or spotting notes.</p>
+                    {/if}
+
+                    <div class="tag-input-row">
+                      <input
+                        type="text"
+                        placeholder="cargo, retro livery, frequent arrival..."
+                        value={selectedTagDraft}
+                        on:input={(event) => {
+                          selectedTagDraft = event.currentTarget.value;
+                        }}
+                        on:keydown={(event) => event.key === "Enter" && submitSelectedFlightTag()}
+                      />
+                      <button class="workflow-button primary" type="button" on:click={submitSelectedFlightTag}>
+                        Add tag
+                      </button>
+                    </div>
+                  </div>
+                </section>
               </div>
-            </section>
+            </details>
           {/if}
         {:else if sidebarMode === "watchlist"}
           <WatchlistPanel
@@ -3278,7 +3249,6 @@
   .radar-left-panel,
   .radar-right-panel,
   .bottom-dock,
-  .view-chip,
   .floating-messages {
     position: absolute;
     z-index: 1100;
@@ -3446,20 +3416,6 @@
     align-items: center;
   }
 
-  .topbar-ribbon {
-    margin-top: 0.55rem;
-    display: grid;
-    gap: 0.42rem;
-    width: min(34rem, calc(100vw - 39rem));
-    min-width: 30rem;
-    padding: 0.48rem 0.52rem;
-    border-radius: 16px;
-    background:
-      linear-gradient(180deg, rgba(27, 30, 35, 0.98) 0%, rgba(14, 16, 20, 0.98) 100%);
-  }
-
-  .ribbon-row,
-  .filter-token-row,
   .filter-token-list,
   .filter-chip-row {
     display: flex;
@@ -3467,7 +3423,6 @@
     gap: 0.38rem;
   }
 
-  .ribbon-chip,
   .filter-chip,
   .filter-token,
   .suggestion-pill {
@@ -3477,7 +3432,6 @@
     cursor: pointer;
   }
 
-  .ribbon-chip,
   .filter-chip,
   .suggestion-pill {
     padding: 0.42rem 0.68rem;
@@ -3487,16 +3441,10 @@
     background: rgba(255, 255, 255, 0.05);
   }
 
-  .ribbon-chip.active,
   .filter-chip.active {
     color: #171a1f;
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
     border-color: transparent;
-  }
-
-  .ribbon-chip-reset {
-    color: #ffd9d9;
-    background: rgba(118, 41, 41, 0.24);
   }
 
   .filter-token {
@@ -3624,197 +3572,6 @@
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
-  }
-
-  .radar-status-strip,
-  .selected-flight-quick-card {
-    position: absolute;
-    z-index: 1120;
-  }
-
-  .radar-status-strip {
-    top: 9.15rem;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(44rem, calc(100vw - 42rem));
-    min-width: 33rem;
-    display: flex;
-    justify-content: space-between;
-    gap: 0.65rem;
-    align-items: center;
-    padding: 0.55rem 0.68rem;
-  }
-
-  .status-cluster,
-  .status-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.4rem;
-    align-items: center;
-  }
-
-  .status-actions {
-    justify-content: flex-end;
-  }
-
-  .status-strip-pill,
-  .status-action {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 1.95rem;
-    padding: 0 0.72rem;
-    border-radius: 999px;
-    font-size: 0.7rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
-  }
-
-  .status-strip-pill {
-    color: #dbe4ee;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .status-strip-pill.primary {
-    color: #171a1f;
-    border-color: transparent;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-  }
-
-  .status-action {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    color: #f4f7fb;
-    background: rgba(255, 255, 255, 0.04);
-    cursor: pointer;
-    font: inherit;
-  }
-
-  .selected-flight-quick-card {
-    left: 50%;
-    bottom: 6.65rem;
-    transform: translateX(-50%);
-    width: min(33rem, calc(100vw - 44rem));
-    min-width: 22rem;
-    display: grid;
-    gap: 0.7rem;
-    padding: 0.82rem;
-  }
-
-  .quick-card-header {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.8rem;
-    align-items: start;
-  }
-
-  .quick-card-copy {
-    display: grid;
-    gap: 0.18rem;
-    min-width: 0;
-  }
-
-  .quick-card-eyebrow {
-    font-size: 0.66rem;
-    text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: rgba(184, 194, 206, 0.72);
-  }
-
-  .quick-card-copy strong {
-    color: #f7f9fc;
-    font-size: 1.08rem;
-    line-height: 1.05;
-  }
-
-  .quick-card-copy p {
-    margin: 0;
-    color: #b5bfcb;
-    font-size: 0.76rem;
-  }
-
-  .quick-card-header-actions {
-    display: flex;
-    gap: 0.45rem;
-    align-items: start;
-  }
-
-  .quick-card-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 1.85rem;
-    padding: 0 0.65rem;
-    border-radius: 999px;
-    font-size: 0.69rem;
-    font-weight: 800;
-    color: #f8dd8d;
-    background: rgba(245, 185, 8, 0.12);
-    border: 1px solid rgba(245, 185, 8, 0.18);
-  }
-
-  .quick-card-close {
-    width: 1.9rem;
-    height: 1.9rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    font: inherit;
-    font-size: 1rem;
-    color: #f5f8fc;
-    background: rgba(255, 255, 255, 0.04);
-    cursor: pointer;
-  }
-
-  .quick-card-metrics {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 0.45rem;
-  }
-
-  .quick-card-metrics article {
-    display: grid;
-    gap: 0.16rem;
-    padding: 0.66rem 0.7rem;
-    border-radius: 13px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .quick-card-metrics span {
-    font-size: 0.66rem;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: rgba(180, 191, 203, 0.72);
-  }
-
-  .quick-card-metrics strong {
-    color: #f4f7fb;
-    font-size: 0.82rem;
-  }
-
-  .quick-card-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
-  }
-
-  .quick-action-button {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.52rem 0.8rem;
-    font: inherit;
-    font-size: 0.73rem;
-    font-weight: 800;
-    color: #e8eef6;
-    background: rgba(255, 255, 255, 0.04);
-    cursor: pointer;
-  }
-
-  .quick-action-button.active,
-  .quick-action-button.primary {
-    color: #171a1f;
-    border-color: transparent;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   .error-banner,
@@ -3945,7 +3702,7 @@
 
   .utility-tabs {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.35rem;
   }
 
@@ -3992,6 +3749,44 @@
     box-shadow:
       0 18px 30px rgba(0, 0, 0, 0.24),
       inset 3px 0 0 #45a7ee;
+  }
+
+  .utility-compact-card {
+    box-shadow:
+      0 18px 30px rgba(0, 0, 0, 0.18),
+      inset 3px 0 0 rgba(69, 167, 238, 0.7);
+  }
+
+  .utility-fact-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .utility-fact-grid article {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.72rem 0.76rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .utility-fact-grid span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(171, 186, 202, 0.62);
+  }
+
+  .utility-fact-grid strong {
+    color: #f2f6fb;
+    font-size: 0.9rem;
+  }
+
+  .utility-fact-grid small {
+    color: rgba(190, 203, 217, 0.74);
+    font-size: 0.74rem;
   }
 
   .filter-card {
@@ -4104,6 +3899,67 @@
     margin: 0;
     font-size: 0.7rem;
     color: rgba(193, 202, 214, 0.78);
+  }
+
+  .utility-drawer,
+  .inspector-drawer {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 18px;
+    background:
+      linear-gradient(180deg, rgba(39, 42, 47, 0.98) 0%, rgba(22, 24, 29, 0.98) 100%);
+    overflow: hidden;
+  }
+
+  .utility-drawer summary,
+  .inspector-drawer summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+    padding: 0.82rem 0.86rem;
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .utility-drawer summary::-webkit-details-marker,
+  .inspector-drawer summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .utility-drawer summary span,
+  .inspector-drawer summary span {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #d8e1eb;
+  }
+
+  .utility-drawer summary strong,
+  .inspector-drawer summary strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2rem;
+    min-height: 1.8rem;
+    padding: 0 0.58rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .utility-drawer-body {
+    display: grid;
+    gap: 0.65rem;
+    padding: 0 0.78rem 0.78rem;
+  }
+
+  .drawer-caption {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.45;
+    color: rgba(190, 203, 217, 0.76);
   }
 
   .filter-form-grid {
@@ -4275,6 +4131,18 @@
     cursor: pointer;
   }
 
+  .widget-mini-action {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.4rem 0.7rem;
+    font: inherit;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.05);
+    cursor: pointer;
+  }
+
   .widget-footer-bar {
     display: flex;
     justify-content: space-between;
@@ -4294,31 +4162,6 @@
 
   .widget-footer-bar strong {
     color: #f5b908;
-    font-size: 0.86rem;
-  }
-
-  .view-chip {
-    top: 4.55rem;
-    right: 21.6rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.42rem;
-    padding: 0.52rem 0.82rem;
-    border-radius: 999px;
-    color: #eef3f8;
-    background:
-      linear-gradient(180deg, rgba(53, 56, 62, 0.98) 0%, rgba(34, 36, 41, 0.98) 100%);
-    cursor: pointer;
-  }
-
-  .view-chip span {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.15em;
-    color: #c3ccd7;
-  }
-
-  .view-chip strong {
     font-size: 0.86rem;
   }
 
@@ -4347,6 +4190,13 @@
     color: #eef3f8;
     font-size: 1rem;
     line-height: 1.15;
+  }
+
+  .rail-subtitle {
+    margin: 0;
+    color: #aeb8c6;
+    font-size: 0.76rem;
+    line-height: 1.4;
   }
 
   .rail-count {
@@ -4404,7 +4254,7 @@
 
   .inspector-tab-row {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.38rem;
   }
 
@@ -4776,21 +4626,6 @@
       width: min(32rem, calc(100vw - 24rem));
       min-width: 0;
     }
-
-    .topbar-ribbon {
-      width: min(32rem, calc(100vw - 24rem));
-      min-width: 0;
-    }
-
-    .radar-status-strip {
-      width: min(30rem, calc(100vw - 24rem));
-      min-width: 0;
-    }
-
-    .selected-flight-quick-card {
-      width: min(27rem, calc(100vw - 28rem));
-      min-width: 0;
-    }
   }
 
   @media (max-width: 960px) {
@@ -4811,10 +4646,6 @@
 
     .radar-left-panel.open {
       transform: translateY(0);
-    }
-
-    .view-chip {
-      right: 0.75rem;
     }
 
     .bottom-dock {
@@ -4855,11 +4686,6 @@
     .center-bar {
       width: min(32rem, calc(100vw - 1.5rem));
     }
-
-    .topbar-ribbon {
-      width: min(32rem, calc(100vw - 1.5rem));
-      min-width: 0;
-    }
   }
 
   @media (max-width: 720px) {
@@ -4878,12 +4704,6 @@
       padding: 0.62rem 0.68rem;
     }
 
-    .topbar-ribbon {
-      width: auto;
-      min-width: 0;
-      padding: 0.54rem 0.58rem;
-    }
-
     .center-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
@@ -4893,17 +4713,12 @@
     .preset-save-row,
     .preset-card,
     .tag-input-row,
+    .utility-fact-grid,
     .workflow-metrics,
     .inspector-tab-row,
     .workflow-header {
       grid-template-columns: 1fr;
       display: grid;
-    }
-
-    .view-chip {
-      top: auto;
-      right: 0.75rem;
-      bottom: 5rem;
     }
 
     .bottom-dock {

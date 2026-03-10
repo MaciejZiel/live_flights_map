@@ -2,8 +2,11 @@
   import { onMount } from "svelte";
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
+  import AirportDetailsPanel from "./lib/components/AirportDetailsPanel.svelte";
+  import EntitySearchPanel from "./lib/components/EntitySearchPanel.svelte";
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
   import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
+  import WorkspaceProfilesPanel from "./lib/components/WorkspaceProfilesPanel.svelte";
   import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
   import AlertPanel from "./lib/components/AlertPanel.svelte";
   import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
@@ -14,10 +17,16 @@
   import SavedViewsPanel from "./lib/components/SavedViewsPanel.svelte";
   import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import {
+    createWorkspaceProfile,
+    fetchAirportDashboard,
+    fetchAirports,
     fetchFlightDetails,
     fetchGlobalTrafficBoard,
     fetchFlightTrail,
     fetchReplayHistory,
+    fetchWorkspaceProfiles,
+    fetchWorkspaceState,
+    saveWorkspaceState,
     searchFlights,
   } from "./lib/api/flights.js";
   import { flightsStore } from "./lib/stores/flights.js";
@@ -28,6 +37,10 @@
     formatSpeed,
   } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
+  import {
+    classifyTrafficCategory,
+    TRAFFIC_CATEGORY_OPTIONS,
+  } from "./lib/utils/trafficCategories.js";
   import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
 
   let state = {
@@ -59,13 +72,20 @@
     minSpeed: "",
     country: "",
     operator: "",
+    trafficCategory: "all",
     headingBand: "any",
     hideGroundTraffic: true,
     recentActivity: "any",
+    dimFilteredTraffic: true,
   };
   let selectedIcao24 = null;
+  let selectedAirportCode = null;
+  let selectedAirportSnapshot = null;
+  let selectedEntityContext = null;
   let followAircraft = false;
   let mapStyle = "standard";
+  let weatherLayerEnabled = false;
+  let showAirportMarkers = true;
   let mapViewport = {
     center: [52.2297, 21.0122],
     zoom: 7.1,
@@ -83,6 +103,15 @@
   let sortBy = "altitude_desc";
   let theme = "dark";
   let onboardingDismissed = false;
+  let workspaceProfiles = [];
+  let activeWorkspaceProfileId = null;
+  let workspaceSyncStatus = "idle";
+  let workspaceSyncError = null;
+  let workspaceUpdatedAt = null;
+  let workspaceHydrating = false;
+  let workspaceReady = false;
+  let workspaceSaveTimer = null;
+  let workspaceProfileDraft = "";
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
   let mobileUtilityOpen = false;
@@ -130,6 +159,8 @@
   let lastArchivedReplayBboxKey = null;
   let replayHydrationTimer = null;
   let remoteSearchResults = [];
+  let remoteSearchGroups = {};
+  let remoteSearchCount = 0;
   let remoteSearchStatus = "idle";
   let remoteSearchError = null;
   let remoteSearchRequestId = 0;
@@ -148,6 +179,19 @@
   };
   let globalTrafficBoardRequestId = 0;
   let globalTrafficBoardTimer = null;
+  let savedEntities = [];
+  let airportFeed = {
+    status: "idle",
+    airports: [],
+    error: null,
+  };
+  let airportFeedRequestId = 0;
+  let airportFeedDebounceTimer = null;
+  let selectedAirportDashboard = null;
+  let selectedAirportStatus = "idle";
+  let selectedAirportError = null;
+  let selectedAirportRequestId = 0;
+  let lastSelectedAirportKey = null;
 
   onMount(() => {
     const savedPreferences = loadUserPreferences();
@@ -169,6 +213,10 @@
       alertEvents = savedPreferences.alertEvents ?? alertEvents;
       monitoringSessions = savedPreferences.monitoringSessions ?? monitoringSessions;
       savedViews = savedPreferences.savedViews ?? savedViews;
+      savedEntities = savedPreferences.savedEntities ?? savedEntities;
+      weatherLayerEnabled = savedPreferences.weatherLayerEnabled ?? weatherLayerEnabled;
+      showAirportMarkers = savedPreferences.showAirportMarkers ?? showAirportMarkers;
+      selectedAirportCode = savedPreferences.selectedAirportCode ?? selectedAirportCode;
     }
 
     applySharedStateFromUrl();
@@ -177,6 +225,7 @@
     preferencesReady = true;
     flightsStore.start();
     refreshGlobalTrafficBoard();
+    initializeWorkspace();
     globalTrafficBoardTimer = window.setInterval(() => {
       refreshGlobalTrafficBoard();
     }, 90000);
@@ -214,6 +263,12 @@
       }
       if (globalTrafficBoardTimer) {
         window.clearInterval(globalTrafficBoardTimer);
+      }
+      if (airportFeedDebounceTimer) {
+        window.clearTimeout(airportFeedDebounceTimer);
+      }
+      if (workspaceSaveTimer) {
+        window.clearTimeout(workspaceSaveTimer);
       }
       unsubscribe();
       flightsStore.stop();
@@ -274,6 +329,7 @@
       currentFilters.minSpeed,
       currentFilters.country.trim(),
       currentFilters.operator.trim(),
+      currentFilters.trafficCategory !== "all",
       currentFilters.headingBand !== "any",
       !currentFilters.hideGroundTraffic,
       currentFilters.recentActivity !== "any",
@@ -339,6 +395,263 @@
     }
 
     return `${formatAirportCode(airports[0])} -> ${formatAirportCode(airports[airports.length - 1])}`;
+  }
+
+  function normalizeAirportKey(airport) {
+    return String(airport?.entity_key ?? airport?.iata ?? airport?.icao ?? "")
+      .trim()
+      .toUpperCase();
+  }
+
+  function getEntityBookmarkKey(entityType, entityKey) {
+    return `${entityType}:${String(entityKey ?? "").trim().toLowerCase()}`;
+  }
+
+  function buildEntityBookmark(entity) {
+    const entityType = entity?.entity_type ?? (entity?.icao24 ? "flight" : null);
+    const entityKey =
+      entity?.entity_key ??
+      entity?.icao24 ??
+      entity?.iata ??
+      entity?.icao ??
+      entity?.callsign ??
+      entity?.label;
+    if (!entityType || !entityKey) {
+      return null;
+    }
+
+    return {
+      entity_type: entityType,
+      entity_key: String(entityKey),
+      label:
+        entity?.label ??
+        entity?.callsign ??
+        entity?.registration ??
+        entity?.iata ??
+        entity?.icao ??
+        String(entityKey).toUpperCase(),
+      subtitle:
+        entity?.subtitle ??
+        [entity?.city, entity?.country].filter(Boolean).join(", ") ??
+        entity?.origin_country ??
+        "Saved entity",
+      latitude: entity?.latitude ?? null,
+      longitude: entity?.longitude ?? null,
+      bbox: entity?.bbox ?? null,
+      payload: {
+        icao24: entity?.icao24 ?? null,
+        callsign: entity?.callsign ?? null,
+        registration: entity?.registration ?? null,
+        type_code: entity?.type_code ?? null,
+        origin_country: entity?.origin_country ?? null,
+        iata: entity?.iata ?? null,
+        icao: entity?.icao ?? null,
+      },
+    };
+  }
+
+  function isEntityBookmarked(entityType, entityKey) {
+    const bookmarkKey = getEntityBookmarkKey(entityType, entityKey);
+    return savedEntities.some(
+      (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) === bookmarkKey
+    );
+  }
+
+  function toggleEntityBookmark(entity) {
+    const bookmark = buildEntityBookmark(entity);
+    if (!bookmark) {
+      return;
+    }
+
+    const bookmarkKey = getEntityBookmarkKey(bookmark.entity_type, bookmark.entity_key);
+    if (
+      savedEntities.some(
+        (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) === bookmarkKey
+      )
+    ) {
+      savedEntities = savedEntities.filter(
+        (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) !== bookmarkKey
+      );
+      return;
+    }
+
+    savedEntities = [
+      bookmark,
+      ...savedEntities.filter(
+        (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) !== bookmarkKey
+      ),
+    ].slice(0, 36);
+  }
+
+  function removeSavedEntity(entityType, entityKey) {
+    const bookmarkKey = getEntityBookmarkKey(entityType, entityKey);
+    savedEntities = savedEntities.filter(
+      (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) !== bookmarkKey
+    );
+  }
+
+  function buildWorkspacePayload() {
+    return {
+      filters,
+      mapStyle,
+      mapViewport,
+      filterPresets,
+      sortBy,
+      theme,
+      onboardingDismissed,
+      watchlist,
+      watchModeEnabled,
+      flightAnnotations,
+      alertRules,
+      alertEvents,
+      monitoringSessions,
+      savedViews,
+      savedEntities,
+      weatherLayerEnabled,
+      showAirportMarkers,
+      selectedAirportCode,
+    };
+  }
+
+  function hasMeaningfulWorkspaceState(workspaceState) {
+    if (!workspaceState || typeof workspaceState !== "object") {
+      return false;
+    }
+
+    return Boolean(
+      Object.keys(workspaceState.filters ?? {}).length ||
+        (workspaceState.filterPresets ?? []).length ||
+        (workspaceState.watchlist ?? []).length ||
+        (workspaceState.savedEntities ?? []).length ||
+        (workspaceState.monitoringSessions ?? []).length ||
+        (workspaceState.savedViews ?? []).length ||
+        Object.keys(workspaceState.flightAnnotations ?? {}).length ||
+        (workspaceState.alertRules ?? []).length ||
+        workspaceState.mapStyle !== "standard" ||
+        workspaceState.theme !== "dark" ||
+        workspaceState.weatherLayerEnabled ||
+        workspaceState.showAirportMarkers === false
+    );
+  }
+
+  function applyWorkspaceState(workspaceState) {
+    if (!workspaceState || typeof workspaceState !== "object") {
+      return;
+    }
+
+    filters = {
+      ...filters,
+      ...(workspaceState.filters ?? {}),
+    };
+    mapStyle = workspaceState.mapStyle ?? mapStyle;
+    mapViewport = workspaceState.mapViewport ?? mapViewport;
+    filterPresets = workspaceState.filterPresets ?? filterPresets;
+    sortBy = workspaceState.sortBy ?? sortBy;
+    theme = workspaceState.theme ?? theme;
+    onboardingDismissed = workspaceState.onboardingDismissed ?? onboardingDismissed;
+    watchlist = workspaceState.watchlist ?? watchlist;
+    watchModeEnabled = workspaceState.watchModeEnabled ?? watchModeEnabled;
+    flightAnnotations = workspaceState.flightAnnotations ?? flightAnnotations;
+    alertRules = workspaceState.alertRules ?? alertRules;
+    alertEvents = workspaceState.alertEvents ?? alertEvents;
+    monitoringSessions = workspaceState.monitoringSessions ?? monitoringSessions;
+    savedViews = workspaceState.savedViews ?? savedViews;
+    savedEntities = workspaceState.savedEntities ?? savedEntities;
+    weatherLayerEnabled = workspaceState.weatherLayerEnabled ?? weatherLayerEnabled;
+    showAirportMarkers = workspaceState.showAirportMarkers ?? showAirportMarkers;
+    selectedAirportCode = workspaceState.selectedAirportCode ?? selectedAirportCode;
+  }
+
+  async function loadWorkspaceProfile(profileId) {
+    if (!profileId) {
+      return;
+    }
+
+    workspaceHydrating = true;
+    workspaceSyncStatus = "loading";
+    workspaceSyncError = null;
+
+    try {
+      const payload = await fetchWorkspaceState(profileId);
+      activeWorkspaceProfileId = payload.profile?.id ?? profileId;
+      workspaceUpdatedAt = payload.updated_at ?? null;
+      if (hasMeaningfulWorkspaceState(payload.state)) {
+        applyWorkspaceState(payload.state);
+      }
+      workspaceSyncStatus = "success";
+      workspaceReady = true;
+    } catch (error) {
+      workspaceSyncStatus = "error";
+      workspaceSyncError = error instanceof Error ? error.message : "Failed to load workspace profile.";
+    } finally {
+      workspaceHydrating = false;
+    }
+  }
+
+  async function initializeWorkspace() {
+    workspaceSyncStatus = "loading";
+    workspaceSyncError = null;
+
+    try {
+      const profilesPayload = await fetchWorkspaceProfiles();
+      workspaceProfiles = profilesPayload.profiles ?? [];
+      const initialProfileId = workspaceProfiles[0]?.id ?? null;
+      if (initialProfileId) {
+        await loadWorkspaceProfile(initialProfileId);
+      } else {
+        workspaceSyncStatus = "idle";
+      }
+    } catch (error) {
+      workspaceSyncStatus = "error";
+      workspaceSyncError = error instanceof Error ? error.message : "Failed to load workspace profiles.";
+    }
+  }
+
+  async function createWorkspaceDesk() {
+    const normalizedName = workspaceProfileDraft.trim();
+    if (!normalizedName) {
+      return;
+    }
+
+    try {
+      const payload = await createWorkspaceProfile(normalizedName);
+      workspaceProfileDraft = "";
+      workspaceProfiles = [payload.profile, ...workspaceProfiles];
+      await loadWorkspaceProfile(payload.profile.id);
+    } catch (error) {
+      workspaceSyncStatus = "error";
+      workspaceSyncError = error instanceof Error ? error.message : "Failed to create a workspace profile.";
+    }
+  }
+
+  function queueWorkspaceSave() {
+    if (
+      typeof window === "undefined" ||
+      !workspaceReady ||
+      workspaceHydrating ||
+      !activeWorkspaceProfileId
+    ) {
+      return;
+    }
+
+    if (workspaceSaveTimer) {
+      window.clearTimeout(workspaceSaveTimer);
+    }
+
+    workspaceSaveTimer = window.setTimeout(async () => {
+      workspaceSaveTimer = null;
+      workspaceSyncStatus = "saving";
+      workspaceSyncError = null;
+
+      try {
+        const payload = await saveWorkspaceState(activeWorkspaceProfileId, buildWorkspacePayload());
+        workspaceUpdatedAt = payload.updated_at ?? null;
+        workspaceSyncStatus = "success";
+      } catch (error) {
+        workspaceSyncStatus = "error";
+        workspaceSyncError = error instanceof Error ? error.message : "Failed to sync workspace.";
+      }
+    }, 500);
   }
 
   function buildSelectedFlightSnapshot(flight) {
@@ -408,6 +721,12 @@
 
     selectedFlightSnapshot = snapshot;
     selectedIcao24 = snapshot.icao24;
+    selectedAirportCode = null;
+    selectedAirportSnapshot = null;
+    selectedAirportDashboard = null;
+    selectedAirportStatus = "idle";
+    selectedAirportError = null;
+    selectedEntityContext = null;
     inspectorTab = options.inspectorTab ?? "details";
 
     if (options.exitReplay) {
@@ -445,6 +764,94 @@
     }
   }
 
+  function openAirportInspector(airport, options = {}) {
+    const airportKey = normalizeAirportKey(airport);
+    if (!airportKey) {
+      return;
+    }
+
+    selectedAirportCode = airportKey;
+    selectedAirportSnapshot = {
+      ...airport,
+      entity_key: airportKey,
+    };
+    selectedIcao24 = null;
+    selectedFlightSnapshot = null;
+    selectedEntityContext = null;
+    followAircraft = false;
+
+    if (
+      options.focusMap !== false &&
+      Number.isFinite(airport.latitude) &&
+      Number.isFinite(airport.longitude)
+    ) {
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        center: [airport.latitude, airport.longitude],
+        zoom: options.zoom ?? Math.max(mapViewport?.zoom ?? 7.1, 8.2),
+      };
+    }
+
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
+    }
+  }
+
+  function focusLocationEntity(locationEntity) {
+    if (locationEntity?.bbox) {
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        bounds: [
+          [locationEntity.bbox.lamin, locationEntity.bbox.lomin],
+          [locationEntity.bbox.lamax, locationEntity.bbox.lomax],
+        ],
+        maxZoom: locationEntity.zoom ?? 7.5,
+      };
+      return;
+    }
+
+    if (Number.isFinite(locationEntity?.latitude) && Number.isFinite(locationEntity?.longitude)) {
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        center: [locationEntity.latitude, locationEntity.longitude],
+        zoom: locationEntity.zoom ?? 6.5,
+      };
+    }
+  }
+
+  function openEntityContext(entity) {
+    selectedEntityContext = entity;
+    selectedIcao24 = null;
+    selectedFlightSnapshot = null;
+    selectedAirportCode = null;
+    selectedAirportSnapshot = null;
+    selectedAirportDashboard = null;
+    selectedAirportStatus = "idle";
+    selectedAirportError = null;
+
+    if (Number.isFinite(entity?.latitude) && Number.isFinite(entity?.longitude)) {
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        center: [entity.latitude, entity.longitude],
+        zoom: entity.entity_type === "location" ? entity.zoom ?? 5.8 : 7.4,
+      };
+    }
+
+    if (entity?.entity_type === "location") {
+      focusLocationEntity(entity);
+    }
+
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
+    }
+  }
+
+  function handleAirportSelect(event) {
+    openAirportInspector(event.detail.airport, { focusMap: false });
+  }
+
   function handleBoundsChange(event) {
     flightsStore.setBbox(event.detail.bbox);
   }
@@ -457,11 +864,17 @@
   }
 
   function handleMapBackgroundClick() {
-    if (!selectedIcao24) {
+    if (!selectedIcao24 && !selectedAirportCode && !selectedEntityContext) {
       return;
     }
 
     clearSelectedFlight({ closeSidebar: isMobileViewport });
+    selectedAirportCode = null;
+    selectedAirportSnapshot = null;
+    selectedAirportDashboard = null;
+    selectedAirportStatus = "idle";
+    selectedAirportError = null;
+    selectedEntityContext = null;
   }
 
   function handleViewportChange(event) {
@@ -491,13 +904,17 @@
     const sharedMinSpeed = params.get("minSpeed");
     const sharedCountry = params.get("country");
     const sharedOperator = params.get("operator");
+    const sharedCategory = params.get("category");
     const sharedHeadingBand = params.get("heading");
     const sharedRecentActivity = params.get("recent");
     const sharedSort = params.get("sort");
     const sharedTheme = params.get("theme");
     const sharedMapStyle = params.get("map");
     const sharedSelectedIcao24 = params.get("sel");
+    const sharedSelectedAirport = params.get("airport");
     const sharedGroundFlag = params.get("ground");
+    const sharedWeather = params.get("weather");
+    const sharedAirportMarkers = params.get("airports");
 
     if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(zoom)) {
       mapViewport = {
@@ -526,6 +943,13 @@
       nextFilters.operator = sharedOperator;
     }
 
+    if (
+      sharedCategory &&
+      TRAFFIC_CATEGORY_OPTIONS.some((option) => option.value === sharedCategory)
+    ) {
+      nextFilters.trafficCategory = sharedCategory;
+    }
+
     if (["any", "north", "east", "south", "west"].includes(sharedHeadingBand)) {
       nextFilters.headingBand = sharedHeadingBand;
     }
@@ -550,8 +974,20 @@
       selectedIcao24 = sharedSelectedIcao24;
     }
 
+    if (sharedSelectedAirport) {
+      selectedAirportCode = sharedSelectedAirport.toUpperCase();
+    }
+
     if (sharedGroundFlag === "0" || sharedGroundFlag === "1") {
       nextFilters.hideGroundTraffic = sharedGroundFlag === "1";
+    }
+
+    if (sharedWeather === "1" || sharedWeather === "0") {
+      weatherLayerEnabled = sharedWeather === "1";
+    }
+
+    if (sharedAirportMarkers === "1" || sharedAirportMarkers === "0") {
+      showAirportMarkers = sharedAirportMarkers !== "0";
     }
 
     filters = nextFilters;
@@ -593,6 +1029,12 @@
       params.set("operator", filters.operator.trim());
     } else {
       params.delete("operator");
+    }
+
+    if (filters.trafficCategory !== "all") {
+      params.set("category", filters.trafficCategory);
+    } else {
+      params.delete("category");
     }
 
     if (filters.headingBand !== "any") {
@@ -637,6 +1079,12 @@
       params.delete("sel");
     }
 
+    if (selectedAirportCode) {
+      params.set("airport", selectedAirportCode);
+    } else {
+      params.delete("airport");
+    }
+
     if (mapViewport?.center && Number.isFinite(mapViewport.zoom)) {
       params.set("lat", mapViewport.center[0].toFixed(4));
       params.set("lng", mapViewport.center[1].toFixed(4));
@@ -645,6 +1093,18 @@
       params.delete("lat");
       params.delete("lng");
       params.delete("z");
+    }
+
+    if (weatherLayerEnabled) {
+      params.set("weather", "1");
+    } else {
+      params.delete("weather");
+    }
+
+    if (!showAirportMarkers) {
+      params.set("airports", "0");
+    } else {
+      params.delete("airports");
     }
 
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
@@ -745,7 +1205,11 @@
         mapViewport,
         watchlist: [...watchlist],
         watchModeEnabled,
+        savedEntities: [...savedEntities],
+        weatherLayerEnabled,
+        showAirportMarkers,
         selectedIcao24,
+        selectedAirportCode,
       },
     };
 
@@ -770,7 +1234,11 @@
     mapViewport = view.state.mapViewport ?? mapViewport;
     watchlist = view.state.watchlist ?? watchlist;
     watchModeEnabled = view.state.watchModeEnabled ?? watchModeEnabled;
+    savedEntities = view.state.savedEntities ?? savedEntities;
+    weatherLayerEnabled = view.state.weatherLayerEnabled ?? weatherLayerEnabled;
+    showAirportMarkers = view.state.showAirportMarkers ?? showAirportMarkers;
     selectedIcao24 = view.state.selectedIcao24 ?? null;
+    selectedAirportCode = view.state.selectedAirportCode ?? null;
     activeSavedViewId = view.id;
   }
 
@@ -838,14 +1306,25 @@
 
     if (watchlist.includes(selectedFlight.icao24)) {
       watchlist = watchlist.filter((icao24) => icao24 !== selectedFlight.icao24);
+      removeSavedEntity("flight", selectedFlight.icao24);
       return;
     }
 
     watchlist = [selectedFlight.icao24, ...watchlist.filter((icao24) => icao24 !== selectedFlight.icao24)].slice(0, 12);
+    toggleEntityBookmark({
+      entity_type: "flight",
+      entity_key: selectedFlight.icao24,
+      label: selectedFlight.callsign ?? selectedFlight.registration ?? selectedFlight.icao24.toUpperCase(),
+      subtitle: [selectedFlight.registration ?? selectedFlight.icao24.toUpperCase(), selectedFlight.origin_country]
+        .filter(Boolean)
+        .join(" · "),
+      ...selectedFlight,
+    });
   }
 
   function removeFromWatchlist(icao24) {
     watchlist = watchlist.filter((value) => value !== icao24);
+    removeSavedEntity("flight", icao24);
   }
 
   function selectWatchedFlight(target) {
@@ -1099,10 +1578,95 @@
     }
   }
 
+  async function refreshAirports(bbox) {
+    if (!bbox) {
+      airportFeed = {
+        status: "idle",
+        airports: [],
+        error: null,
+      };
+      return;
+    }
+
+    const requestId = ++airportFeedRequestId;
+    airportFeed = {
+      ...airportFeed,
+      status: airportFeed.airports.length ? "refreshing" : "loading",
+      error: null,
+    };
+
+    try {
+      const payload = await fetchAirports(bbox, {
+        limit: mapViewport?.zoom >= 7 ? 32 : mapViewport?.zoom >= 5 ? 18 : 10,
+      });
+      if (requestId !== airportFeedRequestId) {
+        return;
+      }
+
+      airportFeed = {
+        status: "success",
+        airports: payload.airports ?? [],
+        error: null,
+      };
+    } catch (error) {
+      if (requestId !== airportFeedRequestId) {
+        return;
+      }
+
+      airportFeed = {
+        ...airportFeed,
+        status: airportFeed.airports.length ? "success" : "error",
+        error: airportFeed.airports.length
+          ? null
+          : error instanceof Error
+            ? error.message
+            : "Failed to load airport markers.",
+      };
+    }
+  }
+
+  async function loadSelectedAirportDashboard(airport) {
+    const airportKey = normalizeAirportKey(airport);
+    if (!airportKey) {
+      selectedAirportDashboard = null;
+      selectedAirportStatus = "idle";
+      selectedAirportError = null;
+      return;
+    }
+
+    const requestId = ++selectedAirportRequestId;
+    selectedAirportStatus = selectedAirportDashboard ? "refreshing" : "loading";
+    selectedAirportError = null;
+
+    try {
+      const payload = await fetchAirportDashboard(airportKey, {
+        hours: 12,
+        limit: 10,
+      });
+      if (requestId !== selectedAirportRequestId || selectedAirportCode !== airportKey) {
+        return;
+      }
+
+      selectedAirportSnapshot = payload.airport ?? airport;
+      selectedAirportDashboard = payload;
+      selectedAirportStatus = "success";
+      selectedAirportError = null;
+    } catch (error) {
+      if (requestId !== selectedAirportRequestId || selectedAirportCode !== airportKey) {
+        return;
+      }
+
+      selectedAirportStatus = selectedAirportDashboard ? "success" : "error";
+      selectedAirportError = error instanceof Error ? error.message : "Failed to load airport dashboard.";
+    }
+  }
+
   async function loadRemoteSearchResults(query) {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length < 2) {
       remoteSearchResults = [];
+      remoteSearchGroups = {};
+      remoteSearchCount = 0;
       remoteSearchStatus = "idle";
       remoteSearchError = null;
       return;
@@ -1119,6 +1683,8 @@
       }
 
       remoteSearchResults = searchPayload.results ?? [];
+      remoteSearchGroups = searchPayload.groups ?? {};
+      remoteSearchCount = searchPayload.count ?? remoteSearchResults.length;
       remoteSearchStatus = "success";
       remoteSearchError = null;
     } catch (error) {
@@ -1127,6 +1693,8 @@
       }
 
       remoteSearchResults = [];
+      remoteSearchGroups = {};
+      remoteSearchCount = 0;
       remoteSearchStatus = "error";
       remoteSearchError =
         error instanceof Error ? error.message : "Failed to search archived flights.";
@@ -1174,22 +1742,43 @@
   }
 
   function selectSearchResult(result) {
-    if (!result || !Number.isFinite(result.latitude) || !Number.isFinite(result.longitude)) {
+    if (!result) {
       return;
     }
 
-    openFlightInspector(result, {
-      focusMap: true,
-      zoom: 8.4,
-      exitReplay: true,
-      pendingSearchSelection: result.icao24,
-    });
+    if (result.entity_type === "flight") {
+      openFlightInspector(result, {
+        focusMap: true,
+        zoom: 8.4,
+        exitReplay: true,
+        pendingSearchSelection: result.icao24,
+      });
+    } else if (result.entity_type === "airport") {
+      openAirportInspector(result, {
+        focusMap: true,
+        zoom: 9.1,
+      });
+    } else if (result.entity_type === "location") {
+      openEntityContext(result);
+    } else if (result.entity_type === "airline") {
+      filters = {
+        ...filters,
+        operator: result.entity_key ?? result.label ?? "",
+      };
+      openEntityContext(result);
+    } else if (result.entity_type === "route") {
+      openEntityContext(result);
+    } else {
+      openEntityContext(result);
+    }
 
     filters = {
       ...filters,
       query: "",
     };
     remoteSearchResults = [];
+    remoteSearchGroups = {};
+    remoteSearchCount = 0;
     remoteSearchStatus = "idle";
     remoteSearchError = null;
   }
@@ -1260,9 +1849,11 @@
       minSpeed: "",
       country: "",
       operator: "",
+      trafficCategory: "all",
       headingBand: "any",
       hideGroundTraffic: true,
       recentActivity: "any",
+      dimFilteredTraffic: true,
     };
   }
 
@@ -1298,6 +1889,22 @@
       return;
     }
 
+    if (presetKey === "cargo") {
+      filters = {
+        ...filters,
+        trafficCategory: "cargo",
+      };
+      return;
+    }
+
+    if (presetKey === "military") {
+      filters = {
+        ...filters,
+        trafficCategory: "military",
+      };
+      return;
+    }
+
     if (presetKey === "ground") {
       filters = {
         ...filters,
@@ -1329,6 +1936,11 @@
 
     if (tokenKey === "operator") {
       filters = { ...filters, operator: "" };
+      return;
+    }
+
+    if (tokenKey === "trafficCategory") {
+      filters = { ...filters, trafficCategory: "all" };
       return;
     }
 
@@ -1686,7 +2298,7 @@
     }
 
     if (event.key === "Escape") {
-      clearSelectedFlight({ closeSidebar: isMobileViewport });
+      handleMapBackgroundClick();
       return;
     }
 
@@ -1776,6 +2388,14 @@
     return true;
   }
 
+  function matchesTrafficCategory(flight, category) {
+    if (category === "all") {
+      return true;
+    }
+
+    return classifyTrafficCategory(flight) === category;
+  }
+
   function calculateDistanceKm(latitude, longitude, viewport) {
     const center = viewport?.center ?? [52.15, 19.4];
     const toRadians = (value) => (value * Math.PI) / 180;
@@ -1857,6 +2477,7 @@
         priority:
           (flight.icao24 === selectedIcao24 ? 5000 : 0) +
           (watchedSet.has(flight.icao24) ? 2000 : 0) +
+          (flight.is_dimmed ? -4500 : 1200) +
           (!flight.on_ground ? 600 : 0) +
           Math.max(0, Math.round(flight.altitude ?? 0) / 100) +
           Math.max(0, Math.round(flight.velocity ?? 0)),
@@ -1885,6 +2506,7 @@
   $: activeReplaySnapshot =
     replaySnapshotIndex >= 0 ? replaySourceSnapshots[replaySnapshotIndex] ?? null : null;
   $: replayFlights = activeReplaySnapshot?.flights ?? state.flights;
+  $: activeFilterCount = countActiveFilters(filters);
   $: filteredFlights = replayFlights.filter((flight) => {
     const operatorCode = deriveOperatorCode(flight).toLowerCase();
     const matchesQuery =
@@ -1910,6 +2532,8 @@
 
     const matchesOperator =
       !normalizedOperatorFilter || operatorCode.includes(normalizedOperatorFilter);
+
+    const matchesCategory = matchesTrafficCategory(flight, filters.trafficCategory);
 
     const matchesHeading = matchesHeadingBand(flight.true_track, filters.headingBand);
 
@@ -1937,14 +2561,35 @@
       matchesSpeed &&
       matchesCountry &&
       matchesOperator &&
+      matchesCategory &&
       matchesHeading &&
       matchesGroundFilter &&
       matchesRecentActivity
     );
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
+  $: filteredFlightIds = new Set(filteredFlights.map((flight) => flight.icao24));
+  $: mapFeedFlights =
+    filters.dimFilteredTraffic && activeFilterCount
+      ? replayFlights.map((flight) =>
+          filteredFlightIds.has(flight.icao24)
+            ? flight
+            : {
+                ...flight,
+                is_dimmed: true,
+              }
+        )
+      : filteredFlights;
+  $: dimmedFlightIds = filters.dimFilteredTraffic && activeFilterCount
+    ? mapFeedFlights.filter((flight) => flight.is_dimmed).map((flight) => flight.icao24)
+    : [];
   $: displayLimit = getDisplayLimitForZoom(mapViewport?.zoom);
-  $: renderedFlights = prioritizeFlightsForMap(sortedFlights, displayLimit, selectedIcao24, watchlist);
+  $: renderedFlights = prioritizeFlightsForMap(
+    sortFlights(mapFeedFlights, sortBy, mapViewport),
+    displayLimit,
+    selectedIcao24,
+    watchlist
+  );
   $: watchedFlightEntries = watchlist.map((icao24) => {
     const flight = state.flights.find((candidate) => candidate.icao24 === icao24) ?? null;
     return {
@@ -1953,6 +2598,11 @@
       isLive: Boolean(flight),
     };
   });
+  $: savedFlightEntities = savedEntities.filter((entity) => entity.entity_type === "flight");
+  $: savedAirportEntities = savedEntities.filter((entity) => entity.entity_type === "airport");
+  $: savedLocationEntities = savedEntities.filter((entity) => entity.entity_type === "location");
+  $: savedAirlineEntities = savedEntities.filter((entity) => entity.entity_type === "airline");
+  $: savedRouteEntities = savedEntities.filter((entity) => entity.entity_type === "route");
   $: comparisonFlights = watchedFlightEntries
     .filter((entry) => entry.flight)
     .map((entry) => entry.flight)
@@ -1967,7 +2617,6 @@
           filteredFlights.length
       )
     : 0;
-  $: activeFilterCount = countActiveFilters(filters);
   $: topOperatorSuggestions = getTopValues(replayFlights, (flight) => deriveOperatorCode(flight) || "", 4);
   $: topCountrySuggestions = getTopValues(replayFlights, (flight) => flight.origin_country ?? "", 4);
   $: activeFilterTokens = [
@@ -1976,6 +2625,12 @@
     filters.minSpeed ? { key: "minSpeed", label: `Min speed ${filters.minSpeed} km/h` } : null,
     filters.country.trim() ? { key: "country", label: `Country: ${filters.country.trim()}` } : null,
     filters.operator.trim() ? { key: "operator", label: `Operator: ${filters.operator.trim().toUpperCase()}` } : null,
+    filters.trafficCategory !== "all"
+      ? {
+          key: "trafficCategory",
+          label: `Category: ${TRAFFIC_CATEGORY_OPTIONS.find((option) => option.value === filters.trafficCategory)?.label ?? filters.trafficCategory}`,
+        }
+      : null,
     filters.headingBand !== "any" ? { key: "headingBand", label: `Heading: ${filters.headingBand}` } : null,
     !filters.hideGroundTraffic ? { key: "ground", label: "Ground traffic visible" } : null,
     filters.recentActivity !== "any"
@@ -1996,7 +2651,12 @@
     ? `${globalTrafficBoard.meta.sectors_synced}/${globalTrafficBoard.meta.sectors_total} sectors synced`
     : "Global board";
   $: showMobileStartHint =
-    isMobileViewport && !selectedFlight && !mobileSidebarOpen && !mobileUtilityOpen;
+    isMobileViewport &&
+    !selectedFlight &&
+    !selectedAirport &&
+    !selectedEntityContext &&
+    !mobileSidebarOpen &&
+    !mobileUtilityOpen;
   $: replayPanelBadge = activeReplaySnapshot
     ? "Replay"
     : activeMonitoringSession
@@ -2031,7 +2691,7 @@
   $: canStepReplayForward = replaySourceSnapshots.length > 1 && replaySnapshotIndex !== -1;
   $: showSearchSuggestions =
     searchQuery.length >= 2 &&
-    (remoteSearchStatus !== "idle" || remoteSearchResults.length > 0 || remoteSearchError);
+    (remoteSearchStatus !== "idle" || remoteSearchCount > 0 || remoteSearchError);
   $: selectedFlightLiveCandidate = selectedIcao24 ? getKnownFlightByIcao24(selectedIcao24) : null;
   $: if (
     selectedIcao24 &&
@@ -2047,6 +2707,13 @@
     ? selectedFlightLiveCandidate ??
       (selectedFlightSnapshot?.icao24 === selectedIcao24 ? selectedFlightSnapshot : null)
     : null;
+  $: selectedAirport = selectedAirportCode
+    ? airportFeed.airports.find((airport) => normalizeAirportKey(airport) === selectedAirportCode) ??
+      (normalizeAirportKey(selectedAirportSnapshot) === selectedAirportCode ? selectedAirportSnapshot : null)
+    : null;
+  $: selectedAirportBookmarked = selectedAirport
+    ? isEntityBookmarked("airport", normalizeAirportKey(selectedAirport))
+    : false;
   $: selectedOperatorCode = selectedFlight ? deriveOperatorCode(selectedFlight) || "N/A" : "N/A";
   $: selectedFlightCallsignLabel = selectedFlight
     ? selectedFlight.callsign ?? selectedFlight.registration ?? selectedFlight.icao24.toUpperCase()
@@ -2136,6 +2803,23 @@
     followAircraft = false;
     selectedTagDraft = "";
   }
+  $: if (!selectedAirportCode) {
+    lastSelectedAirportKey = null;
+    selectedAirportDashboard = null;
+    selectedAirportStatus = "idle";
+    selectedAirportError = null;
+  }
+  $: if (selectedAirportCode && !selectedAirport && selectedAirportCode !== lastSelectedAirportKey) {
+    lastSelectedAirportKey = selectedAirportCode;
+    loadSelectedAirportDashboard({ entity_key: selectedAirportCode });
+  }
+  $: if (
+    selectedAirport &&
+    normalizeAirportKey(selectedAirport) !== lastSelectedAirportKey
+  ) {
+    lastSelectedAirportKey = normalizeAirportKey(selectedAirport);
+    loadSelectedAirportDashboard(selectedAirport);
+  }
   $: if (!selectedIcao24) {
     selectedFlightSnapshot = null;
     lastInspectorScrollFlightKey = null;
@@ -2172,6 +2856,8 @@
 
     if (searchQuery.length < 2) {
       remoteSearchResults = [];
+      remoteSearchGroups = {};
+      remoteSearchCount = 0;
       remoteSearchStatus = "idle";
       remoteSearchError = null;
     } else {
@@ -2184,6 +2870,17 @@
   $: if (state.fetchedAt && state.fetchedAt !== lastAlertCheckKey && !activeReplaySnapshot) {
     lastAlertCheckKey = state.fetchedAt;
     evaluateAlertRules();
+  }
+  $: if (buildBboxKey(state.bbox) && typeof window !== "undefined") {
+    state.bbox;
+    mapViewport.zoom;
+    if (airportFeedDebounceTimer) {
+      window.clearTimeout(airportFeedDebounceTimer);
+    }
+    airportFeedDebounceTimer = window.setTimeout(() => {
+      airportFeedDebounceTimer = null;
+      refreshAirports(state.bbox);
+    }, 260);
   }
   $: {
     replayPlaybackActive;
@@ -2217,7 +2914,31 @@
       alertEvents,
       monitoringSessions,
       savedViews,
+      savedEntities,
+      weatherLayerEnabled,
+      showAirportMarkers,
+      selectedAirportCode,
     });
+  }
+  $: if (preferencesReady) {
+    filters;
+    mapStyle;
+    mapViewport;
+    filterPresets;
+    sortBy;
+    theme;
+    onboardingDismissed;
+    watchlist;
+    watchModeEnabled;
+    flightAnnotations;
+    alertRules;
+    alertEvents;
+    monitoringSessions;
+    savedViews;
+    savedEntities;
+    weatherLayerEnabled;
+    showAirportMarkers;
+    queueWorkspaceSave();
   }
 </script>
 
@@ -2234,13 +2955,18 @@
     <div class="map-layer">
       <FlightMap
         flights={renderedFlights}
+        airports={airportFeed.airports}
         selectedIcao24={selectedIcao24}
+        selectedAirportKey={selectedAirportCode}
         selectedRouteAirports={selectedRouteAirports}
         followAircraft={followAircraft}
         mapStyle={mapStyle}
         trailPoints={selectedFlightTrail}
         watchedIcao24s={watchlist}
         watchModeEnabled={watchModeEnabled}
+        dimmedIcao24s={dimmedFlightIds}
+        showAirportMarkers={showAirportMarkers}
+        weatherLayerEnabled={weatherLayerEnabled}
         initialViewport={mapViewport}
         fullscreenRequestId={fullscreenRequestId}
         viewPresetRequest={viewPresetRequest}
@@ -2248,6 +2974,7 @@
         on:boundschange={handleBoundsChange}
         on:viewportchange={handleViewportChange}
         on:select={handleFlightSelect}
+        on:selectairport={handleAirportSelect}
         on:backgroundclick={handleMapBackgroundClick}
       />
     </div>
@@ -2268,37 +2995,21 @@
               bind:this={searchInput}
               bind:value={filters.query}
               type="text"
-              placeholder="Find flights, airports and more"
-              title="Search by callsign, ICAO24, origin country, or operator code"
+              placeholder="Search flights, airports, airlines, routes, locations"
+              title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
             />
           </label>
 
           {#if showSearchSuggestions}
             <div class="search-suggestions">
-              {#if remoteSearchStatus === "loading"}
-                <p class="search-hint">Searching archived traffic…</p>
-              {:else if remoteSearchError}
-                <p class="search-hint search-hint-error">{remoteSearchError}</p>
-              {:else if remoteSearchResults.length}
-                {#each remoteSearchResults as result}
-                  <button
-                    class="search-result"
-                    type="button"
-                    on:click={() => selectSearchResult(result)}
-                  >
-                    <strong>{result.callsign ?? result.registration ?? result.icao24.toUpperCase()}</strong>
-                    <span>
-                      {result.registration ?? result.icao24.toUpperCase()}
-                      {#if result.type_code}
-                        · {result.type_code}
-                      {/if}
-                      · {result.origin_country ?? "Unknown"}
-                    </span>
-                  </button>
-                {/each}
-              {:else}
-                <p class="search-hint">No recent archived flights match this query.</p>
-              {/if}
+              <EntitySearchPanel
+                query={searchQuery}
+                status={remoteSearchStatus}
+                error={remoteSearchError}
+                groups={remoteSearchGroups}
+                totalCount={remoteSearchCount}
+                onSelectResult={selectSearchResult}
+              />
             </div>
           {/if}
         </div>
@@ -2470,6 +3181,11 @@
                 <strong>{visibleTrackedCount}</strong>
                 <small>{airborneCount} airborne · {groundCount} ground</small>
               </article>
+              <article>
+                <span>Airports</span>
+                <strong>{airportFeed.airports.length}</strong>
+                <small>{showAirportMarkers ? "Markers visible" : "Layer hidden"}</small>
+              </article>
             </div>
           </section>
 
@@ -2486,6 +3202,8 @@
               <button class="filter-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast jets</button>
               <button class="filter-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
               <button class="filter-chip" type="button" on:click={() => applyQuickFilter("recent")}>Recent</button>
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("cargo")}>Cargo</button>
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("military")}>Military</button>
               <button
                 class:active={!filters.hideGroundTraffic}
                 class="filter-chip"
@@ -2567,6 +3285,23 @@
               </label>
 
               <label class="filter-field">
+                <span>Traffic category</span>
+                <select
+                  value={filters.trafficCategory}
+                  on:change={(event) => {
+                    filters = {
+                      ...filters,
+                      trafficCategory: event.currentTarget.value,
+                    };
+                  }}
+                >
+                  {#each TRAFFIC_CATEGORY_OPTIONS as option}
+                    <option value={option.value}>{option.label}</option>
+                  {/each}
+                </select>
+              </label>
+
+              <label class="filter-field">
                 <span>Heading</span>
                 <select
                   value={filters.headingBand}
@@ -2601,6 +3336,22 @@
                   <option value="2m">2 minutes</option>
                   <option value="5m">5 minutes</option>
                   <option value="15m">15 minutes</option>
+                </select>
+              </label>
+
+              <label class="filter-field filter-field-wide">
+                <span>Map filter mode</span>
+                <select
+                  value={filters.dimFilteredTraffic ? "dim" : "hide"}
+                  on:change={(event) => {
+                    filters = {
+                      ...filters,
+                      dimFilteredTraffic: event.currentTarget.value === "dim",
+                    };
+                  }}
+                >
+                  <option value="dim">Dim unmatched traffic</option>
+                  <option value="hide">Hide unmatched traffic</option>
                 </select>
               </label>
 
@@ -2659,6 +3410,34 @@
                   </div>
                 </div>
               {/if}
+            </div>
+
+            <div class="filter-suggestion-group">
+              <div class="suggestion-row">
+                <span>Map layers</span>
+                <div>
+                  <button
+                    class:active={showAirportMarkers}
+                    class="filter-chip"
+                    type="button"
+                    on:click={() => {
+                      showAirportMarkers = !showAirportMarkers;
+                    }}
+                  >
+                    Airports
+                  </button>
+                  <button
+                    class:active={weatherLayerEnabled}
+                    class="filter-chip"
+                    type="button"
+                    on:click={() => {
+                      weatherLayerEnabled = !weatherLayerEnabled;
+                    }}
+                  >
+                    Weather radar
+                  </button>
+                </div>
+              </div>
             </div>
 
             {#if activeFilterTokens.length}
@@ -2780,22 +3559,44 @@
           <section class="widget-card utility-summary-card">
             <div class="widget-header">
               <div class="widget-heading">
-                <strong>Local workspace</strong>
-                <span class="live-pill utility-state-pill">LOCAL</span>
+                <strong>Workspace sync</strong>
+                <span class="live-pill utility-state-pill">{workspaceSyncStatus === "success" ? "SYNC" : workspaceSyncStatus === "saving" ? "SAVE" : workspaceSyncStatus === "loading" ? "LOAD" : "ERR"}</span>
               </div>
             </div>
             <p class="widget-empty">
-              Local notes, bookmarks, alerts and saved views stay here so the live radar flow stays clean.
+              Profiles now sync filters, bookmarks, notes and replay sessions to the backend workspace store while local cache stays as fallback.
             </p>
           </section>
 
+          <details class="utility-drawer" open={workspaceProfiles.length > 0}>
+            <summary>
+              <span>Profiles</span>
+              <strong>{workspaceProfiles.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <WorkspaceProfilesPanel
+                profiles={workspaceProfiles}
+                activeProfileId={activeWorkspaceProfileId}
+                syncStatus={workspaceSyncStatus}
+                updatedAt={workspaceUpdatedAt}
+                draftName={workspaceProfileDraft}
+                syncError={workspaceSyncError}
+                onSelectProfile={loadWorkspaceProfile}
+                onDraftChange={(value) => {
+                  workspaceProfileDraft = value;
+                }}
+                onCreateProfile={createWorkspaceDesk}
+              />
+            </div>
+          </details>
+
           <details class="utility-drawer" open={watchlist.length > 0}>
             <summary>
-              <span>Bookmarks</span>
+              <span>Tracked aircraft</span>
               <strong>{watchlist.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Saved only in this browser until the app gets account-backed sync.</p>
+              <p class="drawer-caption">Saved aircraft stay highlighted on the radar and now sync with the active workspace profile.</p>
               <WatchlistPanel
                 entries={watchedFlightEntries}
                 selectedIcao24={selectedIcao24}
@@ -2806,6 +3607,96 @@
                 onSelectFlight={selectWatchedFlight}
                 onRemoveFlight={removeFromWatchlist}
               />
+            </div>
+          </details>
+
+          <details class="utility-drawer" open={savedAirportEntities.length > 0 || savedLocationEntities.length > 0 || savedAirlineEntities.length > 0 || savedRouteEntities.length > 0}>
+            <summary>
+              <span>Saved entities</span>
+              <strong>{savedEntities.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <p class="drawer-caption">Bookmarks are grouped by airports, locations, airlines and routes so search results stay reusable across sessions.</p>
+
+              {#if savedAirportEntities.length}
+                <div class="mini-stat-list">
+                  {#each savedAirportEntities as entity}
+                    <div>
+                      <span>
+                        <strong>{entity.label}</strong>
+                        <small>{entity.subtitle}</small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => openAirportInspector(entity, { focusMap: true, zoom: 8.8 })}>Open</button>
+                        <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if savedLocationEntities.length}
+                <div class="mini-stat-list">
+                  {#each savedLocationEntities as entity}
+                    <div>
+                      <span>
+                        <strong>{entity.label}</strong>
+                        <small>{entity.subtitle}</small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => focusLocationEntity(entity)}>Focus</button>
+                        <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if savedAirlineEntities.length}
+                <div class="mini-stat-list">
+                  {#each savedAirlineEntities as entity}
+                    <div>
+                      <span>
+                        <strong>{entity.label}</strong>
+                        <small>{entity.subtitle}</small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button
+                          class="widget-footer-button"
+                          type="button"
+                          on:click={() => {
+                            filters = {
+                              ...filters,
+                              operator: entity.entity_key,
+                            };
+                            openEntityContext(entity);
+                          }}
+                        >
+                          Filter
+                        </button>
+                        <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if savedRouteEntities.length}
+                <div class="mini-stat-list">
+                  {#each savedRouteEntities as entity}
+                    <div>
+                      <span>
+                        <strong>{entity.label}</strong>
+                        <small>{entity.subtitle}</small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => openEntityContext(entity)}>Open</button>
+                        <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           </details>
 
@@ -2822,7 +3713,7 @@
 
                 <div class="local-tool-actions">
                   <button class="widget-footer-button" type="button" on:click={toggleSelectedFlightWatchlist}>
-                    {watchlist.includes(selectedFlight.icao24) ? "Remove bookmark" : "Bookmark aircraft"}
+                    {watchlist.includes(selectedFlight.icao24) ? "Remove tracked aircraft" : "Bookmark aircraft"}
                   </button>
                   {#if selectedFlight.callsign}
                     <button
@@ -3003,16 +3894,53 @@
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
       <div class="rail-header">
         <div class="rail-brand">
-          <span>{selectedFlight ? selectedFlightQuickStatus : "Click any aircraft"}</span>
-          <strong>{selectedFlight ? selectedFlightCallsignLabel : "Visible traffic"}</strong>
+          <span>
+            {#if selectedFlight}
+              {selectedFlightQuickStatus}
+            {:else if selectedAirport}
+              Airport board
+            {:else if selectedEntityContext}
+              Search focus
+            {:else}
+              Click any aircraft
+            {/if}
+          </span>
+          <strong>
+            {#if selectedFlight}
+              {selectedFlightCallsignLabel}
+            {:else if selectedAirport}
+              {selectedAirport.iata ?? selectedAirport.icao ?? selectedAirport.entity_key}
+            {:else if selectedEntityContext}
+              {selectedEntityContext.label ?? selectedEntityContext.entity_key}
+            {:else}
+              Visible traffic
+            {/if}
+          </strong>
           {#if selectedFlightQuickSubtitle}
             <p class="rail-subtitle">{selectedFlightQuickSubtitle}</p>
+          {:else if selectedAirport}
+            <p class="rail-subtitle">
+              {selectedAirport.name ?? selectedAirport.label}
+              {#if selectedAirport.city || selectedAirport.country}
+                · {[selectedAirport.city, selectedAirport.country].filter(Boolean).join(", ")}
+              {/if}
+            </p>
+          {:else if selectedEntityContext}
+            <p class="rail-subtitle">{selectedEntityContext.subtitle ?? "Selected search entity"}</p>
           {/if}
         </div>
         {#if selectedFlight}
           <div class="rail-actions">
             <button class:active={followAircraft} class="rail-toggle" type="button" on:click={toggleFollowAircraft}>
               {followAircraft ? "Following" : "Follow"}
+            </button>
+            <button
+              class:active={watchlist.includes(selectedFlight.icao24)}
+              class="rail-toggle"
+              type="button"
+              on:click={toggleSelectedFlightWatchlist}
+            >
+              {watchlist.includes(selectedFlight.icao24) ? "Saved" : "Bookmark"}
             </button>
             <button class="rail-toggle" type="button" on:click={copyShareLink}>
               {shareFeedback || "Share"}
@@ -3023,6 +3951,39 @@
               aria-label="Close selected aircraft"
               on:click={() => clearSelectedFlight({ closeSidebar: true })}
             >
+              ×
+            </button>
+          </div>
+        {:else if selectedAirport}
+          <div class="rail-actions">
+            <button
+              class:active={selectedAirportBookmarked}
+              class="rail-toggle"
+              type="button"
+              on:click={() => toggleEntityBookmark(selectedAirport)}
+            >
+              {selectedAirportBookmarked ? "Saved" : "Bookmark"}
+            </button>
+            <button
+              class="rail-close"
+              type="button"
+              aria-label="Close selected airport"
+              on:click={() => handleMapBackgroundClick()}
+            >
+              ×
+            </button>
+          </div>
+        {:else if selectedEntityContext}
+          <div class="rail-actions">
+            <button
+              class:active={isEntityBookmarked(selectedEntityContext.entity_type, selectedEntityContext.entity_key)}
+              class="rail-toggle"
+              type="button"
+              on:click={() => toggleEntityBookmark(selectedEntityContext)}
+            >
+              {isEntityBookmarked(selectedEntityContext.entity_type, selectedEntityContext.entity_key) ? "Saved" : "Bookmark"}
+            </button>
+            <button class="rail-close" type="button" aria-label="Close search focus" on:click={handleMapBackgroundClick}>
               ×
             </button>
           </div>
@@ -3128,6 +4089,80 @@
               </div>
             </section>
           {/if}
+        {:else if selectedAirport}
+          <AirportDetailsPanel
+            airport={selectedAirport}
+            dashboard={selectedAirportDashboard}
+            status={selectedAirportStatus}
+            error={selectedAirportError}
+            weatherLayerEnabled={weatherLayerEnabled}
+            bookmarked={selectedAirportBookmarked}
+            onSelectFlight={selectWatchedFlight}
+            onRetry={() => loadSelectedAirportDashboard(selectedAirport)}
+            onToggleWeather={() => {
+              weatherLayerEnabled = !weatherLayerEnabled;
+            }}
+            onToggleBookmark={() => toggleEntityBookmark(selectedAirport)}
+          />
+        {:else if selectedEntityContext}
+          <section class="panel aircraft-workflow-panel">
+            <div class="workflow-header">
+              <div>
+                <p class="workflow-eyebrow">Search focus</p>
+                <h2>{selectedEntityContext.label ?? selectedEntityContext.entity_key}</h2>
+              </div>
+              <span class="workflow-status">{selectedEntityContext.entity_type ?? "entity"}</span>
+            </div>
+
+            <div class="workflow-facts">
+              <div>
+                <span>Entity type</span>
+                <strong>{selectedEntityContext.entity_type}</strong>
+              </div>
+              <div>
+                <span>Scope</span>
+                <strong>{selectedEntityContext.subtitle ?? "Live traffic intelligence"}</strong>
+              </div>
+              <div>
+                <span>Map focus</span>
+                <strong>
+                  {#if selectedEntityContext.entity_type === "location"}
+                    Saved area
+                  {:else if selectedEntityContext.entity_type === "airline"}
+                    Airline traffic
+                  {:else if selectedEntityContext.entity_type === "route"}
+                    Recent route
+                  {:else}
+                    Search entity
+                  {/if}
+                </strong>
+              </div>
+            </div>
+
+            <div class="local-tool-actions">
+              {#if selectedEntityContext.entity_type === "airline"}
+                <button
+                  class="workflow-button primary"
+                  type="button"
+                  on:click={() => {
+                    filters = {
+                      ...filters,
+                      operator: selectedEntityContext.entity_key ?? selectedEntityContext.label ?? "",
+                    };
+                    utilityPanelMode = "radar";
+                  }}
+                >
+                  Filter by airline
+                </button>
+              {/if}
+              {#if selectedEntityContext.entity_type === "location"}
+                <button class="workflow-button primary" type="button" on:click={() => focusLocationEntity(selectedEntityContext)}>
+                  Focus saved area
+                </button>
+              {/if}
+              <button class="workflow-button" type="button" on:click={copyShareLink}>Share view</button>
+            </div>
+          </section>
         {:else}
           <TrafficBoardPanel
             flights={sortedFlights}
@@ -3299,6 +4334,8 @@
     display: grid;
     gap: 0.32rem;
     padding: 0.4rem;
+    max-height: min(34rem, calc(100vh - 7rem));
+    overflow-y: auto;
     border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background:
@@ -3306,45 +4343,6 @@
     box-shadow:
       0 18px 32px rgba(0, 0, 0, 0.26),
       inset 0 1px 0 rgba(255, 255, 255, 0.03);
-  }
-
-  .search-hint {
-    margin: 0;
-    padding: 0.6rem 0.7rem;
-    font-size: 0.78rem;
-    color: rgba(214, 222, 231, 0.8);
-  }
-
-  .search-hint-error {
-    color: #ffd8d8;
-  }
-
-  .search-result {
-    display: grid;
-    gap: 0.14rem;
-    width: 100%;
-    padding: 0.72rem 0.74rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 11px;
-    color: inherit;
-    background: rgba(255, 255, 255, 0.03);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .search-result strong {
-    font-size: 0.84rem;
-    color: #f6f8fb;
-  }
-
-  .search-result span {
-    font-size: 0.72rem;
-    color: rgba(194, 206, 219, 0.7);
-  }
-
-  .search-result:hover {
-    border-color: rgba(255, 211, 79, 0.24);
-    background: rgba(255, 211, 79, 0.06);
   }
 
   .center-actions {
@@ -4046,6 +5044,13 @@
     text-transform: uppercase;
     letter-spacing: 0.1em;
     color: rgba(179, 188, 200, 0.66);
+  }
+
+  .compact-entity-actions {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .widget-footer-button {

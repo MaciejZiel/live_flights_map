@@ -68,14 +68,30 @@ function animateMarkerPosition(entry, nextLatLng) {
   entry.animationFrame = requestAnimationFrame(step);
 }
 
-export function createAircraftIcon(track = 0, selected = false, watched = false, watchModeEnabled = false, label = null) {
-  const fillColor = selected ? "#86d2ff" : watched ? "#7df0b1" : watchModeEnabled ? "#9aa5b3" : "#f7c716";
-  const strokeColor = selected ? "#eff9ff" : watched ? "#ecfff4" : "#46370a";
-  const opacity = watchModeEnabled && !watched && !selected ? 0.45 : 1;
+export function createAircraftIcon(
+  track = 0,
+  selected = false,
+  watched = false,
+  watchModeEnabled = false,
+  label = null,
+  dimmed = false
+) {
+  const fillColor = selected
+    ? "#86d2ff"
+    : watched
+      ? "#7df0b1"
+      : dimmed
+        ? "#8893a0"
+        : watchModeEnabled
+          ? "#9aa5b3"
+          : "#f7c716";
+  const strokeColor = selected ? "#eff9ff" : watched ? "#ecfff4" : dimmed ? "#3d4650" : "#46370a";
+  const opacity = dimmed ? 0.32 : watchModeEnabled && !watched && !selected ? 0.45 : 1;
   const shellClassNames = [
     "aircraft-icon-shell",
     selected ? "is-selected" : "",
     watched ? "is-watched" : "",
+    dimmed ? "is-dimmed" : "",
     watchModeEnabled && !watched && !selected ? "is-muted" : "",
   ]
     .filter(Boolean)
@@ -106,7 +122,7 @@ export function createAircraftIcon(track = 0, selected = false, watched = false,
   });
 }
 
-function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled) {
+function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, dimmed) {
   const nextLatLng = [flight.latitude, flight.longitude];
 
   entry.flight = flight;
@@ -117,21 +133,31 @@ function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled) {
       selected,
       watched,
       watchModeEnabled,
-      selected ? getMarkerLabel(flight) : null
+      selected ? getMarkerLabel(flight) : null,
+      dimmed
     )
   );
   entry.marker.setTooltipContent(buildTooltipContent(flight));
   entry.marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
 }
 
-function createMarkerEntry(layer, flight, selectedIcao24, watchedIcao24s, watchModeEnabled, onSelect) {
+function createMarkerEntry(
+  layer,
+  flight,
+  selectedIcao24,
+  watchedIcao24s,
+  watchModeEnabled,
+  dimmedIcao24s,
+  onSelect
+) {
   const marker = L.marker([flight.latitude, flight.longitude], {
     icon: createAircraftIcon(
       flight.true_track ?? 0,
       selectedIcao24 === flight.icao24,
       watchedIcao24s.has(flight.icao24),
       watchModeEnabled,
-      selectedIcao24 === flight.icao24 ? getMarkerLabel(flight) : null
+      selectedIcao24 === flight.icao24 ? getMarkerLabel(flight) : null,
+      dimmedIcao24s.has(flight.icao24)
     ),
     keyboard: false,
   }).bindTooltip(buildTooltipContent(flight), {
@@ -176,6 +202,7 @@ export function syncAircraftMarkers(
   selectedIcao24,
   watchedIcao24s = new Set(),
   watchModeEnabled = false,
+  dimmedIcao24s = new Set(),
   onSelect
 ) {
   const nextIds = new Set();
@@ -190,7 +217,8 @@ export function syncAircraftMarkers(
         flight,
         selectedIcao24 === flight.icao24,
         watchedIcao24s.has(flight.icao24),
-        watchModeEnabled
+        watchModeEnabled,
+        dimmedIcao24s.has(flight.icao24)
       );
       continue;
     }
@@ -201,6 +229,7 @@ export function syncAircraftMarkers(
       selectedIcao24,
       watchedIcao24s,
       watchModeEnabled,
+      dimmedIcao24s,
       onSelect
     );
     registry.set(flight.icao24, entry);

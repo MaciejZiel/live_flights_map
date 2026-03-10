@@ -145,6 +145,78 @@ export async function searchFlights(query, options = {}) {
   return parseApiResponse(response, "Failed to search archived flights.");
 }
 
+export async function fetchAirports(bbox, options = {}) {
+  const url = createApiUrl("/api/airports");
+  if (bbox) {
+    url.searchParams.set("lamin", bbox.lamin.toFixed(4));
+    url.searchParams.set("lamax", bbox.lamax.toFixed(4));
+    url.searchParams.set("lomin", bbox.lomin.toFixed(4));
+    url.searchParams.set("lomax", bbox.lomax.toFixed(4));
+  }
+  if (options.limit) {
+    url.searchParams.set("limit", String(options.limit));
+  }
+
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load airports.");
+}
+
+export async function fetchAirportDashboard(airportCode, options = {}) {
+  const url = createApiUrl(`/api/airports/${encodeURIComponent(airportCode)}`);
+  if (options.hours) {
+    url.searchParams.set("hours", String(options.hours));
+  }
+  if (options.limit) {
+    url.searchParams.set("limit", String(options.limit));
+  }
+
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load airport details.");
+}
+
+export async function fetchWorkspaceProfiles() {
+  const url = createApiUrl("/api/workspace/profiles");
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load workspace profiles.");
+}
+
+export async function createWorkspaceProfile(displayName) {
+  const url = createApiUrl("/api/workspace/profiles");
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ display_name: displayName }),
+  });
+  return parseApiResponse(response, "Failed to create a workspace profile.");
+}
+
+export async function fetchWorkspaceState(profileId) {
+  const url = createApiUrl("/api/workspace/state");
+  if (profileId) {
+    url.searchParams.set("profile_id", profileId);
+  }
+
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load the workspace state.");
+}
+
+export async function saveWorkspaceState(profileId, state) {
+  const url = createApiUrl("/api/workspace/state");
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      profile_id: profileId,
+      state,
+    }),
+  });
+  return parseApiResponse(response, "Failed to save the workspace state.");
+}
+
 export async function fetchGlobalTrafficBoard(options = {}) {
   const url = createApiUrl("/api/traffic/leaderboard");
   if (options.limit) {

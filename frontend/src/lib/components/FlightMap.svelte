@@ -7,13 +7,18 @@
   import { syncAircraftMarkers } from "../map/aircraftMarkers.js";
 
   export let flights = [];
+  export let airports = [];
   export let selectedIcao24 = null;
+  export let selectedAirportKey = null;
   export let selectedRouteAirports = [];
   export let followAircraft = false;
   export let mapStyle = "standard";
   export let trailPoints = [];
   export let watchedIcao24s = [];
   export let watchModeEnabled = false;
+  export let dimmedIcao24s = [];
+  export let showAirportMarkers = true;
+  export let weatherLayerEnabled = false;
   export let initialViewport = null;
   export let fullscreenRequestId = 0;
   export let viewPresetRequest = null;
@@ -26,11 +31,16 @@
   let activeBaseLayer;
   let activeMapStyle = null;
   let aircraftLayer;
+  let airportLayer;
   let trailLayer;
   let motionVectorLayer;
   let routeLayer;
   let selectionLayer;
+  let weatherLayer;
+  let weatherFrame = null;
+  let weatherRefreshTimer = null;
   const markerRegistry = new Map();
+  const airportRegistry = new Map();
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
@@ -222,7 +232,21 @@
   }
 
   function applyFocusRequest(request) {
-    if (!map || !request?.center) {
+    if (!map || !request) {
+      return;
+    }
+
+    if (request.bounds?.length === 2) {
+      map.flyToBounds(request.bounds, {
+        animate: true,
+        duration: 1.1,
+        padding: [72, 72],
+        maxZoom: request.maxZoom ?? 8.4,
+      });
+      return;
+    }
+
+    if (!request.center) {
       return;
     }
 
@@ -441,6 +465,113 @@
     routeLayer = L.layerGroup(routePoints).addTo(map);
   }
 
+  function buildAirportTooltipContent(airport) {
+    const airportCode = airport?.iata ?? airport?.icao ?? airport?.entity_key ?? "?";
+    const subtitle = [airport?.city, airport?.country].filter(Boolean).join(", ");
+    return `
+      <div class="airport-tooltip-card">
+        <strong>${airportCode}</strong>
+        <span>${airport?.name ?? airport?.label ?? "Airport"}</span>
+        <small>${subtitle || "Airport desk"}</small>
+      </div>
+    `;
+  }
+
+  function createAirportIcon(airport, selected) {
+    const airportCode = airport?.iata ?? airport?.icao ?? airport?.entity_key ?? "?";
+    return L.divIcon({
+      className: `airport-marker-shell${selected ? " is-selected" : ""}`,
+      iconSize: [selected ? 42 : 34, selected ? 42 : 34],
+      iconAnchor: [17, 17],
+      html: `
+        <div class="airport-marker">
+          <span class="airport-marker-core">${airportCode}</span>
+        </div>
+      `,
+    });
+  }
+
+  function syncAirportLayer() {
+    if (!map || !airportLayer) {
+      return;
+    }
+
+    airportLayer.clearLayers();
+    airportRegistry.clear();
+
+    if (!showAirportMarkers || !airports?.length) {
+      return;
+    }
+
+    for (const airport of airports) {
+      if (!Number.isFinite(airport?.latitude) || !Number.isFinite(airport?.longitude)) {
+        continue;
+      }
+
+      const marker = L.marker([airport.latitude, airport.longitude], {
+        icon: createAirportIcon(airport, selectedAirportKey === airport.entity_key),
+        keyboard: false,
+      }).bindTooltip(buildAirportTooltipContent(airport), {
+        direction: "top",
+        offset: [0, -12],
+        opacity: 1,
+        className: "airport-tooltip",
+      });
+
+      marker.on("click", () => {
+        dispatch("selectairport", { airport });
+      });
+      marker.on("mouseover", () => marker.openTooltip());
+      marker.on("mouseout", () => marker.closeTooltip());
+      marker.addTo(airportLayer);
+      airportRegistry.set(airport.entity_key, marker);
+    }
+  }
+
+  async function loadWeatherFrame() {
+    try {
+      const response = await fetch("https://api.rainviewer.com/public/weather-maps.json");
+      if (!response.ok) {
+        return;
+      }
+
+      const payload = await response.json();
+      const frame = payload?.radar?.past?.[payload.radar.past.length - 1];
+      const host = payload?.host ?? "https://tilecache.rainviewer.com";
+      if (!frame?.path) {
+        return;
+      }
+
+      weatherFrame = {
+        url: `${host}${frame.path}/256/{z}/{x}/{y}/2/1_1.png`,
+      };
+      syncWeatherLayer();
+    } catch {
+      // Keep the map functional if the public weather overlay is unavailable.
+    }
+  }
+
+  function syncWeatherLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (weatherLayer) {
+      map.removeLayer(weatherLayer);
+      weatherLayer = null;
+    }
+
+    if (!weatherLayerEnabled || !weatherFrame?.url) {
+      return;
+    }
+
+    weatherLayer = L.tileLayer(weatherFrame.url, {
+      opacity: 0.42,
+      maxZoom: 7,
+      attribution: "Weather radar © RainViewer",
+    }).addTo(map);
+  }
+
   function focusSelectedRoute() {
     if (!map || !selectedIcao24 || followAircraft) {
       return;
@@ -509,6 +640,7 @@
         });
       },
     }).addTo(map);
+    airportLayer = L.layerGroup().addTo(map);
     aircraftLayer.on("clusterclick", (event) => {
       const cluster = event.layer;
       if (map.getZoom() >= 8) {
@@ -521,12 +653,17 @@
       });
     });
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
+    syncAirportLayer();
+    loadWeatherFrame();
+    weatherRefreshTimer = window.setInterval(() => {
+      loadWeatherFrame();
+    }, 10 * 60 * 1000);
     map.on("click", (event) => {
       const target = event.originalEvent?.target;
       if (
         target instanceof Element &&
         target.closest(
-          ".aircraft-icon-shell, .aircraft-cluster, .leaflet-tooltip, .leaflet-control, .route-airport-label"
+          ".aircraft-icon-shell, .aircraft-cluster, .leaflet-tooltip, .leaflet-control, .route-airport-label, .airport-marker-shell, .airport-tooltip"
         )
       ) {
         return;
@@ -549,7 +686,13 @@
       motionVectorLayer = null;
       routeLayer = null;
       selectionLayer = null;
+      airportLayer = null;
+      weatherLayer = null;
+      if (weatherRefreshTimer) {
+        window.clearInterval(weatherRefreshTimer);
+      }
       markerRegistry.clear();
+      airportRegistry.clear();
     };
   });
 
@@ -561,15 +704,19 @@
       selectedIcao24,
       new Set(watchedIcao24s),
       watchModeEnabled,
+      new Set(dimmedIcao24s),
       (flight) => {
-      dispatch("select", { flight });
+        dispatch("select", { flight });
       }
     );
   }
 
+  $: syncAirportLayer();
+
   $: if (map) {
     setBasemap(mapStyle);
   }
+  $: syncWeatherLayer();
 
   $: if (
     map &&
@@ -858,6 +1005,10 @@
     box-shadow: none;
   }
 
+  :global(.aircraft-icon-shell.is-dimmed .aircraft-icon-wrap::before) {
+    box-shadow: none;
+  }
+
   :global(.leaflet-tooltip.aircraft-hover-tooltip) {
     padding: 0;
     border: 0;
@@ -933,6 +1084,92 @@
 
   :global(.leaflet-tooltip.route-airport-label:before) {
     display: none;
+  }
+
+  :global(.airport-marker-shell) {
+    background: transparent;
+    border: 0;
+  }
+
+  :global(.airport-marker) {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+  }
+
+  :global(.airport-marker::before) {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 14px 14px 14px 4px;
+    background: linear-gradient(180deg, rgba(18, 20, 25, 0.96) 0%, rgba(8, 10, 14, 0.98) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    transform: rotate(45deg);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+  }
+
+  :global(.airport-marker-core) {
+    position: relative;
+    z-index: 1;
+    transform: translateY(-1px);
+    font-size: 0.58rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #f7d36a;
+  }
+
+  :global(.airport-marker-shell.is-selected .airport-marker::before) {
+    background: linear-gradient(180deg, rgba(55, 49, 19, 0.98) 0%, rgba(18, 16, 11, 0.98) 100%);
+    border-color: rgba(255, 211, 79, 0.4);
+    box-shadow:
+      0 14px 26px rgba(0, 0, 0, 0.26),
+      0 0 0 7px rgba(245, 185, 8, 0.12);
+  }
+
+  :global(.leaflet-tooltip.airport-tooltip) {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :global(.leaflet-tooltip.airport-tooltip:before) {
+    display: none;
+  }
+
+  :global(.airport-tooltip-card) {
+    display: grid;
+    gap: 0.16rem;
+    min-width: 10.5rem;
+    padding: 0.62rem 0.72rem;
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #ecf3fa;
+    background: linear-gradient(180deg, rgba(25, 28, 33, 0.98) 0%, rgba(12, 14, 18, 0.98) 100%);
+    box-shadow:
+      0 18px 28px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  :global(.airport-tooltip-card strong) {
+    font-size: 0.82rem;
+    color: #f8fbff;
+  }
+
+  :global(.airport-tooltip-card span),
+  :global(.airport-tooltip-card small) {
+    color: rgba(198, 209, 221, 0.78);
+  }
+
+  :global(.airport-tooltip-card span) {
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  :global(.airport-tooltip-card small) {
+    font-size: 0.66rem;
   }
 
   @media (max-width: 960px) {

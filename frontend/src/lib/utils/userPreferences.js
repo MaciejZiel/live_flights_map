@@ -18,5 +18,9 @@ export function saveUserPreferences(preferences) {
     return;
   }
 
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+  } catch {
+    // Ignore storage write failures so the radar stays usable in private mode and tight quotas.
+  }
 }

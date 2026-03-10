@@ -15,10 +15,20 @@
   export let followAircraft = false;
   export let trailPoints = [];
   export let bookmarked = false;
+  export let liveStatus = "Live";
+  export let snapshotFreshness = "waiting";
+  export let snapshotConfidence = "High";
+  export let snapshotTransport = "Polling";
+  export let detailFreshness = "waiting";
+  export let isReplayActive = false;
+  export let shareFeedback = "";
   export let onToggleFollow = () => {};
   export let onToggleBookmark = () => {};
   export let onOpenAirport = () => {};
   export let onRetryDetails = () => {};
+  export let onShare = () => {};
+  export let onOpenTracking = () => {};
+  export let onAddAlert = () => {};
 
   function formatRelativeContact(lastContact) {
     if (lastContact === null || lastContact === undefined) {
@@ -237,6 +247,13 @@
       : ["loading", "refreshing"].includes(detailsStatus)
         ? "Resolving route"
         : "Live track";
+  $: dataQualitySummary = detailWarning
+    ? "Guarded"
+    : detailsStatus === "loading" || detailsStatus === "refreshing"
+      ? "Syncing"
+      : isReplayActive
+        ? "Replay"
+        : snapshotConfidence;
 </script>
 
 <section class="panel details-panel">
@@ -347,6 +364,15 @@
           <button class:active={bookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
             {bookmarked ? "Saved to workspace" : "Save flight"}
           </button>
+          <button class="action-button secondary" type="button" on:click={onOpenTracking}>
+            Tracking
+          </button>
+          <button class="action-button secondary" type="button" on:click={onShare}>
+            {shareFeedback || "Share"}
+          </button>
+          <button class="action-button secondary" type="button" on:click={onAddAlert}>
+            Alert
+          </button>
           <button class="action-button secondary" type="button" on:click={onRetryDetails}>
             Refresh
           </button>
@@ -360,6 +386,36 @@
         <span>{detailWarning}</span>
       </section>
     {/if}
+
+    <section class="facts-panel data-quality-panel">
+      <div class="facts-header">
+        <strong>Data quality</strong>
+        <span>{dataQualitySummary}</span>
+      </div>
+
+      <div class="quality-grid">
+        <article class="quality-card">
+          <span>Radar mode</span>
+          <strong>{isReplayActive ? "Replay frame" : liveStatus}</strong>
+          <small>{routeStatusText}</small>
+        </article>
+        <article class="quality-card">
+          <span>Snapshot age</span>
+          <strong>{snapshotFreshness}</strong>
+          <small>{snapshotConfidence} confidence</small>
+        </article>
+        <article class="quality-card">
+          <span>Details sync</span>
+          <strong>{detailFreshness}</strong>
+          <small>{detailsStatus === "success" ? "Details ready" : detailsStatus === "error" ? "Fallback active" : "Resolving metadata"}</small>
+        </article>
+        <article class="quality-card">
+          <span>Transport</span>
+          <strong>{snapshotTransport}</strong>
+          <small>{trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up"}</small>
+        </article>
+      </div>
+    </section>
 
     <section class="telemetry-grid">
       <article class="telemetry-card">
@@ -406,6 +462,10 @@
         <div class="fact-row">
           <span>ICAO24</span>
           <strong>{identity.icao24}</strong>
+        </div>
+        <div class="fact-row">
+          <span>Operator</span>
+          <strong>{identity.operatorCode ?? "Unknown"}</strong>
         </div>
         <div class="fact-row">
           <span>Current position</span>
@@ -849,6 +909,38 @@
   .detail-warning,
   .facts-panel {
     padding: 0.82rem;
+  }
+
+  .quality-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+  }
+
+  .quality-card {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.72rem 0.76rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .quality-card span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: rgba(171, 186, 202, 0.56);
+  }
+
+  .quality-card strong {
+    color: #f2f6fb;
+    font-size: 0.9rem;
+  }
+
+  .quality-card small {
+    color: rgba(190, 203, 217, 0.72);
+    font-size: 0.74rem;
   }
 
   .detail-warning strong {

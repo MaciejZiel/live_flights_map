@@ -315,6 +315,137 @@ class TrafficIntelligenceService:
             if row["airline_code"]
         ]
 
+    def search_aircraft_profiles(
+        self,
+        query: str,
+        limit: int,
+        lookback_hours: float,
+    ) -> list[dict[str, object]]:
+        normalized_query = str(query).strip().upper()
+        if not normalized_query:
+            return []
+
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(hours=max(lookback_hours, 1.0))
+        ).isoformat()
+        like_query = f"%{normalized_query}%"
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    """
+                    WITH latest_positions AS (
+                        SELECT
+                            p.icao24,
+                            p.callsign,
+                            p.registration,
+                            p.type_code,
+                            p.origin_country,
+                            p.latitude,
+                            p.longitude,
+                            p.altitude,
+                            p.velocity,
+                            p.vertical_rate,
+                            p.true_track,
+                            p.last_contact,
+                            p.on_ground,
+                            p.fetched_at,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY p.icao24
+                                ORDER BY p.fetched_at DESC
+                            ) AS row_number
+                        FROM positions p
+                        WHERE p.fetched_at >= ?
+                    )
+                    SELECT
+                        lp.icao24,
+                        COALESCE(e.registration, lp.registration) AS registration,
+                        COALESCE(e.type_code, lp.type_code) AS type_code,
+                        COALESCE(e.callsign, lp.callsign) AS callsign,
+                        COALESCE(e.operator_code, e.airline_code, SUBSTR(COALESCE(e.callsign, lp.callsign, ''), 1, 3)) AS operator_code,
+                        COALESCE(e.route_label, e.iata_codes, e.airport_codes) AS route_label,
+                        lp.origin_country,
+                        lp.latitude,
+                        lp.longitude,
+                        lp.altitude,
+                        lp.velocity,
+                        lp.vertical_rate,
+                        lp.true_track,
+                        lp.last_contact,
+                        lp.on_ground,
+                        lp.fetched_at
+                    FROM latest_positions lp
+                    LEFT JOIN enriched_flights e
+                      ON e.icao24 = lp.icao24
+                    WHERE lp.row_number = 1
+                      AND (
+                        UPPER(COALESCE(e.registration, lp.registration, '')) LIKE ?
+                        OR UPPER(COALESCE(e.type_code, lp.type_code, '')) LIKE ?
+                        OR UPPER(COALESCE(e.callsign, lp.callsign, '')) LIKE ?
+                        OR UPPER(COALESCE(e.icao24, lp.icao24, '')) LIKE ?
+                      )
+                    ORDER BY
+                        CASE
+                            WHEN UPPER(COALESCE(e.registration, lp.registration, '')) = ? THEN 0
+                            WHEN UPPER(COALESCE(e.icao24, lp.icao24, '')) = ? THEN 1
+                            WHEN UPPER(COALESCE(e.callsign, lp.callsign, '')) = ? THEN 2
+                            ELSE 3
+                        END,
+                        lp.fetched_at DESC
+                    LIMIT ?
+                    """,
+                    (
+                        cutoff_timestamp,
+                        like_query,
+                        like_query,
+                        like_query,
+                        like_query,
+                        normalized_query,
+                        normalized_query,
+                        normalized_query,
+                        max(limit, 1),
+                    ),
+                ).fetchall()
+            finally:
+                connection.close()
+
+        return [
+            {
+                "entity_type": "aircraft",
+                "entity_key": row["registration"] or row["icao24"],
+                "label": row["registration"] or row["icao24"].upper(),
+                "subtitle": " · ".join(
+                    part
+                    for part in (
+                        row["type_code"],
+                        row["operator_code"],
+                        row["route_label"],
+                    )
+                    if part
+                )
+                or row["origin_country"]
+                or "Tracked aircraft",
+                "icao24": row["icao24"],
+                "callsign": row["callsign"],
+                "registration": row["registration"],
+                "type_code": row["type_code"],
+                "operator_code": row["operator_code"],
+                "origin_country": row["origin_country"],
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "altitude": row["altitude"],
+                "velocity": row["velocity"],
+                "vertical_rate": row["vertical_rate"],
+                "true_track": row["true_track"],
+                "last_contact": row["last_contact"],
+                "on_ground": bool(row["on_ground"]),
+                "fetched_at": row["fetched_at"],
+            }
+            for row in rows
+            if row["icao24"]
+        ]
+
     def search_routes(self, query: str, limit: int) -> list[dict[str, object]]:
         normalized_query = str(query).strip().upper()
         if not normalized_query:

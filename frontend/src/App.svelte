@@ -165,6 +165,12 @@
   let archivedReplayRequestId = 0;
   let lastArchivedReplayBboxKey = null;
   let replayHydrationTimer = null;
+  let flattenedSearchResults = [];
+  let activeSearchResult = null;
+  let activeSearchResultKey = "";
+  let searchNavigationIndex = -1;
+  let searchSuggestionsDismissed = false;
+  let lastSearchQuery = "";
   let remoteSearchResults = [];
   let remoteSearchGroups = {};
   let remoteSearchCount = 0;
@@ -843,6 +849,112 @@
     }
   }
 
+  function buildSearchResultKey(result) {
+    return `${result?.entity_type ?? "entity"}:${result?.entity_key ?? result?.icao24 ?? result?.label ?? "unknown"}`;
+  }
+
+  function flattenSearchGroups(groups) {
+    const orderedGroupNames = [
+      "aircraft",
+      "flights",
+      "airports",
+      "airlines",
+      "routes",
+      "locations",
+    ];
+    const fallbackEntries = Object.entries(groups ?? {});
+    const prioritizedEntries = orderedGroupNames
+      .map((name) => [name, groups?.[name] ?? null])
+      .filter(([, items]) => Array.isArray(items) && items.length);
+    const trailingEntries = fallbackEntries.filter(
+      ([name, items]) =>
+        !orderedGroupNames.includes(name) && Array.isArray(items) && items.length
+    );
+
+    return [...prioritizedEntries, ...trailingEntries].flatMap(([, items]) => items);
+  }
+
+  function resetSearchSuggestions(options = {}) {
+    const clearQuery = options.clearQuery ?? false;
+    if (clearQuery) {
+      filters = {
+        ...filters,
+        query: "",
+      };
+    }
+    remoteSearchResults = [];
+    remoteSearchGroups = {};
+    remoteSearchCount = 0;
+    remoteSearchStatus = "idle";
+    remoteSearchError = null;
+    searchNavigationIndex = -1;
+    searchSuggestionsDismissed = Boolean(options.dismissed ?? false);
+  }
+
+  function setSearchNavigationByResult(result) {
+    const resultKey = buildSearchResultKey(result);
+    const resultIndex = flattenedSearchResults.findIndex(
+      (entry) => buildSearchResultKey(entry) === resultKey
+    );
+    if (resultIndex >= 0) {
+      searchNavigationIndex = resultIndex;
+    }
+  }
+
+  function handleSearchResultHover(result) {
+    if (!result) {
+      return;
+    }
+
+    setSearchNavigationByResult(result);
+  }
+
+  function handleSearchInputKeydown(event) {
+    if (!showSearchSuggestions || !flattenedSearchResults.length) {
+      if (event.key === "Escape") {
+        searchSuggestionsDismissed = true;
+      }
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      searchNavigationIndex =
+        searchNavigationIndex < 0
+          ? 0
+          : (searchNavigationIndex + 1) % flattenedSearchResults.length;
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      searchNavigationIndex =
+        searchNavigationIndex < 0
+          ? flattenedSearchResults.length - 1
+          : (searchNavigationIndex - 1 + flattenedSearchResults.length) %
+            flattenedSearchResults.length;
+      return;
+    }
+
+    if (event.key === "Enter") {
+      const activeResult =
+        flattenedSearchResults[searchNavigationIndex] ?? flattenedSearchResults[0] ?? null;
+      if (!activeResult) {
+        return;
+      }
+
+      event.preventDefault();
+      selectSearchResult(activeResult);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      searchSuggestionsDismissed = true;
+      searchNavigationIndex = -1;
+    }
+  }
+
   function openEntityContext(entity) {
     selectedEntityContext = entity;
     selectedIcao24 = null;
@@ -1399,6 +1511,25 @@
     }
   }
 
+  function addSelectedFlightAlert() {
+    if (!selectedFlight) {
+      return;
+    }
+
+    if (selectedFlight.callsign) {
+      addAlertRule({
+        type: "callsign",
+        query: selectedFlight.callsign,
+      });
+      return;
+    }
+
+    addAlertRule({
+      type: "icao24",
+      query: selectedFlight.icao24,
+    });
+  }
+
   function buildFlightDetailsKey(flight) {
     if (!flight?.icao24) {
       return null;
@@ -1737,17 +1868,14 @@
   async function loadRemoteSearchResults(query) {
     const normalizedQuery = query.trim();
     if (normalizedQuery.length < 2) {
-      remoteSearchResults = [];
-      remoteSearchGroups = {};
-      remoteSearchCount = 0;
-      remoteSearchStatus = "idle";
-      remoteSearchError = null;
+      resetSearchSuggestions();
       return;
     }
 
     const requestId = ++remoteSearchRequestId;
     remoteSearchStatus = "loading";
     remoteSearchError = null;
+    searchSuggestionsDismissed = false;
 
     try {
       const searchPayload = await searchFlights(normalizedQuery, { limit: 8 });
@@ -1760,6 +1888,7 @@
       remoteSearchCount = searchPayload.count ?? remoteSearchResults.length;
       remoteSearchStatus = "success";
       remoteSearchError = null;
+      searchNavigationIndex = remoteSearchResults.length ? 0 : -1;
     } catch (error) {
       if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedQuery) {
         return;
@@ -1771,6 +1900,7 @@
       remoteSearchStatus = "error";
       remoteSearchError =
         error instanceof Error ? error.message : "Failed to search archived flights.";
+      searchNavigationIndex = -1;
     }
   }
 
@@ -1819,7 +1949,7 @@
       return;
     }
 
-    if (result.entity_type === "flight") {
+    if (result.entity_type === "flight" || result.entity_type === "aircraft") {
       openFlightInspector(result, {
         focusMap: true,
         zoom: 8.4,
@@ -1845,15 +1975,7 @@
       openEntityContext(result);
     }
 
-    filters = {
-      ...filters,
-      query: "",
-    };
-    remoteSearchResults = [];
-    remoteSearchGroups = {};
-    remoteSearchCount = 0;
-    remoteSearchStatus = "idle";
-    remoteSearchError = null;
+    resetSearchSuggestions({ clearQuery: true, dismissed: true });
   }
 
   function updateSelectedFlightNotes(notes) {
@@ -2390,6 +2512,11 @@
     }
 
     if (event.key === "Escape") {
+      if (isTypingField && target === searchInput) {
+        searchSuggestionsDismissed = true;
+        searchNavigationIndex = -1;
+        return;
+      }
       handleMapBackgroundClick();
       return;
     }
@@ -2783,8 +2910,20 @@
   $: canStepReplayBackward =
     replaySourceSnapshots.length > 1 && (replaySnapshotIndex > 0 || replaySnapshotIndex === -1);
   $: canStepReplayForward = replaySourceSnapshots.length > 1 && replaySnapshotIndex !== -1;
+  $: if (searchQuery !== lastSearchQuery) {
+    lastSearchQuery = searchQuery;
+    searchSuggestionsDismissed = false;
+  }
+  $: flattenedSearchResults = flattenSearchGroups(remoteSearchGroups);
+  $: if (searchNavigationIndex >= flattenedSearchResults.length) {
+    searchNavigationIndex = flattenedSearchResults.length ? 0 : -1;
+  }
+  $: activeSearchResult =
+    searchNavigationIndex >= 0 ? flattenedSearchResults[searchNavigationIndex] ?? null : null;
+  $: activeSearchResultKey = activeSearchResult ? buildSearchResultKey(activeSearchResult) : "";
   $: showSearchSuggestions =
     searchQuery.length >= 2 &&
+    !searchSuggestionsDismissed &&
     (remoteSearchStatus !== "idle" || remoteSearchCount > 0 || remoteSearchError);
   $: selectedFlightLiveCandidate = selectedIcao24 ? getKnownFlightByIcao24(selectedIcao24) : null;
   $: if (
@@ -2870,6 +3009,13 @@
   $: selectedFlightTrailRecentPoints = [...selectedFlightTrail].slice(-5).reverse();
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
+  $: selectedFlightRadarModeLabel = activeReplaySnapshot ? "Replay frame" : statusLabel;
+  $: selectedFlightFreshnessLabel = getFreshnessLabel(
+    activeReplaySnapshot?.fetchedAt ?? state.fetchedAt
+  );
+  $: selectedFlightConfidence = activeReplaySnapshot ? "Archived" : confidenceLabel;
+  $: selectedFlightTransportMode = activeReplaySnapshot ? "Archive" : transportLabel;
+  $: selectedFlightDetailsFreshness = getFreshnessLabel(selectedFlightDetails?.meta?.fetched_at);
   $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
   $: replayArchiveBboxKey = buildBboxKey(state.bbox);
   $: mapStyleLabel = {
@@ -2962,11 +3108,7 @@
     }
 
     if (searchQuery.length < 2) {
-      remoteSearchResults = [];
-      remoteSearchGroups = {};
-      remoteSearchCount = 0;
-      remoteSearchStatus = "idle";
-      remoteSearchError = null;
+      resetSearchSuggestions();
     } else {
       searchDebounceTimer = window.setTimeout(() => {
         searchDebounceTimer = null;
@@ -3106,8 +3248,9 @@
                 bind:this={searchInput}
                 bind:value={filters.query}
                 type="text"
-                placeholder="Search flights, airports, airlines, routes, locations"
+                placeholder="Search aircraft, flights, airports, airlines, routes, locations"
                 title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
+                on:keydown={handleSearchInputKeydown}
               />
             </label>
 
@@ -3119,6 +3262,8 @@
                   error={remoteSearchError}
                   groups={remoteSearchGroups}
                   totalCount={remoteSearchCount}
+                  activeResultKey={activeSearchResultKey}
+                  onHoverResult={handleSearchResultHover}
                   onSelectResult={selectSearchResult}
                 />
               </div>
@@ -4188,10 +4333,20 @@
               followAircraft={followAircraft}
               trailPoints={selectedFlightTrail}
               bookmarked={watchlist.includes(selectedFlight.icao24)}
+              liveStatus={selectedFlightRadarModeLabel}
+              snapshotFreshness={selectedFlightFreshnessLabel}
+              snapshotConfidence={selectedFlightConfidence}
+              snapshotTransport={selectedFlightTransportMode}
+              detailFreshness={selectedFlightDetailsFreshness}
+              isReplayActive={Boolean(activeReplaySnapshot)}
+              shareFeedback={shareFeedback}
               onToggleFollow={toggleFollowAircraft}
               onToggleBookmark={toggleSelectedFlightWatchlist}
               onOpenAirport={(airport) => openAirportInspector(airport, { focusMap: true, zoom: 8.8 })}
               onRetryDetails={retrySelectedFlightDetails}
+              onShare={copyShareLink}
+              onOpenTracking={() => openInspectorTab("tracking")}
+              onAddAlert={addSelectedFlightAlert}
             />
           {:else if inspectorTab === "tracking"}
             <section class="panel aircraft-workflow-panel">

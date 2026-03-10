@@ -4,9 +4,12 @@
   export let error = null;
   export let groups = {};
   export let totalCount = 0;
+  export let activeResultKey = "";
   export let onSelectResult = () => {};
+  export let onHoverResult = () => {};
 
   const GROUP_META = {
+    aircraft: { label: "Aircraft", glyph: "ACFT" },
     flights: { label: "Flights", glyph: "FLT" },
     airports: { label: "Airports", glyph: "APT" },
     airlines: { label: "Airlines", glyph: "AIR" },
@@ -35,6 +38,12 @@
       return result.subtitle;
     }
 
+    if (result?.entity_type === "aircraft") {
+      return [result.callsign, result.operator_code, result.origin_country]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
     if (result?.entity_type === "flight") {
       return [result.registration ?? result.icao24?.toUpperCase(), result.type_code, result.origin_country]
         .filter(Boolean)
@@ -55,6 +64,10 @@
   }
 
   function getMetric(result) {
+    if (result?.entity_type === "aircraft") {
+      return result.type_code ?? result.icao24?.toUpperCase() ?? "LIVE";
+    }
+
     if (result?.entity_type === "flight") {
       return result.type_code ?? "LIVE";
     }
@@ -78,18 +91,25 @@
     return result?.entity_key ?? "Open";
   }
 
+  function buildResultKey(result) {
+    return `${result?.entity_type ?? "entity"}:${result?.entity_key ?? result?.icao24 ?? result?.label ?? "unknown"}`;
+  }
+
   $: groupEntries = getEntries(groups);
 </script>
 
 <section class="search-panel" aria-label="Entity search results">
   {#if status === "loading"}
-    <p class="search-copy">Searching flights, airports, airlines and routes…</p>
+    <p class="search-copy">Searching aircraft, flights, airports, airlines, routes and locations…</p>
   {:else if error}
     <p class="search-copy search-copy-error">{error}</p>
   {:else if groupEntries.length}
     <div class="search-summary">
-      <strong>{totalCount}</strong>
-      <span>{query.trim() ? `results for "${query.trim()}"` : "results"}</span>
+      <div>
+        <strong>{totalCount}</strong>
+        <span>{query.trim() ? `results for "${query.trim()}"` : "results"}</span>
+      </div>
+      <small>Use ↑ ↓ to navigate, Enter to open</small>
     </div>
 
     {#each groupEntries as [groupName, items]}
@@ -101,7 +121,15 @@
 
         <div class="search-result-list">
           {#each items as result}
-            <button class="search-row" type="button" on:click={() => onSelectResult(result)}>
+            <button
+              class:active={activeResultKey === buildResultKey(result)}
+              class="search-row"
+              type="button"
+              aria-current={activeResultKey === buildResultKey(result) ? "true" : undefined}
+              on:mouseenter={() => onHoverResult(result)}
+              on:focus={() => onHoverResult(result)}
+              on:click={() => onSelectResult(result)}
+            >
               <span class="search-row-glyph">{GROUP_META[groupName]?.glyph ?? "..."}</span>
               <span class="search-row-main">
                 <strong>{getResultLabel(result)}</strong>
@@ -114,9 +142,9 @@
       </section>
     {/each}
   {:else if query.trim().length >= 2}
-    <p class="search-copy">No live or archived entities match this search yet.</p>
+    <p class="search-copy">No live aircraft, flights or airport entities matched this search yet.</p>
   {:else}
-    <p class="search-copy">Type at least two characters to search flights, airports, airlines, routes and saved locations.</p>
+    <p class="search-copy">Type at least two characters to search aircraft, flights, airports, airlines, routes and saved locations.</p>
   {/if}
 </section>
 
@@ -128,9 +156,16 @@
 
   .search-summary {
     display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: end;
+    padding: 0 0.25rem;
+  }
+
+  .search-summary div {
+    display: flex;
     align-items: baseline;
     gap: 0.45rem;
-    padding: 0 0.25rem;
   }
 
   .search-summary strong {
@@ -139,6 +174,7 @@
   }
 
   .search-summary span,
+  .search-summary small,
   .search-copy {
     font-size: 0.76rem;
     color: rgba(199, 209, 220, 0.78);
@@ -217,6 +253,12 @@
     transform: translateY(-1px);
     border-color: rgba(255, 211, 79, 0.24);
     background: linear-gradient(180deg, rgba(44, 37, 18, 0.98) 0%, rgba(23, 22, 17, 0.98) 100%);
+  }
+
+  .search-row.active {
+    border-color: rgba(120, 200, 255, 0.34);
+    background: linear-gradient(180deg, rgba(14, 36, 54, 0.98) 0%, rgba(12, 22, 33, 0.98) 100%);
+    box-shadow: 0 0 0 1px rgba(120, 200, 255, 0.16);
   }
 
   .search-row-glyph {

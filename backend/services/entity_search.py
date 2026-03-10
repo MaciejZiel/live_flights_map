@@ -16,6 +16,11 @@ class EntitySearchService:
 
     def search(self, query: str, limit: int) -> dict[str, object]:
         normalized_limit = min(max(limit, 1), 12)
+        aircraft = self.traffic_intelligence_service.search_aircraft_profiles(
+            query=query,
+            limit=normalized_limit,
+            lookback_hours=self.lookback_hours,
+        )
         flights_payload = self.archive_service.search_recent_flights(
             query=query,
             limit=normalized_limit,
@@ -88,6 +93,7 @@ class EntitySearchService:
         )
 
         ordered_groups = [
+            ("aircraft", aircraft),
             ("flights", flights),
             ("airports", airport_results),
             ("airlines", airlines),

@@ -8,6 +8,13 @@
   let ruleType = "callsign";
   let ruleQuery = "";
 
+  const RULE_LABELS = {
+    callsign: "Callsign match",
+    icao24: "ICAO24 match",
+    airline: "Airline/operator match",
+    country: "Country match",
+  };
+
   function submitRule() {
     const normalizedQuery = ruleQuery.trim();
     if (!normalizedQuery) {
@@ -51,6 +58,8 @@
       <select bind:value={ruleType}>
         <option value="callsign">Callsign</option>
         <option value="icao24">ICAO24</option>
+        <option value="airline">Airline</option>
+        <option value="country">Country</option>
       </select>
     </label>
     <label class="field">
@@ -58,7 +67,7 @@
       <input
         bind:value={ruleQuery}
         type="text"
-        placeholder="LOT, RYR, 48ad08"
+        placeholder="LOT, RYR, Poland, 48ad08"
         on:keydown={(event) => event.key === "Enter" && submitRule()}
       />
     </label>
@@ -71,7 +80,7 @@
         <article class="rule-card">
           <div>
             <strong>{rule.query}</strong>
-            <p>{rule.type === "callsign" ? "Callsign match" : "ICAO24 match"}</p>
+            <p>{RULE_LABELS[rule.type] ?? "Traffic match"}</p>
           </div>
           <button class="remove-button" type="button" on:click={() => onRemoveRule(rule.id)}>Remove</button>
         </article>

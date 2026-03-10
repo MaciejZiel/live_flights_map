@@ -3,10 +3,14 @@
   export let activeSnapshot = null;
   export let activeIndex = -1;
   export let isPlaying = false;
+  export let playbackSpeed = 1;
   export let canStepBackward = false;
   export let canStepForward = false;
   export let onSelectIndex = () => {};
   export let onReturnToLive = () => {};
+  export let onJumpStart = () => {};
+  export let onJumpLatest = () => {};
+  export let onSetPlaybackSpeed = () => {};
   export let onStepBackward = () => {};
   export let onStepForward = () => {};
   export let onTogglePlayback = () => {};
@@ -23,7 +27,12 @@
     }).format(new Date(value));
   }
 
+  function handleSpeedChange(event) {
+    onSetPlaybackSpeed(Number(event.currentTarget.value));
+  }
+
   $: sliderValue = activeIndex >= 0 ? activeIndex : Math.max(0, snapshots.length - 1);
+  $: activeSnapshotLabel = snapshots[sliderValue] ? formatSnapshotTime(snapshots[sliderValue].fetchedAt) : "--:--";
 </script>
 
 <section class="panel replay-panel">
@@ -57,11 +66,22 @@
     </label>
 
     <div class="timeline-meta">
-      <strong>{formatSnapshotTime(snapshots[sliderValue].fetchedAt)}</strong>
+      <strong>{activeSnapshotLabel}</strong>
       <span>{snapshots[sliderValue].count} tracked aircraft</span>
     </div>
 
+    <div class="timeline-speed-row">
+      <span>Playback speed</span>
+      <select value={playbackSpeed} on:change={handleSpeedChange}>
+        <option value="0.5">0.5x</option>
+        <option value="1">1x</option>
+        <option value="2">2x</option>
+        <option value="4">4x</option>
+      </select>
+    </div>
+
     <div class="timeline-controls">
+      <button class="control-button" type="button" on:click={onJumpStart}>First</button>
       <button
         class="control-button"
         type="button"
@@ -92,6 +112,7 @@
       >
         Step forward
       </button>
+      <button class="control-button" type="button" on:click={onJumpLatest}>Latest</button>
     </div>
   {/if}
 </section>
@@ -185,8 +206,29 @@
 
   .timeline-controls {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 0.55rem;
+  }
+
+  .timeline-speed-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .timeline-speed-row span {
+    font-size: 0.8rem;
+    color: var(--color-muted);
+  }
+
+  .timeline-speed-row select {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.56rem 0.72rem;
+    font: inherit;
+    color: var(--color-text);
+    background: var(--surface-input-bg);
   }
 
   .control-button {
@@ -213,8 +255,13 @@
 
   @media (max-width: 720px) {
     .replay-header,
-    .timeline-meta {
+    .timeline-meta,
+    .timeline-speed-row {
       display: grid;
+    }
+
+    .timeline-controls {
+      grid-template-columns: 1fr;
     }
   }
 </style>

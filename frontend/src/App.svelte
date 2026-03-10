@@ -123,6 +123,7 @@
   let lastReplaySnapshotKey = null;
   let replayPlaybackActive = false;
   let replayPlaybackTimer = null;
+  let replayPlaybackSpeed = 1;
   let lastInspectorScrollFlightKey = null;
   let shareFeedback = "";
   let shareFeedbackTimer = null;
@@ -217,6 +218,7 @@
       weatherLayerEnabled = savedPreferences.weatherLayerEnabled ?? weatherLayerEnabled;
       showAirportMarkers = savedPreferences.showAirportMarkers ?? showAirportMarkers;
       selectedAirportCode = savedPreferences.selectedAirportCode ?? selectedAirportCode;
+      replayPlaybackSpeed = savedPreferences.replayPlaybackSpeed ?? replayPlaybackSpeed;
     }
 
     applySharedStateFromUrl();
@@ -510,6 +512,7 @@
       weatherLayerEnabled,
       showAirportMarkers,
       selectedAirportCode,
+      replayPlaybackSpeed,
     };
   }
 
@@ -560,6 +563,7 @@
     weatherLayerEnabled = workspaceState.weatherLayerEnabled ?? weatherLayerEnabled;
     showAirportMarkers = workspaceState.showAirportMarkers ?? showAirportMarkers;
     selectedAirportCode = workspaceState.selectedAirportCode ?? selectedAirportCode;
+    replayPlaybackSpeed = workspaceState.replayPlaybackSpeed ?? replayPlaybackSpeed;
   }
 
   async function loadWorkspaceProfile(profileId) {
@@ -1210,6 +1214,7 @@
         showAirportMarkers,
         selectedIcao24,
         selectedAirportCode,
+        replayPlaybackSpeed,
       },
     };
 
@@ -1239,6 +1244,7 @@
     showAirportMarkers = view.state.showAirportMarkers ?? showAirportMarkers;
     selectedIcao24 = view.state.selectedIcao24 ?? null;
     selectedAirportCode = view.state.selectedAirportCode ?? null;
+    replayPlaybackSpeed = view.state.replayPlaybackSpeed ?? replayPlaybackSpeed;
     activeSavedViewId = view.id;
   }
 
@@ -1263,6 +1269,14 @@
           return (flight.callsign ?? "").toLowerCase().includes(normalizedQuery);
         }
 
+        if (rule.type === "airline") {
+          return deriveOperatorCode(flight).toLowerCase().includes(normalizedQuery);
+        }
+
+        if (rule.type === "country") {
+          return (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery);
+        }
+
         return flight.icao24.includes(normalizedQuery);
       });
 
@@ -1274,15 +1288,13 @@
       if (matches.length > 0 && previousMatches === 0) {
         const leadFlight = matches[0];
         pushAlertEvent(
-          `${rule.type === "callsign" ? "Callsign" : "ICAO24"} ${rule.query} matched ${
-            leadFlight.callsign ?? leadFlight.icao24
-          }`
+          `${rule.type === "callsign" ? "Callsign" : rule.type === "airline" ? "Airline" : rule.type === "country" ? "Country" : "ICAO24"} ${rule.query} matched ${leadFlight.callsign ?? leadFlight.icao24}`
         );
       }
 
       if (matches.length === 0 && previousMatches > 0) {
         pushAlertEvent(
-          `${rule.type === "callsign" ? "Callsign" : "ICAO24"} ${rule.query} is no longer visible`
+          `${rule.type === "callsign" ? "Callsign" : rule.type === "airline" ? "Airline" : rule.type === "country" ? "Country" : "ICAO24"} ${rule.query} is no longer visible`
         );
       }
     }
@@ -2168,6 +2180,25 @@
     replaySnapshotCursor = replaySourceSnapshots[boundedIndex]?.fetchedAt ?? null;
   }
 
+  function jumpReplayToStart() {
+    if (!replaySourceSnapshots.length) {
+      return;
+    }
+
+    replayPlaybackActive = false;
+    setReplaySnapshotIndex(0);
+  }
+
+  function jumpReplayToLatest() {
+    replayPlaybackActive = false;
+    replaySnapshotCursor = null;
+  }
+
+  function setReplayPlaybackSpeed(multiplier) {
+    const numericMultiplier = Number(multiplier);
+    replayPlaybackSpeed = Number.isFinite(numericMultiplier) && numericMultiplier > 0 ? numericMultiplier : 1;
+  }
+
   function stepReplay(direction) {
     if (replaySourceSnapshots.length < 2) {
       return;
@@ -2280,7 +2311,7 @@
       }
 
       setReplaySnapshotIndex(nextIndex);
-    }, 1200);
+    }, Math.max(240, Math.round(1200 / replayPlaybackSpeed)));
   }
 
   function handleKeyboardShortcut(event) {
@@ -2889,6 +2920,7 @@
     replayPlaybackActive;
     replaySnapshotIndex;
     replaySourceSnapshots.length;
+    replayPlaybackSpeed;
     syncReplayPlaybackTimer();
   }
   $: if (preferencesReady) {
@@ -2921,6 +2953,7 @@
       weatherLayerEnabled,
       showAirportMarkers,
       selectedAirportCode,
+      replayPlaybackSpeed,
     });
   }
   $: if (preferencesReady) {
@@ -2941,6 +2974,7 @@
     savedEntities;
     weatherLayerEnabled;
     showAirportMarkers;
+    replayPlaybackSpeed;
     queueWorkspaceSave();
   }
 </script>
@@ -3551,10 +3585,14 @@
             activeSnapshot={activeReplaySnapshot}
             activeIndex={replaySnapshotIndex}
             isPlaying={replayPlaybackActive}
+            playbackSpeed={replayPlaybackSpeed}
             canStepBackward={canStepReplayBackward}
             canStepForward={canStepReplayForward}
             onSelectIndex={selectReplaySnapshot}
             onReturnToLive={returnToLiveReplay}
+            onJumpStart={jumpReplayToStart}
+            onJumpLatest={jumpReplayToLatest}
+            onSetPlaybackSpeed={setReplayPlaybackSpeed}
             onStepBackward={() => stepReplay(-1)}
             onStepForward={() => stepReplay(1)}
             onTogglePlayback={toggleReplayPlayback}
@@ -3749,6 +3787,19 @@
                       Alert by callsign
                     </button>
                   {/if}
+                  {#if selectedOperatorCode !== "N/A"}
+                    <button
+                      class="widget-footer-button"
+                      type="button"
+                      on:click={() =>
+                        addAlertRule({
+                          type: "airline",
+                          query: selectedOperatorCode,
+                        })}
+                    >
+                      Alert by airline
+                    </button>
+                  {/if}
                   <button
                     class="widget-footer-button"
                     type="button"
@@ -3875,7 +3926,7 @@
               <strong>{alertRules.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Alert rules stay local until the app gets account-backed workflows.</p>
+              <p class="drawer-caption">Alert rules sync with the active workspace profile and can watch callsigns, ICAO24s, airlines and countries.</p>
               <AlertPanel
                 rules={alertRules}
                 events={alertEvents}

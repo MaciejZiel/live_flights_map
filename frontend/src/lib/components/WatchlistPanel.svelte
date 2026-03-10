@@ -10,7 +10,7 @@
 <section class="panel watchlist-panel">
   <div class="watchlist-header">
     <div>
-      <p class="eyebrow">Local workspace</p>
+      <p class="eyebrow">Synced workspace</p>
       <h2>Saved aircraft</h2>
     </div>
 
@@ -47,7 +47,7 @@
       {/each}
     </div>
   {:else}
-    <p>Add an aircraft in Local workspace to keep it saved on this device.</p>
+    <p>Add an aircraft to keep it saved in the active synced workspace profile.</p>
   {/if}
 </section>
 

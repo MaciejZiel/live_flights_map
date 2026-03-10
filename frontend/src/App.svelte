@@ -4868,7 +4868,7 @@
               <strong>{monitoringSessions.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Replay snapshots saved only on this device.</p>
+              <p class="drawer-caption">Replay sessions stay in the active synced workspace profile.</p>
               <MonitoringSessionsPanel
                 sessions={monitoringSessions}
                 activeSessionId={activeMonitoringSessionId}
@@ -5113,50 +5113,64 @@
 
           <details class="utility-drawer" open={false}>
             <summary>
-              <span>Guide and shortcuts</span>
-              <strong>{onboardingDismissed ? "Hidden" : "Open"}</strong>
+              <span>Workspace extras</span>
+              <strong>{savedViews.length + comparisonFlights.length + (onboardingDismissed ? 0 : 1)}</strong>
             </summary>
             <div class="utility-drawer-body">
-              {#if !onboardingDismissed}
-                <OnboardingPanel onDismiss={dismissOnboarding} />
-              {:else}
-                <section class="widget-card utility-summary-card utility-compact-card">
-                  <div class="widget-header">
-                    <div class="widget-heading">
-                      <strong>Quick start hidden</strong>
-                      <span class="live-pill utility-state-pill">Guide</span>
+              <section class="utility-stack-panel">
+                <p class="drawer-caption">
+                  Quick start, shortcuts, saved views and comparison stay here without
+                  competing with the main map and inspector workflow.
+                </p>
+                {#if !onboardingDismissed}
+                  <OnboardingPanel onDismiss={dismissOnboarding} />
+                {:else}
+                  <section class="widget-card utility-summary-card utility-compact-card">
+                    <div class="widget-header">
+                      <div class="widget-heading">
+                        <strong>Quick start hidden</strong>
+                        <span class="live-pill utility-state-pill">Guide</span>
+                      </div>
                     </div>
-                  </div>
-                  <p class="widget-empty">Bring back the onboarding tips at any time.</p>
-                  <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
-                    Show tips again
-                  </button>
-                </section>
-              {/if}
+                    <p class="widget-empty">Bring back the onboarding tips at any time.</p>
+                    <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
+                      Show tips again
+                    </button>
+                  </section>
+                {/if}
 
-              <LegendPanel />
-              <ShortcutsPanel />
-            </div>
-          </details>
+                <LegendPanel />
+                <ShortcutsPanel />
+              </section>
 
-          <details class="utility-drawer" open={false}>
-            <summary>
-              <span>Saved views</span>
-              <strong>{savedViews.length}</strong>
-            </summary>
-            <div class="utility-drawer-body">
-              <p class="drawer-caption">Saved only in this browser for quick jumps back to your favorite airspace.</p>
-              <SavedViewsPanel
-                views={savedViews}
-                activeViewId={activeSavedViewId}
-                currentName={savedViewName}
-                onNameChange={(value) => {
-                  savedViewName = value;
-                }}
-                onSaveView={saveCurrentView}
-                onLoadView={loadSavedView}
-                onDeleteView={deleteSavedView}
-              />
+              <section class="utility-stack-panel">
+                <p class="drawer-caption">
+                  Saved views now stay in the synced workspace so every desk profile can reopen a
+                  full radar setup.
+                </p>
+                <SavedViewsPanel
+                  views={savedViews}
+                  activeViewId={activeSavedViewId}
+                  currentName={savedViewName}
+                  onNameChange={(value) => {
+                    savedViewName = value;
+                  }}
+                  onSaveView={saveCurrentView}
+                  onLoadView={loadSavedView}
+                  onDeleteView={deleteSavedView}
+                />
+              </section>
+
+              <section class="utility-stack-panel">
+                <p class="drawer-caption">
+                  Comparison stays available here without competing with the live radar by default.
+                </p>
+                <ComparisonPanel
+                  flights={comparisonFlights}
+                  selectedIcao24={selectedIcao24}
+                  onSelectFlight={selectWatchedFlight}
+                />
+              </section>
             </div>
           </details>
 
@@ -5173,21 +5187,6 @@
                 onAddRule={addAlertRule}
                 onRemoveRule={removeAlertRule}
                 onClearEvents={clearAlertEvents}
-              />
-            </div>
-          </details>
-
-          <details class="utility-drawer" open={false}>
-            <summary>
-              <span>Aircraft comparison</span>
-              <strong>{comparisonFlights.length}</strong>
-            </summary>
-            <div class="utility-drawer-body">
-              <p class="drawer-caption">Comparison stays available here without competing with the live radar by default.</p>
-              <ComparisonPanel
-                flights={comparisonFlights}
-                selectedIcao24={selectedIcao24}
-                onSelectFlight={selectWatchedFlight}
               />
             </div>
           </details>
@@ -6576,6 +6575,18 @@
     font-size: 0.74rem;
     line-height: 1.45;
     color: rgba(190, 203, 217, 0.76);
+  }
+
+  .utility-stack-panel {
+    display: grid;
+    gap: 0.65rem;
+    padding-top: 0.72rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .utility-stack-panel:first-child {
+    padding-top: 0;
+    border-top: 0;
   }
 
   .local-tool-actions {

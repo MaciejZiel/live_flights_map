@@ -11,6 +11,7 @@ def _env_bool(name: str, default: bool) -> bool:
 
 class Config:
     DEBUG = _env_bool("FLASK_DEBUG", False)
+    HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "5000"))
 
     OPENSKY_BASE_URL = os.getenv(

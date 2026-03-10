@@ -53,6 +53,12 @@ Uruchom backend:
 .venv/bin/python app.py
 ```
 
+Backend host i port możesz nadpisać:
+
+```bash
+HOST=127.0.0.1 PORT=5002 .venv/bin/python app.py
+```
+
 Backend będzie dostępny pod:
 
 ```text
@@ -95,6 +101,18 @@ Uruchom dev server:
 
 ```bash
 npm --prefix frontend run dev
+```
+
+Frontend możesz skierować na inny backend bez edycji kodu:
+
+```bash
+VITE_API_BASE_URL=http://127.0.0.1:5002 npm --prefix frontend run dev
+```
+
+Albo zachować ścieżki względne `/api` i tylko przestawić dev proxy:
+
+```bash
+VITE_DEV_PROXY_TARGET=http://127.0.0.1:5002 npm --prefix frontend run dev
 ```
 
 Frontend będzie dostępny pod:

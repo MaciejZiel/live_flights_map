@@ -80,6 +80,8 @@
     country: "",
     operator: "",
     route: "",
+    airportCode: "",
+    airportFlow: "all",
     trafficState: "all",
     trafficCategory: "all",
     headingBand: "any",
@@ -361,6 +363,8 @@
       country: "",
       operator: "",
       route: "",
+      airportCode: "",
+      airportFlow: "all",
       trafficState: "all",
       trafficCategory: "all",
       headingBand: "any",
@@ -377,6 +381,8 @@
       normalizedFilters.country.trim(),
       normalizedFilters.operator.trim(),
       normalizedFilters.route.trim(),
+      normalizedFilters.airportCode.trim(),
+      normalizedFilters.airportCode.trim() && normalizedFilters.airportFlow !== "all",
       normalizedFilters.trafficState !== "all",
       normalizedFilters.trafficCategory !== "all",
       normalizedFilters.headingBand !== "any",
@@ -1215,6 +1221,8 @@
     const sharedCountry = params.get("country");
     const sharedOperator = params.get("operator");
     const sharedRoute = params.get("route");
+    const sharedAirportFilter = params.get("airportFilter");
+    const sharedAirportFlow = params.get("airportFlow");
     const sharedTrafficState = params.get("flightState");
     const sharedCategory = params.get("category");
     const sharedHeadingBand = params.get("heading");
@@ -1262,6 +1270,14 @@
 
     if (sharedRoute !== null) {
       nextFilters.route = sharedRoute;
+    }
+
+    if (sharedAirportFilter !== null) {
+      nextFilters.airportCode = sharedAirportFilter;
+    }
+
+    if (["all", "arrivals", "departures"].includes(sharedAirportFlow)) {
+      nextFilters.airportFlow = sharedAirportFlow;
     }
 
     if (["all", "airborne", "ground"].includes(sharedTrafficState)) {
@@ -1370,6 +1386,18 @@
       params.set("route", filters.route.trim());
     } else {
       params.delete("route");
+    }
+
+    if (filters.airportCode.trim()) {
+      params.set("airportFilter", filters.airportCode.trim().toUpperCase());
+    } else {
+      params.delete("airportFilter");
+    }
+
+    if (filters.airportCode.trim() && filters.airportFlow !== "all") {
+      params.set("airportFlow", filters.airportFlow);
+    } else {
+      params.delete("airportFlow");
     }
 
     if (filters.trafficState !== "all") {
@@ -2367,6 +2395,8 @@
       country: "",
       operator: "",
       route: "",
+      airportCode: "",
+      airportFlow: "all",
       trafficState: "all",
       trafficCategory: "all",
       headingBand: "any",
@@ -2465,6 +2495,16 @@
 
     if (tokenKey === "route") {
       filters = { ...filters, route: "" };
+      return;
+    }
+
+    if (tokenKey === "airportCode") {
+      filters = { ...filters, airportCode: "", airportFlow: "all" };
+      return;
+    }
+
+    if (tokenKey === "airportFlow") {
+      filters = { ...filters, airportFlow: "all" };
       return;
     }
 
@@ -3025,6 +3065,66 @@
     return getFlightSearchFields(flight).some((value) => value.includes(query));
   }
 
+  function getAirportFlowFields(flight, flow) {
+    if (flow === "departures") {
+      return [
+        flight?.origin,
+        flight?.origin_iata,
+        flight?.origin_icao,
+        flight?.origin_name,
+      ];
+    }
+
+    if (flow === "arrivals") {
+      return [
+        flight?.destination,
+        flight?.destination_iata,
+        flight?.destination_icao,
+        flight?.destination_name,
+      ];
+    }
+
+    return [
+      flight?.origin,
+      flight?.origin_iata,
+      flight?.origin_icao,
+      flight?.origin_name,
+      flight?.destination,
+      flight?.destination_iata,
+      flight?.destination_icao,
+      flight?.destination_name,
+    ];
+  }
+
+  function matchesAirportTrafficFilter(flight, airportCode, airportFlow) {
+    if (!airportCode) {
+      return true;
+    }
+
+    return getAirportFlowFields(flight, airportFlow)
+      .filter(Boolean)
+      .some((value) => String(value).toLowerCase().includes(airportCode));
+  }
+
+  function applyAirportTrafficFilter(airport, flow = "all") {
+    const airportCode = normalizeAirportKey(airport);
+    if (!airportCode) {
+      return;
+    }
+
+    filters = {
+      ...filters,
+      airportCode,
+      airportFlow: flow,
+    };
+    utilityPanelMode = "radar";
+
+    if (isMobileViewport) {
+      mobileUtilityOpen = true;
+      mobileSidebarOpen = false;
+    }
+  }
+
   function matchesHeadingBand(track, band) {
     if (band === "any" || track === null || track === undefined) {
       return true;
@@ -3160,6 +3260,7 @@
   $: normalizedCountryFilter = filters.country.trim().toLowerCase();
   $: normalizedOperatorFilter = filters.operator.trim().toLowerCase();
   $: normalizedRouteFilter = filters.route.trim().toLowerCase();
+  $: normalizedAirportCodeFilter = filters.airportCode.trim().toLowerCase();
   $: activeMonitoringSession =
     monitoringSessions.find((session) => session.id === activeMonitoringSessionId) ?? null;
   $: activeWorkspaceProfile =
@@ -3218,6 +3319,12 @@
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(normalizedRouteFilter));
 
+    const matchesAirportFlow = matchesAirportTrafficFilter(
+      flight,
+      normalizedAirportCodeFilter,
+      filters.airportFlow
+    );
+
     const matchesTrafficState =
       filters.trafficState === "all" ||
       (filters.trafficState === "ground" ? flight.on_ground : !flight.on_ground);
@@ -3252,6 +3359,7 @@
       matchesCountry &&
       matchesOperator &&
       matchesRoute &&
+      matchesAirportFlow &&
       matchesTrafficState &&
       matchesCategory &&
       matchesHeading &&
@@ -3323,6 +3431,18 @@
     filters.country.trim() ? { key: "country", label: `Country: ${filters.country.trim()}` } : null,
     filters.operator.trim() ? { key: "operator", label: `Operator: ${filters.operator.trim().toUpperCase()}` } : null,
     filters.route.trim() ? { key: "route", label: `Route/airport: ${filters.route.trim().toUpperCase()}` } : null,
+    filters.airportCode.trim()
+      ? {
+          key: "airportCode",
+          label: `Airport: ${filters.airportCode.trim().toUpperCase()}`,
+        }
+      : null,
+    filters.airportCode.trim() && filters.airportFlow !== "all"
+      ? {
+          key: "airportFlow",
+          label: `Flow: ${filters.airportFlow === "arrivals" ? "Arrivals" : "Departures"}`,
+        }
+      : null,
     filters.trafficState !== "all"
       ? {
           key: "trafficState",
@@ -4105,6 +4225,38 @@
                     };
                   }}
                 />
+              </label>
+
+              <label class="filter-field">
+                <span>Airport code</span>
+                <input
+                  type="text"
+                  value={filters.airportCode}
+                  placeholder="WAW or EPWA"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      airportCode: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
+                <span>Airport flow</span>
+                <select
+                  value={filters.airportFlow}
+                  on:change={(event) => {
+                    filters = {
+                      ...filters,
+                      airportFlow: event.currentTarget.value,
+                    };
+                  }}
+                >
+                  <option value="all">Arrivals + departures</option>
+                  <option value="arrivals">Arrivals only</option>
+                  <option value="departures">Departures only</option>
+                </select>
               </label>
 
               <label class="filter-field">
@@ -5189,6 +5341,9 @@
             }}
             onToggleBookmark={() => toggleEntityBookmark(selectedAirport)}
             onAddAlert={addSelectedAirportAlert}
+            onFilterAllTraffic={() => applyAirportTrafficFilter(selectedAirport, "all")}
+            onFilterArrivals={() => applyAirportTrafficFilter(selectedAirport, "arrivals")}
+            onFilterDepartures={() => applyAirportTrafficFilter(selectedAirport, "departures")}
           />
         {:else if selectedEntityContext}
           <section class="panel aircraft-workflow-panel">

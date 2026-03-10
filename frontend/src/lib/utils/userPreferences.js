@@ -11,6 +11,7 @@ const THEME_OPTIONS = new Set(["dark", "light"]);
 const RECENT_ACTIVITY_OPTIONS = new Set(["any", "30s", "2m", "5m", "15m"]);
 const HEADING_BAND_OPTIONS = new Set(["any", "north", "east", "south", "west"]);
 const TRAFFIC_STATE_OPTIONS = new Set(["all", "airborne", "ground"]);
+const AIRPORT_FLOW_OPTIONS = new Set(["all", "arrivals", "departures"]);
 const REPLAY_WINDOW_OPTIONS = new Set([30, 90, 180]);
 const TRAFFIC_CATEGORY_OPTIONS = new Set([
   "all",
@@ -95,6 +96,12 @@ function sanitizeFilters(value) {
     country: sanitizeString(value.country),
     operator: sanitizeString(value.operator),
     route: sanitizeString(value.route),
+    airportCode: sanitizeString(value.airportCode),
+    airportFlow: sanitizeOption(
+      sanitizeString(value.airportFlow, "all"),
+      AIRPORT_FLOW_OPTIONS,
+      "all"
+    ),
     trafficState: sanitizeOption(
       sanitizeString(value.trafficState, "all"),
       TRAFFIC_STATE_OPTIONS,

@@ -15,6 +15,9 @@
   export let onToggleWeather = () => {};
   export let onToggleBookmark = () => {};
   export let onAddAlert = () => {};
+  export let onFilterAllTraffic = () => {};
+  export let onFilterArrivals = () => {};
+  export let onFilterDepartures = () => {};
 
   let activeTab = "overview";
   let lastAirportKey = null;
@@ -146,6 +149,18 @@
         <strong>{stats.departures}</strong>
         <small>Recent tracked departures</small>
       </article>
+    </div>
+
+    <div class="airport-flow-actions">
+      <button class="airport-flow-button" type="button" on:click={onFilterAllTraffic}>
+        Filter airport traffic
+      </button>
+      <button class="airport-flow-button" type="button" on:click={onFilterArrivals}>
+        Arrivals
+      </button>
+      <button class="airport-flow-button" type="button" on:click={onFilterDepartures}>
+        Departures
+      </button>
     </div>
 
     <div class="airport-tab-row" role="tablist" aria-label="Airport sections">
@@ -401,7 +416,14 @@
     justify-content: flex-end;
   }
 
+  .airport-flow-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
   .airport-action,
+  .airport-flow-button,
   .airport-tab-row button,
   .movement-row,
   .movement-pill,
@@ -411,6 +433,7 @@
   }
 
   .airport-action,
+  .airport-flow-button,
   .airport-tab-row button,
   .airport-banner button {
     border: 1px solid rgba(255, 255, 255, 0.08);

@@ -113,6 +113,24 @@
       });
     }
 
+    if (style === "light") {
+      return L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        ...commonOptions,
+        subdomains: "abcd",
+        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+      });
+    }
+
+    if (style === "terrain") {
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}",
+        {
+          ...commonOptions,
+          attribution: "Tiles &copy; Esri",
+        }
+      );
+    }
+
     if (style === "aviation") {
       const aviationBase = L.tileLayer(
         `https://nwy-tiles-api.prod.newaydata.com/tiles/{z}/{x}/{y}.jpg?path=${currentAirac}/base/latest`,
@@ -884,6 +902,19 @@
       radial-gradient(circle at center, rgba(57, 88, 58, 0.12), transparent 58%);
   }
 
+  .map-shell.map-style-light .map-tint {
+    background:
+      linear-gradient(180deg, rgba(198, 211, 204, 0.12) 0%, rgba(159, 176, 165, 0.18) 100%),
+      radial-gradient(circle at center, rgba(224, 233, 228, 0.14), transparent 58%);
+    mix-blend-mode: screen;
+  }
+
+  .map-shell.map-style-terrain .map-tint {
+    background:
+      linear-gradient(180deg, rgba(108, 93, 62, 0.2) 0%, rgba(58, 48, 33, 0.3) 100%),
+      radial-gradient(circle at center, rgba(172, 138, 84, 0.12), transparent 58%);
+  }
+
   .map-vignette {
     background:
       linear-gradient(180deg, rgba(7, 8, 10, 0.18) 0%, transparent 18%, transparent 82%, rgba(7, 8, 10, 0.24) 100%),
@@ -904,6 +935,14 @@
 
   .map-shell.map-style-dark :global(.leaflet-tile-pane) {
     filter: saturate(0.86) brightness(0.92) contrast(1.02);
+  }
+
+  .map-shell.map-style-light :global(.leaflet-tile-pane) {
+    filter: saturate(0.88) brightness(1.02) contrast(0.96);
+  }
+
+  .map-shell.map-style-terrain :global(.leaflet-tile-pane) {
+    filter: saturate(0.94) brightness(0.94) contrast(1);
   }
 
   :global(.leaflet-popup-content) {

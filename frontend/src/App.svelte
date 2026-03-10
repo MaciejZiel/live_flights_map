@@ -95,6 +95,15 @@
     }
   }
 
+  const MAP_STYLE_OPTIONS = [
+    { value: "standard", label: "Map" },
+    { value: "satellite", label: "Satellite" },
+    { value: "dark", label: "Dark" },
+    { value: "aviation", label: "Aero" },
+    { value: "light", label: "Light" },
+    { value: "terrain", label: "Terrain" },
+  ];
+
   let filters = {
     query: "",
     minAltitude: "",
@@ -1508,7 +1517,7 @@
       theme = sharedTheme;
     }
 
-    if (["standard", "satellite", "dark", "aviation"].includes(sharedMapStyle)) {
+    if (MAP_STYLE_OPTIONS.some((option) => option.value === sharedMapStyle)) {
       mapStyle = sharedMapStyle;
     }
 
@@ -2870,7 +2879,7 @@
   }
 
   function cycleMapStyle() {
-    const mapStyles = ["aviation", "dark", "satellite", "standard"];
+    const mapStyles = ["aviation", "terrain", "satellite", "light", "standard", "dark"];
     const currentIndex = mapStyles.indexOf(mapStyle);
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % mapStyles.length;
     mapStyle = mapStyles[nextIndex];
@@ -3318,6 +3327,10 @@
       mapStyle = "dark";
     } else if (event.key === "4") {
       mapStyle = "aviation";
+    } else if (event.key === "5") {
+      mapStyle = "light";
+    } else if (event.key === "6") {
+      mapStyle = "terrain";
     } else if (event.key === "0") {
       resetFilters();
     } else if (event.key.toLowerCase() === "f") {
@@ -3920,6 +3933,8 @@
     dark: "Dark",
     satellite: "Satellite",
     aviation: "Aero",
+    light: "Light",
+    terrain: "Terrain",
   }[mapStyle] ?? "Map";
   $: if (!selectedFlightDetailsKey) {
     lastSelectedFlightDetailsKey = null;
@@ -4715,6 +4730,24 @@
             </div>
 
             <div class="filter-suggestion-group">
+              <div class="suggestion-row">
+                <span>Map style</span>
+                <div>
+                  {#each MAP_STYLE_OPTIONS as option}
+                    <button
+                      class:active={mapStyle === option.value}
+                      class="filter-chip"
+                      type="button"
+                      on:click={() => {
+                        mapStyle = option.value;
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+
               <div class="suggestion-row">
                 <span>Map layers</span>
                 <div>

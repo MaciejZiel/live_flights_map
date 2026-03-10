@@ -7,6 +7,8 @@
     <div><kbd>2</kbd><span>Satellite map</span></div>
     <div><kbd>3</kbd><span>Dark map</span></div>
     <div><kbd>4</kbd><span>Aviation map</span></div>
+    <div><kbd>5</kbd><span>Light map</span></div>
+    <div><kbd>6</kbd><span>Terrain map</span></div>
     <div><kbd>P</kbd><span>Poland preset</span></div>
     <div><kbd>E</kbd><span>Europe preset</span></div>
     <div><kbd>W</kbd><span>World preset</span></div>

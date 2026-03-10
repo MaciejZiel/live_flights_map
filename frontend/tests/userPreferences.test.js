@@ -5,6 +5,7 @@ import { normalizeUserPreferences } from "../src/lib/utils/userPreferences.js";
 
 test("normalizeUserPreferences keeps new frontend filter fields", () => {
   const normalized = normalizeUserPreferences({
+    mapStyle: "terrain",
     filters: {
       route: "WAW-JFK",
       airportCode: "epwa",
@@ -18,6 +19,7 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
     replayPlaybackSpeed: 1.5,
   });
 
+  assert.equal(normalized.mapStyle, "terrain");
   assert.deepEqual(normalized.filters, {
     query: "",
     minAltitude: "",

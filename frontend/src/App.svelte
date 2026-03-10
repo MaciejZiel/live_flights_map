@@ -2476,7 +2476,11 @@
       return;
     }
 
-    if (result.entity_type === "flight" || result.entity_type === "aircraft") {
+    if (
+      result.entity_type === "flight" ||
+      result.entity_type === "aircraft" ||
+      result.entity_type === "registration"
+    ) {
       openFlightInspector(result, {
         focusMap: true,
         zoom: 8.4,
@@ -4079,11 +4083,7 @@
             <span>{mapStyleLabel}</span>
             <span>{showAirportMarkers ? "Airports on" : "Airports off"}</span>
             <span>{weatherLayerEnabled ? "Weather on" : "Weather off"}</span>
-          <span>{workspaceSyncStatus === "success" ? activeWorkspaceProfile?.display_name ?? "Workspace" : workspaceSyncStatus}</span>
-          {#if activeWorkspaceProfile?.role}
-            <span>{activeWorkspaceProfile.role}</span>
-          {/if}
-        </div>
+          </div>
         </div>
       {/if}
     </header>
@@ -4726,7 +4726,7 @@
             onTogglePlayback={toggleReplayPlayback}
           />
 
-          <details class="utility-drawer" open={Boolean(activeMonitoringSession) || monitoringSessions.length > 0}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Saved replay sessions</span>
               <strong>{monitoringSessions.length}</strong>
@@ -4783,7 +4783,7 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={workspaceProfiles.length > 0}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Profiles</span>
               <strong>{workspaceProfiles.length}</strong>
@@ -5101,7 +5101,7 @@
             </details>
           {/if}
 
-          <details class="utility-drawer" open={!onboardingDismissed}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Guide and shortcuts</span>
               <strong>{onboardingDismissed ? "Hidden" : "Open"}</strong>
@@ -5129,7 +5129,7 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={savedViews.length > 0}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Saved views</span>
               <strong>{savedViews.length}</strong>
@@ -5167,7 +5167,7 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={comparisonFlights.length > 1}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Aircraft comparison</span>
               <strong>{comparisonFlights.length}</strong>

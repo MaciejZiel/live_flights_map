@@ -46,6 +46,11 @@ class EntitySearchService:
             }
             for item in flights_payload["results"]
         ]
+        registrations = self._build_registration_results(
+            aircraft=aircraft,
+            flights=flights,
+            limit=normalized_limit,
+        )
         airports = self.airport_catalog_service.search_airports(query, normalized_limit)
         known_airports = self.traffic_intelligence_service.list_known_airports_in_bbox(
             bbox={"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0},
@@ -95,6 +100,7 @@ class EntitySearchService:
         ordered_groups = [
             ("aircraft", aircraft),
             ("flights", flights),
+            ("registrations", registrations),
             ("airports", airport_results),
             ("airlines", airlines),
             ("routes", routes),
@@ -114,3 +120,44 @@ class EntitySearchService:
                 if group
             },
         }
+
+    @staticmethod
+    def _build_registration_results(
+        aircraft: list[dict[str, object]],
+        flights: list[dict[str, object]],
+        limit: int,
+    ) -> list[dict[str, object]]:
+        seen_registrations = set()
+        registration_results = []
+
+        for item in [*aircraft, *flights]:
+            registration = str(item.get("registration") or "").strip().upper()
+            if not registration or registration in seen_registrations:
+                continue
+
+            seen_registrations.add(registration)
+            registration_results.append(
+                {
+                    "entity_type": "registration",
+                    "entity_key": registration,
+                    "label": registration,
+                    "subtitle": " · ".join(
+                        part
+                        for part in (
+                            item.get("callsign"),
+                            item.get("type_code"),
+                            item.get("origin_country"),
+                        )
+                        if part
+                    ),
+                    "registration": registration,
+                    "icao24": item.get("icao24"),
+                    "callsign": item.get("callsign"),
+                    "type_code": item.get("type_code"),
+                    "origin_country": item.get("origin_country"),
+                }
+            )
+            if len(registration_results) >= limit:
+                break
+
+        return registration_results

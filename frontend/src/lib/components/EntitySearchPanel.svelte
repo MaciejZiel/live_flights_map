@@ -11,6 +11,7 @@
   const GROUP_META = {
     aircraft: { label: "Aircraft", glyph: "ACFT" },
     flights: { label: "Flights", glyph: "FLT" },
+    registrations: { label: "Registrations", glyph: "REG" },
     airports: { label: "Airports", glyph: "APT" },
     airlines: { label: "Airlines", glyph: "AIR" },
     routes: { label: "Routes", glyph: "RTE" },
@@ -50,6 +51,12 @@
         .join(" · ");
     }
 
+    if (result?.entity_type === "registration") {
+      return [result.callsign, result.type_code, result.origin_country]
+        .filter(Boolean)
+        .join(" · ");
+    }
+
     if (result?.entity_type === "airport") {
       return [result.city, result.country].filter(Boolean).join(", ");
     }
@@ -70,6 +77,10 @@
 
     if (result?.entity_type === "flight") {
       return result.type_code ?? "LIVE";
+    }
+
+    if (result?.entity_type === "registration") {
+      return result.icao24?.toUpperCase() ?? "OPEN";
     }
 
     if (result?.entity_type === "airport") {

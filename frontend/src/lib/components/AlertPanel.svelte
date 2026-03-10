@@ -15,6 +15,7 @@
     country: "Country match",
     registration: "Registration match",
     type_code: "Aircraft type match",
+    route: "Route match",
     airport: "Airport proximity",
     area: "Saved area match",
   };
@@ -66,6 +67,7 @@
         <option value="country">Country</option>
         <option value="registration">Registration</option>
         <option value="type_code">Aircraft type</option>
+        <option value="route">Route</option>
       </select>
     </label>
     <label class="field">

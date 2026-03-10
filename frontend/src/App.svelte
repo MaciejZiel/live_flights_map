@@ -1628,6 +1628,9 @@
     if (type === "type_code") {
       return "Type";
     }
+    if (type === "route") {
+      return "Route";
+    }
     if (type === "airport") {
       return "Airport";
     }
@@ -1770,6 +1773,23 @@
 
         if (rule.type === "type_code") {
           return (flight.type_code ?? "").toLowerCase().includes(normalizedQuery);
+        }
+
+        if (rule.type === "route") {
+          return [
+            flight.route_label,
+            flight.route_verbose,
+            flight.airport_codes,
+            flight.iata_codes,
+            flight.origin,
+            flight.destination,
+            flight.origin_iata,
+            flight.origin_icao,
+            flight.destination_iata,
+            flight.destination_icao,
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(normalizedQuery));
         }
 
         if (rule.type === "airport") {
@@ -1946,6 +1966,14 @@
         payload: {
           bbox: selectedEntityContext.bbox ?? null,
         },
+      });
+      return;
+    }
+
+    if (selectedEntityContext.entity_type === "route") {
+      addAlertRule({
+        type: "route",
+        query: selectedEntityContext.entity_key ?? selectedEntityContext.label ?? "",
       });
       return;
     }
@@ -5482,13 +5510,7 @@
               </div>
               <div>
                 <span>Live matches</span>
-                <strong>
-                  {#if selectedEntityContext.entity_type === "route"}
-                    Route shortcuts
-                  {:else}
-                    {selectedEntityContextMatches.length}
-                  {/if}
-                </strong>
+                <strong>{selectedEntityContextMatches.length}</strong>
               </div>
             </div>
 
@@ -5534,10 +5556,13 @@
                     class="workflow-button"
                     type="button"
                     on:click={() => openAirportInspector(selectedEntityContextDestinationAirport, { focusMap: true, zoom: 8.8 })}
-                  >
-                    Open destination
-                  </button>
+                    >
+                      Open destination
+                    </button>
                 {/if}
+                <button class="workflow-button" type="button" on:click={addEntityContextAlert}>
+                  Alert by route
+                </button>
               {/if}
               <button class="workflow-button" type="button" on:click={copyShareLink}>Share view</button>
             </div>
@@ -5559,54 +5584,54 @@
               </div>
             {/if}
 
-            {#if selectedEntityContext.entity_type !== "route"}
-              <section class="facts-panel">
-                <div class="facts-header">
-                  <strong>Matching live traffic</strong>
-                  <span>{selectedEntityContextMatches.length} visible now</span>
-                </div>
+            <section class="facts-panel">
+              <div class="facts-header">
+                <strong>Matching live traffic</strong>
+                <span>{selectedEntityContextMatches.length} visible now</span>
+              </div>
 
-                {#if selectedEntityContextMatches.length}
-                  <div class="mini-stat-list">
-                    {#each selectedEntityContextMatches as flight}
-                      <div>
-                        <span>
-                          <strong>{flight.callsign ?? flight.registration ?? flight.icao24.toUpperCase()}</strong>
-                          <small>
-                            {[
-                              flight.registration ?? flight.icao24.toUpperCase(),
-                              flight.type_code,
-                              flight.origin_country,
-                            ].filter(Boolean).join(" · ")}
-                          </small>
-                        </span>
-                        <div class="compact-entity-actions">
-                          <button
-                            class="widget-footer-button"
-                            type="button"
-                            on:click={() =>
-                              openFlightInspector(flight, {
-                                focusMap: true,
-                                zoom: 8.4,
-                                exitReplay: false,
-                                inspectorTab: "details",
-                              })}
-                          >
-                            Open
-                          </button>
-                        </div>
+              {#if selectedEntityContextMatches.length}
+                <div class="mini-stat-list">
+                  {#each selectedEntityContextMatches as flight}
+                    <div>
+                      <span>
+                        <strong>{flight.callsign ?? flight.registration ?? flight.icao24.toUpperCase()}</strong>
+                        <small>
+                          {[
+                            flight.registration ?? flight.icao24.toUpperCase(),
+                            flight.type_code,
+                            flight.route_label ?? flight.origin_country,
+                          ].filter(Boolean).join(" · ")}
+                        </small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button
+                          class="widget-footer-button"
+                          type="button"
+                          on:click={() =>
+                            openFlightInspector(flight, {
+                              focusMap: true,
+                              zoom: 8.4,
+                              exitReplay: false,
+                              inspectorTab: "details",
+                            })}
+                        >
+                          Open
+                        </button>
                       </div>
-                    {/each}
-                  </div>
-                {:else}
-                  <p class="widget-empty">
-                    {selectedEntityContext.entity_type === "location"
-                      ? "No current aircraft are visible inside this saved area."
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <p class="widget-empty">
+                  {selectedEntityContext.entity_type === "location"
+                    ? "No current aircraft are visible inside this saved area."
+                    : selectedEntityContext.entity_type === "route"
+                      ? "No visible aircraft currently match this tracked route."
                       : "No visible aircraft match this search focus right now."}
-                  </p>
-                {/if}
-              </section>
-            {/if}
+                </p>
+              {/if}
+            </section>
           </section>
         {:else}
           <TrafficBoardPanel

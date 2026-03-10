@@ -4,6 +4,18 @@
   export let onSaveSession = () => {};
   export let onLoadSession = () => {};
   export let onDeleteSession = () => {};
+
+  function formatSessionRange(range) {
+    if (!range?.start || !range?.end) {
+      return "Range pending";
+    }
+
+    const formatter = new Intl.DateTimeFormat("pl-PL", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return `${formatter.format(new Date(range.start))} - ${formatter.format(new Date(range.end))}`;
+  }
 </script>
 
 <section class="panel session-panel">
@@ -25,7 +37,8 @@
         <article class:active={session.id === activeSessionId} class="session-card">
           <div>
             <strong>{session.label}</strong>
-            <p>{session.snapshots.length} snapshots</p>
+            <p>{session.summary ?? "Saved airspace focus"}</p>
+            <small>{session.snapshots.length} snapshots · {formatSessionRange(session.snapshotRange)}</small>
           </div>
           <div class="session-actions">
             <button class="session-load" type="button" on:click={() => onLoadSession(session.id)}>
@@ -76,6 +89,11 @@
   h2,
   p {
     margin: 0;
+  }
+
+  .session-card small {
+    color: var(--color-muted);
+    font-size: 0.76rem;
   }
 
   .session-list {

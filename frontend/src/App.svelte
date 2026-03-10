@@ -2720,10 +2720,19 @@
     }
 
     const createdAt = Date.now();
+    const firstSnapshot = snapshotHistory[0] ?? null;
+    const lastSnapshot = snapshotHistory[snapshotHistory.length - 1] ?? null;
     const session = {
       id: crypto.randomUUID(),
       label: `Session ${buildSessionLabel(createdAt)}`,
       createdAt,
+      summary: mapViewport?.center
+        ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)} · z${(mapViewport.zoom ?? 7.1).toFixed(1)}`
+        : "Current airspace",
+      snapshotRange: {
+        start: firstSnapshot?.fetchedAt ?? null,
+        end: lastSnapshot?.fetchedAt ?? null,
+      },
       snapshots: snapshotHistory.map((snapshot) => ({
         ...snapshot,
         flights: snapshot.flights.map((flight) => ({ ...flight })),

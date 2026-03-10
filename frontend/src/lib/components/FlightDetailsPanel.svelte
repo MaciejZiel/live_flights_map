@@ -13,8 +13,10 @@
   export let detailsStatus = "idle";
   export let detailsError = null;
   export let followAircraft = false;
+  export let isBookmarked = false;
   export let trailPoints = [];
   export let onToggleFollow = () => {};
+  export let onToggleBookmark = () => {};
   export let onRetryDetails = () => {};
 
   function formatRelativeContact(lastContact) {
@@ -336,6 +338,9 @@
         <div class="identity-actions">
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
             {followAircraft ? "Following on map" : "Track on map"}
+          </button>
+          <button class:active={isBookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
+            {isBookmarked ? "Bookmarked" : "Save aircraft"}
           </button>
           <button class="action-button secondary" type="button" on:click={onRetryDetails}>
             Refresh

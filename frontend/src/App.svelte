@@ -3,6 +3,7 @@
 
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
+  import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
   import { fetchFlightDetails } from "./lib/api/flights.js";
   import { flightsStore } from "./lib/stores/flights.js";
@@ -64,6 +65,7 @@
   let onboardingDismissed = false;
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
+  let sidebarMode = "traffic";
   let inspectorTab = "details";
   let snapshotHistory = [];
   let replaySnapshotCursor = null;
@@ -653,7 +655,15 @@
 
   function selectWatchedFlight(icao24) {
     selectedIcao24 = icao24;
+    sidebarMode = "traffic";
     inspectorTab = "details";
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+    }
+  }
+
+  function openSidebarMode(nextMode) {
+    sidebarMode = nextMode;
     if (isMobileViewport) {
       mobileSidebarOpen = true;
     }
@@ -1707,7 +1717,7 @@
           </button>
         </section>
 
-        <button class="widget-footer-bar" type="button" on:click={() => (mobileSidebarOpen = true)}>
+        <button class="widget-footer-bar" type="button" on:click={() => openSidebarMode("watchlist")}>
           <span>Bookmarks</span>
           <strong>{watchlist.length}</strong>
         </button>
@@ -1726,8 +1736,8 @@
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
       <div class="rail-header">
         <div class="rail-brand">
-          <span>{selectedFlight ? "Tracking" : "Click any aircraft"}</span>
-          <strong>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : "Visible traffic"}</strong>
+          <span>{selectedFlight ? "Tracking" : sidebarMode === "watchlist" ? "Saved aircraft" : "Click any aircraft"}</span>
+          <strong>{selectedFlight ? selectedFlight.callsign ?? selectedFlight.icao24 : sidebarMode === "watchlist" ? "Bookmarks" : "Visible traffic"}</strong>
         </div>
         {#if selectedFlight}
           <button
@@ -1744,7 +1754,25 @@
             ×
           </button>
         {:else}
-          <span class="rail-count">{visibleTrackedCount}</span>
+          <div class="rail-actions">
+            <button
+              class:active={sidebarMode === "traffic"}
+              class="rail-toggle"
+              type="button"
+              on:click={() => openSidebarMode("traffic")}
+            >
+              Traffic
+            </button>
+            <button
+              class:active={sidebarMode === "watchlist"}
+              class="rail-toggle"
+              type="button"
+              on:click={() => openSidebarMode("watchlist")}
+            >
+              Bookmarks
+            </button>
+            <span class="rail-count">{sidebarMode === "watchlist" ? watchlist.length : visibleTrackedCount}</span>
+          </div>
         {/if}
       </div>
 
@@ -1756,9 +1784,22 @@
             detailsStatus={selectedFlightDetailsStatus}
             detailsError={selectedFlightDetailsError}
             followAircraft={followAircraft}
+            isBookmarked={watchlist.includes(selectedFlight.icao24)}
             trailPoints={selectedFlightTrail}
             onToggleFollow={toggleFollowAircraft}
+            onToggleBookmark={toggleSelectedFlightWatchlist}
             onRetryDetails={retrySelectedFlightDetails}
+          />
+        {:else if sidebarMode === "watchlist"}
+          <WatchlistPanel
+            entries={watchedFlightEntries}
+            selectedIcao24={selectedIcao24}
+            watchModeEnabled={watchModeEnabled}
+            onToggleWatchMode={() => {
+              watchModeEnabled = !watchModeEnabled;
+            }}
+            onSelectFlight={selectWatchedFlight}
+            onRemoveFlight={removeFromWatchlist}
           />
         {:else}
           <TrafficBoardPanel
@@ -2326,6 +2367,34 @@
     font-weight: 800;
     color: #171a1f;
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .rail-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.38rem;
+  }
+
+  .rail-toggle {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.42rem 0.7rem;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #d4dde7;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease,
+      color 160ms ease;
+  }
+
+  .rail-toggle.active {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
   }
 
   .rail-close {

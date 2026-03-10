@@ -161,6 +161,10 @@
   let selectedFlightTrailError = null;
   let selectedFlightTrailRequestId = 0;
   let lastSelectedFlightTrailKey = null;
+  let selectedFlightTrackCursor = -1;
+  let lastSelectedFlightTrackKey = null;
+  let selectedFlightTrackPoint = null;
+  let selectedFlightTrackSliderValue = 0;
   let selectedTagDraft = "";
   let archivedReplayStatus = "idle";
   let archivedReplayError = null;
@@ -2619,6 +2623,55 @@
     replayWindowMinutes = [30, 90, 180].includes(numericMinutes) ? numericMinutes : 90;
   }
 
+  function focusTrailPoint(point, options = {}) {
+    if (!point || !Number.isFinite(point.latitude) || !Number.isFinite(point.longitude)) {
+      return;
+    }
+
+    flightFocusRequest = {
+      id: crypto.randomUUID(),
+      center: [point.latitude, point.longitude],
+      zoom: Math.max(mapViewport?.zoom ?? 7.1, options.zoom ?? 8.2),
+    };
+  }
+
+  function setSelectedFlightTrackCursor(index, options = {}) {
+    if (!selectedFlightTrail.length) {
+      selectedFlightTrackCursor = -1;
+      return;
+    }
+
+    const boundedIndex = Math.max(0, Math.min(index, selectedFlightTrail.length - 1));
+    selectedFlightTrackCursor = boundedIndex;
+    if (options.focusMap !== false) {
+      focusTrailPoint(selectedFlightTrail[boundedIndex], { zoom: 8.4 });
+    }
+  }
+
+  function jumpSelectedFlightTrackStart() {
+    if (!selectedFlightTrail.length) {
+      return;
+    }
+
+    setSelectedFlightTrackCursor(0);
+  }
+
+  function jumpSelectedFlightTrackLatest() {
+    selectedFlightTrackCursor = -1;
+    if (selectedFlight) {
+      openFlightInspector(selectedFlight, {
+        focusMap: true,
+        zoom: 8.4,
+        exitReplay: false,
+        inspectorTab: "tracking",
+      });
+      return;
+    }
+
+    const latestPoint = selectedFlightTrail[selectedFlightTrail.length - 1] ?? null;
+    focusTrailPoint(latestPoint, { zoom: 8.4 });
+  }
+
   function stepReplay(direction) {
     if (replaySourceSnapshots.length < 2) {
       return;
@@ -3278,6 +3331,21 @@
   $: selectedFlightAnnotation = selectedIcao24
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
+  $: if (selectedFlightTrailKey !== lastSelectedFlightTrackKey) {
+    lastSelectedFlightTrackKey = selectedFlightTrailKey;
+    selectedFlightTrackCursor = -1;
+  }
+  $: if (selectedFlightTrackCursor >= selectedFlightTrail.length) {
+    selectedFlightTrackCursor = selectedFlightTrail.length ? selectedFlightTrail.length - 1 : -1;
+  }
+  $: selectedFlightTrackPoint =
+    selectedFlightTrackCursor >= 0
+      ? selectedFlightTrail[selectedFlightTrackCursor] ?? null
+      : selectedFlightTrail[selectedFlightTrail.length - 1] ?? null;
+  $: selectedFlightTrackSliderValue =
+    selectedFlightTrackCursor >= 0
+      ? selectedFlightTrackCursor
+      : Math.max(0, selectedFlightTrail.length - 1);
   $: selectedFlightTrailFirstPoint = selectedFlightTrail[0] ?? null;
   $: selectedFlightTrailLastPoint = selectedFlightTrail[selectedFlightTrail.length - 1] ?? null;
   $: selectedFlightTrailRecentPoints = [...selectedFlightTrail].slice(-5).reverse();
@@ -3328,6 +3396,7 @@
   $: if (!selectedFlight) {
     followAircraft = false;
     selectedTagDraft = "";
+    selectedFlightTrackCursor = -1;
   }
   $: if (!selectedAirportCode) {
     lastSelectedAirportKey = null;
@@ -4837,6 +4906,60 @@
                 </div>
               {/if}
 
+              {#if selectedFlightTrail.length > 1}
+                <div class="tracking-timeline">
+                  <div class="workflow-header compact">
+                    <div>
+                      <p class="workflow-eyebrow">Single-flight replay</p>
+                      <h2>Trail scrubber</h2>
+                    </div>
+                    <span class="workflow-status">
+                      {#if selectedFlightTrackPoint}
+                        {new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(new Date(selectedFlightTrackPoint.timestamp))}
+                      {:else}
+                        Latest point
+                      {/if}
+                    </span>
+                  </div>
+
+                  <label class="workflow-slider">
+                    <span>{selectedFlightTrackCursor >= 0 ? "Inspecting archived trail point" : "Following latest known trail point"}</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={selectedFlightTrail.length - 1}
+                      step="1"
+                      value={selectedFlightTrackSliderValue}
+                      on:input={(event) => setSelectedFlightTrackCursor(Number(event.currentTarget.value))}
+                    />
+                  </label>
+
+                  <div class="route-desk-row">
+                    <button class="workflow-button" type="button" on:click={jumpSelectedFlightTrackStart}>
+                      First point
+                    </button>
+                    <button class="workflow-button" type="button" on:click={jumpSelectedFlightTrackLatest}>
+                      Latest point
+                    </button>
+                  </div>
+
+                  {#if selectedFlightTrackPoint}
+                    <div class="workflow-metrics">
+                      <article>
+                        <span>Replay altitude</span>
+                        <strong>{formatAltitude(selectedFlightTrackPoint.altitude)}</strong>
+                        <small>Historical point</small>
+                      </article>
+                      <article>
+                        <span>Replay speed</span>
+                        <strong>{formatSpeed(selectedFlightTrackPoint.velocity)}</strong>
+                        <small>Captured on trail</small>
+                      </article>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+
               {#if selectedFlightTrailRecentPoints.length}
                 <div class="tracking-timeline">
                   <div class="workflow-header compact">
@@ -6279,6 +6402,21 @@
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.07);
     background: rgba(255, 255, 255, 0.03);
+  }
+
+  .workflow-slider {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .workflow-slider span {
+    font-size: 0.76rem;
+    color: rgba(190, 203, 217, 0.74);
+  }
+
+  .workflow-slider input {
+    width: 100%;
+    accent-color: #f5b908;
   }
 
   .timeline-row {

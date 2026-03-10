@@ -22,6 +22,24 @@ const initialState = {
   transport: USE_SSE ? "sse" : "polling",
 };
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function sanitizeStoredSnapshot(payload) {
+  if (!isPlainObject(payload)) {
+    return null;
+  }
+
+  return {
+    flights: Array.isArray(payload.flights) ? payload.flights : [],
+    fetched_at: typeof payload.fetched_at === "string" ? payload.fetched_at : null,
+    count: Number.isFinite(payload.count) ? payload.count : 0,
+    bbox: isPlainObject(payload.bbox) ? payload.bbox : null,
+    meta: isPlainObject(payload.meta) ? payload.meta : {},
+  };
+}
+
 function normalizeBbox(bbox) {
   if (!bbox) {
     return null;
@@ -59,7 +77,7 @@ function loadStoredSnapshot() {
 
   try {
     const rawValue = window.localStorage.getItem(SNAPSHOT_STORAGE_KEY);
-    return rawValue ? JSON.parse(rawValue) : null;
+    return rawValue ? sanitizeStoredSnapshot(JSON.parse(rawValue)) : null;
   } catch {
     return null;
   }

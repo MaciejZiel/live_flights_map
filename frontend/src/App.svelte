@@ -42,7 +42,11 @@
     classifyTrafficCategory,
     TRAFFIC_CATEGORY_OPTIONS,
   } from "./lib/utils/trafficCategories.js";
-  import { loadUserPreferences, saveUserPreferences } from "./lib/utils/userPreferences.js";
+  import {
+    loadUserPreferences,
+    normalizeUserPreferences,
+    saveUserPreferences,
+  } from "./lib/utils/userPreferences.js";
 
   let state = {
     status: "idle",
@@ -543,32 +547,38 @@
   }
 
   function applyWorkspaceState(workspaceState) {
-    if (!workspaceState || typeof workspaceState !== "object") {
+    const normalizedWorkspaceState = normalizeUserPreferences(workspaceState);
+    if (!normalizedWorkspaceState) {
       return;
     }
 
     filters = {
       ...filters,
-      ...(workspaceState.filters ?? {}),
+      ...(normalizedWorkspaceState.filters ?? {}),
     };
-    mapStyle = workspaceState.mapStyle ?? mapStyle;
-    mapViewport = workspaceState.mapViewport ?? mapViewport;
-    filterPresets = workspaceState.filterPresets ?? filterPresets;
-    sortBy = workspaceState.sortBy ?? sortBy;
-    theme = workspaceState.theme ?? theme;
-    onboardingDismissed = workspaceState.onboardingDismissed ?? onboardingDismissed;
-    watchlist = workspaceState.watchlist ?? watchlist;
-    watchModeEnabled = workspaceState.watchModeEnabled ?? watchModeEnabled;
-    flightAnnotations = workspaceState.flightAnnotations ?? flightAnnotations;
-    alertRules = workspaceState.alertRules ?? alertRules;
-    alertEvents = workspaceState.alertEvents ?? alertEvents;
-    monitoringSessions = workspaceState.monitoringSessions ?? monitoringSessions;
-    savedViews = workspaceState.savedViews ?? savedViews;
-    savedEntities = workspaceState.savedEntities ?? savedEntities;
-    weatherLayerEnabled = workspaceState.weatherLayerEnabled ?? weatherLayerEnabled;
-    showAirportMarkers = workspaceState.showAirportMarkers ?? showAirportMarkers;
-    selectedAirportCode = workspaceState.selectedAirportCode ?? selectedAirportCode;
-    replayPlaybackSpeed = workspaceState.replayPlaybackSpeed ?? replayPlaybackSpeed;
+    mapStyle = normalizedWorkspaceState.mapStyle ?? mapStyle;
+    mapViewport = normalizedWorkspaceState.mapViewport ?? mapViewport;
+    filterPresets = normalizedWorkspaceState.filterPresets ?? filterPresets;
+    sortBy = normalizedWorkspaceState.sortBy ?? sortBy;
+    theme = normalizedWorkspaceState.theme ?? theme;
+    onboardingDismissed =
+      normalizedWorkspaceState.onboardingDismissed ?? onboardingDismissed;
+    watchlist = normalizedWorkspaceState.watchlist ?? watchlist;
+    watchModeEnabled = normalizedWorkspaceState.watchModeEnabled ?? watchModeEnabled;
+    flightAnnotations = normalizedWorkspaceState.flightAnnotations ?? flightAnnotations;
+    alertRules = normalizedWorkspaceState.alertRules ?? alertRules;
+    alertEvents = normalizedWorkspaceState.alertEvents ?? alertEvents;
+    monitoringSessions = normalizedWorkspaceState.monitoringSessions ?? monitoringSessions;
+    savedViews = normalizedWorkspaceState.savedViews ?? savedViews;
+    savedEntities = normalizedWorkspaceState.savedEntities ?? savedEntities;
+    weatherLayerEnabled =
+      normalizedWorkspaceState.weatherLayerEnabled ?? weatherLayerEnabled;
+    showAirportMarkers =
+      normalizedWorkspaceState.showAirportMarkers ?? showAirportMarkers;
+    selectedAirportCode =
+      normalizedWorkspaceState.selectedAirportCode ?? selectedAirportCode;
+    replayPlaybackSpeed =
+      normalizedWorkspaceState.replayPlaybackSpeed ?? replayPlaybackSpeed;
   }
 
   async function loadWorkspaceProfile(profileId) {

@@ -11,8 +11,12 @@ Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
 
 - `GET /api/flights`
 - `GET /api/flights/stream` (SSE transport)
+- `GET /api/history/replay` (ostatnie snapshoty dla aktualnego bboxa)
+- `GET /api/flights/<icao24>/trail` (ślad lotu z archiwum)
+- `GET /api/search?q=...` (wyszukiwanie po ostatnio widzianych lotach)
 - pobiera świeży snapshot z łańcucha providerów `opensky -> adsb_lol`
 - ma cache per `bbox`, cooldown przy rate-limitach i fallback do ostatniego snapshotu przy błędach upstreamu
+- archiwizuje snapshoty i pozycje do lokalnej bazy SQLite pod replay, trail i search
 - dla frontendu wspiera SSE z fallbackiem do zwykłego pollingu
 - filtruje odpowiedź do pól:
   - `icao24`
@@ -126,6 +130,10 @@ http://127.0.0.1:5173
 Wpisz dane do istniejącego `.env`:
 
 ```env
+FLIGHT_ARCHIVE_PATH=/tmp/live-flights-map-history.sqlite3
+FLIGHT_ARCHIVE_RETENTION_HOURS=24
+FLIGHT_ARCHIVE_MAX_SNAPSHOTS=720
+FLIGHT_SEARCH_LOOKBACK_HOURS=6
 FLIGHT_DATA_PROVIDERS=opensky,adsb_lol
 OPENSKY_USERNAME=
 OPENSKY_PASSWORD=

@@ -13,6 +13,19 @@ class Config:
     DEBUG = _env_bool("FLASK_DEBUG", False)
     HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "5000"))
+    FLIGHT_ARCHIVE_PATH = os.getenv(
+        "FLIGHT_ARCHIVE_PATH",
+        os.path.join(gettempdir(), "live-flights-map-history.sqlite3"),
+    )
+    FLIGHT_ARCHIVE_RETENTION_HOURS = float(
+        os.getenv("FLIGHT_ARCHIVE_RETENTION_HOURS", "24")
+    )
+    FLIGHT_ARCHIVE_MAX_SNAPSHOTS = int(
+        os.getenv("FLIGHT_ARCHIVE_MAX_SNAPSHOTS", "720")
+    )
+    FLIGHT_SEARCH_LOOKBACK_HOURS = float(
+        os.getenv("FLIGHT_SEARCH_LOOKBACK_HOURS", "6")
+    )
 
     OPENSKY_BASE_URL = os.getenv(
         "OPENSKY_BASE_URL",

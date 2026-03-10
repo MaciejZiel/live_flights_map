@@ -4,6 +4,7 @@ from .config import Config
 from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
+from .services.flight_archive import FlightArchiveService
 from .services.flight_details import FlightDetailsService
 from .services.flight_snapshot import FlightSnapshotService
 from .services.opensky import OpenSkyClient
@@ -14,6 +15,11 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config.from_object(Config())
     providers = []
+    archive_service = FlightArchiveService(
+        archive_path=app.config["FLIGHT_ARCHIVE_PATH"],
+        retention_hours=app.config["FLIGHT_ARCHIVE_RETENTION_HOURS"],
+        max_snapshots=app.config["FLIGHT_ARCHIVE_MAX_SNAPSHOTS"],
+    )
 
     for provider_name in app.config["FLIGHT_DATA_PROVIDERS"]:
         if provider_name == "opensky":
@@ -46,7 +52,9 @@ def create_app() -> Flask:
         cache_ttl=app.config["OPENSKY_CACHE_TTL"],
         cooldown_seconds=app.config["OPENSKY_COOLDOWN_SECONDS"],
         cache_path=app.config["OPENSKY_CACHE_PATH"],
+        archive_service=archive_service,
     )
+    app.extensions["flight_archive_service"] = archive_service
     app.extensions["flight_details_service"] = FlightDetailsService(
         route_client=ADSBLolRouteClient(
             base_url=app.config["ADSB_LOL_ROUTE_API_URL"],

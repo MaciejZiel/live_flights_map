@@ -1,0 +1,493 @@
+from __future__ import annotations
+
+import json
+import sqlite3
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from threading import Lock
+
+
+class FlightArchiveService:
+    def __init__(
+        self,
+        archive_path: str,
+        retention_hours: float,
+        max_snapshots: int,
+    ) -> None:
+        self.archive_path = Path(archive_path).expanduser()
+        self.retention_hours = max(retention_hours, 0.0)
+        self.max_snapshots = max(max_snapshots, 1)
+        self._lock = Lock()
+        self._initialize_database()
+
+    def store_snapshot(self, payload: dict[str, object]) -> None:
+        fetched_at = self._normalize_timestamp(payload.get("fetched_at"))
+        bbox = self._normalize_bbox(payload.get("bbox"))
+        flights = payload.get("flights")
+
+        if fetched_at is None or bbox is None or not isinstance(flights, list):
+            return
+
+        snapshot_payload = {
+            "fetched_at": fetched_at.isoformat(),
+            "bbox": bbox,
+            "count": int(payload.get("count") or len(flights)),
+            "flights": flights,
+        }
+
+        bbox_key = self._bbox_key(bbox)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(hours=self.retention_hours)
+        ).isoformat()
+
+        with self._lock:
+            try:
+                connection = self._connect()
+                cursor = connection.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO snapshots (
+                        fetched_at,
+                        bbox_key,
+                        bbox_lamin,
+                        bbox_lamax,
+                        bbox_lomin,
+                        bbox_lomax,
+                        flight_count,
+                        payload_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        snapshot_payload["fetched_at"],
+                        bbox_key,
+                        bbox["lamin"],
+                        bbox["lamax"],
+                        bbox["lomin"],
+                        bbox["lomax"],
+                        snapshot_payload["count"],
+                        json.dumps(snapshot_payload),
+                    ),
+                )
+                snapshot_id = cursor.lastrowid
+                position_rows = []
+                for flight in flights:
+                    if not isinstance(flight, dict):
+                        continue
+                    try:
+                        position_rows.append(
+                            self._build_position_row(snapshot_id, fetched_at, flight)
+                        )
+                    except ValueError:
+                        continue
+
+                if position_rows:
+                    cursor.executemany(
+                        """
+                        INSERT INTO positions (
+                            snapshot_id,
+                            fetched_at,
+                            icao24,
+                            callsign,
+                            registration,
+                            type_code,
+                            origin_country,
+                            latitude,
+                            longitude,
+                            altitude,
+                            velocity,
+                            vertical_rate,
+                            true_track,
+                            last_contact,
+                            on_ground
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        position_rows,
+                    )
+                self._prune_locked(cursor, cutoff_timestamp)
+                connection.commit()
+            except sqlite3.Error:
+                return
+            finally:
+                if "connection" in locals():
+                    connection.close()
+
+    def list_replay_snapshots(
+        self,
+        bbox: dict[str, float],
+        minutes: int,
+        limit: int,
+    ) -> dict[str, object]:
+        normalized_bbox = self._normalize_bbox(bbox)
+        if normalized_bbox is None:
+            return {"bbox": bbox, "count": 0, "snapshots": []}
+
+        normalized_limit = min(max(limit, 1), self.max_snapshots)
+        normalized_minutes = max(minutes, 1)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(minutes=normalized_minutes)
+        ).isoformat()
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    """
+                    SELECT payload_json
+                    FROM snapshots
+                    WHERE bbox_key = ? AND fetched_at >= ?
+                    ORDER BY fetched_at DESC
+                    LIMIT ?
+                    """,
+                    (
+                        self._bbox_key(normalized_bbox),
+                        cutoff_timestamp,
+                        normalized_limit,
+                    ),
+                ).fetchall()
+            finally:
+                connection.close()
+
+        snapshots = []
+        for row in reversed(rows):
+            try:
+                snapshots.append(json.loads(row["payload_json"]))
+            except (TypeError, json.JSONDecodeError):
+                continue
+
+        return {
+            "bbox": normalized_bbox,
+            "count": len(snapshots),
+            "snapshots": snapshots,
+        }
+
+    def get_flight_trail(
+        self,
+        icao24: str,
+        hours: int,
+        limit: int,
+    ) -> dict[str, object]:
+        normalized_icao24 = str(icao24).strip().lower()
+        if not normalized_icao24:
+            return {"icao24": normalized_icao24, "count": 0, "points": []}
+
+        normalized_limit = min(max(limit, 1), 2000)
+        normalized_hours = max(hours, 1)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(hours=normalized_hours)
+        ).isoformat()
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    """
+                    SELECT
+                        fetched_at,
+                        latitude,
+                        longitude,
+                        altitude,
+                        velocity,
+                        vertical_rate,
+                        true_track,
+                        on_ground
+                    FROM positions
+                    WHERE icao24 = ? AND fetched_at >= ?
+                    ORDER BY fetched_at DESC
+                    LIMIT ?
+                    """,
+                    (normalized_icao24, cutoff_timestamp, normalized_limit),
+                ).fetchall()
+            finally:
+                connection.close()
+
+        points = [
+            {
+                "timestamp": row["fetched_at"],
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "altitude": row["altitude"],
+                "velocity": row["velocity"],
+                "vertical_rate": row["vertical_rate"],
+                "true_track": row["true_track"],
+                "on_ground": bool(row["on_ground"]),
+            }
+            for row in reversed(rows)
+        ]
+
+        return {
+            "icao24": normalized_icao24,
+            "count": len(points),
+            "points": points,
+        }
+
+    def search_recent_flights(
+        self,
+        query: str,
+        limit: int,
+        lookback_hours: float,
+    ) -> dict[str, object]:
+        normalized_query = str(query).strip()
+        if not normalized_query:
+            return {"query": normalized_query, "count": 0, "results": []}
+
+        normalized_limit = min(max(limit, 1), 25)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(hours=max(lookback_hours, 0.5))
+        ).isoformat()
+        like_query = f"%{normalized_query.upper()}%"
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(
+                    """
+                    WITH ranked_positions AS (
+                        SELECT
+                            positions.icao24,
+                            positions.callsign,
+                            positions.registration,
+                            positions.type_code,
+                            positions.origin_country,
+                            positions.latitude,
+                            positions.longitude,
+                            positions.altitude,
+                            positions.true_track,
+                            positions.on_ground,
+                            positions.fetched_at,
+                            ROW_NUMBER() OVER (
+                                PARTITION BY positions.icao24
+                                ORDER BY positions.fetched_at DESC
+                            ) AS row_number
+                        FROM positions
+                        WHERE positions.fetched_at >= ?
+                          AND (
+                            UPPER(positions.icao24) LIKE ?
+                            OR UPPER(COALESCE(positions.callsign, '')) LIKE ?
+                            OR UPPER(COALESCE(positions.registration, '')) LIKE ?
+                            OR UPPER(COALESCE(positions.type_code, '')) LIKE ?
+                          )
+                    )
+                    SELECT
+                        icao24,
+                        callsign,
+                        registration,
+                        type_code,
+                        origin_country,
+                        latitude,
+                        longitude,
+                        altitude,
+                        true_track,
+                        on_ground,
+                        fetched_at
+                    FROM ranked_positions
+                    WHERE row_number = 1
+                    ORDER BY fetched_at DESC
+                    LIMIT ?
+                    """,
+                    (
+                        cutoff_timestamp,
+                        like_query,
+                        like_query,
+                        like_query,
+                        like_query,
+                        normalized_limit,
+                    ),
+                ).fetchall()
+            finally:
+                connection.close()
+
+        results = [
+            {
+                "icao24": row["icao24"],
+                "callsign": row["callsign"],
+                "registration": row["registration"],
+                "type_code": row["type_code"],
+                "origin_country": row["origin_country"],
+                "latitude": row["latitude"],
+                "longitude": row["longitude"],
+                "altitude": row["altitude"],
+                "true_track": row["true_track"],
+                "on_ground": bool(row["on_ground"]),
+                "fetched_at": row["fetched_at"],
+            }
+            for row in rows
+        ]
+
+        return {
+            "query": normalized_query,
+            "count": len(results),
+            "results": results,
+        }
+
+    def _initialize_database(self) -> None:
+        self.archive_path.parent.mkdir(parents=True, exist_ok=True)
+        connection = self._connect()
+        try:
+            connection.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    fetched_at TEXT NOT NULL,
+                    bbox_key TEXT NOT NULL,
+                    bbox_lamin REAL NOT NULL,
+                    bbox_lamax REAL NOT NULL,
+                    bbox_lomin REAL NOT NULL,
+                    bbox_lomax REAL NOT NULL,
+                    flight_count INTEGER NOT NULL,
+                    payload_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS positions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id) ON DELETE CASCADE,
+                    fetched_at TEXT NOT NULL,
+                    icao24 TEXT NOT NULL,
+                    callsign TEXT,
+                    registration TEXT,
+                    type_code TEXT,
+                    origin_country TEXT,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    altitude REAL,
+                    velocity REAL,
+                    vertical_rate REAL,
+                    true_track REAL,
+                    last_contact INTEGER,
+                    on_ground INTEGER NOT NULL DEFAULT 0
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_snapshots_bbox_time
+                    ON snapshots (bbox_key, fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_positions_icao24_time
+                    ON positions (icao24, fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_positions_callsign_time
+                    ON positions (callsign, fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_positions_registration_time
+                    ON positions (registration, fetched_at DESC);
+                """
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def _prune_locked(self, cursor: sqlite3.Cursor, cutoff_timestamp: str) -> None:
+        cursor.execute(
+            "DELETE FROM snapshots WHERE fetched_at < ?",
+            (cutoff_timestamp,),
+        )
+        cursor.execute(
+            """
+            DELETE FROM snapshots
+            WHERE id IN (
+                SELECT id
+                FROM snapshots
+                ORDER BY fetched_at DESC
+                LIMIT -1 OFFSET ?
+            )
+            """,
+            (self.max_snapshots,),
+        )
+
+    def _connect(self) -> sqlite3.Connection:
+        connection = sqlite3.connect(self.archive_path)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA journal_mode = WAL")
+        return connection
+
+    @staticmethod
+    def _normalize_timestamp(value: object) -> datetime | None:
+        if not value:
+            return None
+
+        try:
+            timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+
+        if timestamp.tzinfo is None:
+            return timestamp.replace(tzinfo=timezone.utc)
+        return timestamp.astimezone(timezone.utc)
+
+    @staticmethod
+    def _normalize_bbox(value: object) -> dict[str, float] | None:
+        if not isinstance(value, dict):
+            return None
+
+        try:
+            return {
+                "lamin": round(float(value["lamin"]), 4),
+                "lamax": round(float(value["lamax"]), 4),
+                "lomin": round(float(value["lomin"]), 4),
+                "lomax": round(float(value["lomax"]), 4),
+            }
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _bbox_key(bbox: dict[str, float]) -> str:
+        return "|".join(
+            f"{bbox[key]:.4f}"
+            for key in ("lamin", "lamax", "lomin", "lomax")
+        )
+
+    @staticmethod
+    def _build_position_row(
+        snapshot_id: int,
+        fetched_at: datetime,
+        flight: dict[str, object],
+    ) -> tuple[object, ...]:
+        icao24 = str(flight.get("icao24") or "").strip().lower()
+        latitude = flight.get("latitude")
+        longitude = flight.get("longitude")
+        if not icao24 or latitude is None or longitude is None:
+            raise ValueError("Cannot archive a flight without identifier and coordinates.")
+
+        return (
+            snapshot_id,
+            fetched_at.isoformat(),
+            icao24,
+            FlightArchiveService._normalize_text(flight.get("callsign"), uppercase=True),
+            FlightArchiveService._normalize_text(
+                flight.get("registration"), uppercase=True
+            ),
+            FlightArchiveService._normalize_text(flight.get("type_code"), uppercase=True),
+            FlightArchiveService._normalize_text(flight.get("origin_country")),
+            float(latitude),
+            float(longitude),
+            FlightArchiveService._normalize_optional_float(flight.get("altitude")),
+            FlightArchiveService._normalize_optional_float(flight.get("velocity")),
+            FlightArchiveService._normalize_optional_float(
+                flight.get("vertical_rate")
+            ),
+            FlightArchiveService._normalize_optional_float(flight.get("true_track")),
+            FlightArchiveService._normalize_optional_int(flight.get("last_contact")),
+            1 if bool(flight.get("on_ground")) else 0,
+        )
+
+    @staticmethod
+    def _normalize_text(value: object, uppercase: bool = False) -> str | None:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        if not cleaned:
+            return None
+        return cleaned.upper() if uppercase else cleaned
+
+    @staticmethod
+    def _normalize_optional_float(value: object) -> float | None:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _normalize_optional_int(value: object) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None

@@ -23,6 +23,7 @@ class FlightSnapshotService:
         cache_ttl: float,
         cooldown_seconds: float,
         cache_path: str | None = None,
+        archive_service=None,
     ) -> None:
         self.providers = providers
         self.cache_ttl = cache_ttl
@@ -31,6 +32,7 @@ class FlightSnapshotService:
         self._cooldown_until: dict[tuple[str, tuple[float, float, float, float]], float] = {}
         self._lock = Lock()
         self._cache_path = Path(cache_path).expanduser() if cache_path else None
+        self._archive_service = archive_service
         self._load_cache_from_disk()
 
     def get_flights(self, bbox: dict[str, float]) -> dict[str, object]:
@@ -64,6 +66,13 @@ class FlightSnapshotService:
                 expires_at=monotonic() + self.cache_ttl,
             )
             self._persist_cache_to_disk()
+
+        if self._archive_service is not None:
+            try:
+                self._archive_service.store_snapshot(payload)
+            except Exception:
+                # Archiving is best-effort and must not break the live feed.
+                pass
 
         return self._with_meta(payload, source="live", stale=False, reason="live")
 

@@ -54,6 +54,22 @@ def _parse_optional_float(name: str) -> float | None:
         raise ValueError(f"Invalid '{name}' query parameter.") from exc
 
 
+def _parse_optional_int(name: str, default: int) -> int:
+    raw_value = request.args.get(name)
+    if raw_value is None or raw_value == "":
+        return default
+
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid '{name}' query parameter.") from exc
+
+    if value < 1:
+        raise ValueError(f"'{name}' must be greater than 0.")
+
+    return value
+
+
 def _normalize_text(raw_value: str | None, uppercase: bool = False) -> str | None:
     if raw_value is None:
         return None
@@ -113,6 +129,68 @@ def flight_details(icao24: str):
         origin_country=_normalize_text(request.args.get("origin_country")),
     )
     return jsonify(details_payload)
+
+
+@api.get("/flights/<icao24>/trail")
+def flight_trail(icao24: str):
+    normalized_icao24 = _normalize_text(icao24, uppercase=False)
+    if not normalized_icao24 or len(normalized_icao24) < 6:
+        return jsonify({"error": "Invalid aircraft identifier."}), 400
+
+    try:
+        hours = _parse_optional_int("hours", default=2)
+        limit = _parse_optional_int("limit", default=240)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    archive_service = current_app.extensions["flight_archive_service"]
+    return jsonify(
+        archive_service.get_flight_trail(
+            icao24=normalized_icao24,
+            hours=hours,
+            limit=limit,
+        )
+    )
+
+
+@api.get("/history/replay")
+def replay_history():
+    try:
+        bbox = _parse_bbox()
+        minutes = _parse_optional_int("minutes", default=30)
+        limit = _parse_optional_int("limit", default=60)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    archive_service = current_app.extensions["flight_archive_service"]
+    return jsonify(
+        archive_service.list_replay_snapshots(
+            bbox=bbox,
+            minutes=minutes,
+            limit=limit,
+        )
+    )
+
+
+@api.get("/search")
+def search_flights():
+    query = request.args.get("q", "").strip()
+    if not query:
+        return jsonify({"error": "Missing 'q' query parameter."}), 400
+
+    try:
+        limit = _parse_optional_int("limit", default=10)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    archive_service = current_app.extensions["flight_archive_service"]
+    return jsonify(
+        archive_service.search_recent_flights(
+            query=query,
+            limit=limit,
+            lookback_hours=current_app.config["FLIGHT_SEARCH_LOOKBACK_HOURS"],
+        )
+    )
 
 
 @api.get("/flights/stream")

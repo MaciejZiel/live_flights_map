@@ -1,4 +1,4 @@
-const STORAGE_KEY = "live-flights-map.preferences.v3";
+const STORAGE_KEY = "live-flights-map.preferences.v4";
 
 const MAP_STYLE_OPTIONS = new Set(["standard", "satellite", "dark", "aviation"]);
 const SORT_OPTIONS = new Set([

@@ -519,7 +519,7 @@
   $: centerOnSelectedAircraft();
 </script>
 
-<div bind:this={shell} class:fullscreen={isFullscreen} class="map-shell">
+<div bind:this={shell} class:fullscreen={isFullscreen} class={`map-shell map-style-${mapStyle}`}>
   <div bind:this={container} class="map-root"></div>
   <div class="map-tint" aria-hidden="true"></div>
   <div class="map-vignette" aria-hidden="true"></div>
@@ -556,6 +556,18 @@
     mix-blend-mode: multiply;
   }
 
+  .map-shell.map-style-standard .map-tint {
+    background:
+      linear-gradient(180deg, rgba(72, 108, 76, 0.3) 0%, rgba(30, 46, 32, 0.5) 100%),
+      radial-gradient(circle at center, rgba(125, 156, 118, 0.15), transparent 58%);
+  }
+
+  .map-shell.map-style-dark .map-tint {
+    background:
+      linear-gradient(180deg, rgba(26, 38, 28, 0.22) 0%, rgba(11, 16, 13, 0.34) 100%),
+      radial-gradient(circle at center, rgba(57, 88, 58, 0.12), transparent 58%);
+  }
+
   .map-vignette {
     background:
       linear-gradient(180deg, rgba(7, 8, 10, 0.18) 0%, transparent 18%, transparent 82%, rgba(7, 8, 10, 0.24) 100%),
@@ -568,6 +580,14 @@
       system-ui,
       sans-serif;
     background: var(--map-background);
+  }
+
+  .map-shell.map-style-standard :global(.leaflet-tile-pane) {
+    filter: saturate(0.92) brightness(0.84) contrast(0.96) sepia(0.12) hue-rotate(-16deg);
+  }
+
+  .map-shell.map-style-dark :global(.leaflet-tile-pane) {
+    filter: saturate(0.86) brightness(0.92) contrast(1.02);
   }
 
   :global(.leaflet-popup-content) {

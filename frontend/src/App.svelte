@@ -2969,13 +2969,24 @@
     const createdAt = Date.now();
     const firstSnapshot = snapshotHistory[0] ?? null;
     const lastSnapshot = snapshotHistory[snapshotHistory.length - 1] ?? null;
+    const focusLabel = selectedFlight
+      ? selectedFlightCallsignLabel
+      : selectedAirport
+        ? selectedAirport.iata ?? selectedAirport.icao ?? selectedAirport.entity_key
+        : selectedEntityContext?.label ?? null;
     const session = {
       id: crypto.randomUUID(),
       label: `Session ${buildSessionLabel(createdAt)}`,
       createdAt,
-      summary: mapViewport?.center
-        ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)} · z${(mapViewport.zoom ?? 7.1).toFixed(1)}`
-        : "Current airspace",
+      summary: [
+        focusLabel,
+        mapViewport?.center
+          ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)} · z${(mapViewport.zoom ?? 7.1).toFixed(1)}`
+          : "Current airspace",
+        activeFilterCount ? `${activeFilterCount} filters` : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
       snapshotRange: {
         start: firstSnapshot?.fetchedAt ?? null,
         end: lastSnapshot?.fetchedAt ?? null,
@@ -2985,6 +2996,14 @@
         flights: snapshot.flights.map((flight) => ({ ...flight })),
       })),
       viewport: mapViewport,
+      filters: { ...filters },
+      mapStyle,
+      weatherLayerEnabled,
+      selectedIcao24,
+      selectedAirportCode,
+      selectedEntityContext: selectedEntityContext
+        ? { ...selectedEntityContext }
+        : null,
     };
 
     monitoringSessions = [session, ...monitoringSessions].slice(0, 8);
@@ -2999,8 +3018,22 @@
     replayPlaybackActive = false;
     activeMonitoringSessionId = sessionId;
     replaySnapshotCursor = session.snapshots[0]?.fetchedAt ?? null;
+    filters = {
+      ...filters,
+      ...(session.filters ?? {}),
+    };
     if (session.viewport) {
       mapViewport = session.viewport;
+    }
+    mapStyle = session.mapStyle ?? mapStyle;
+    weatherLayerEnabled = session.weatherLayerEnabled ?? weatherLayerEnabled;
+    selectedIcao24 = session.selectedIcao24 ?? null;
+    selectedAirportCode = session.selectedAirportCode ?? null;
+    selectedEntityContext = session.selectedEntityContext ?? null;
+
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
     }
   }
 

@@ -5285,6 +5285,9 @@
             >
               {selectedAirportBookmarked ? "Saved" : "Bookmark"}
             </button>
+            <button class="rail-toggle" type="button" on:click={copyShareLink}>
+              {shareFeedback || "Share"}
+            </button>
             <button
               class="rail-close"
               type="button"
@@ -5549,6 +5552,7 @@
             weatherError={selectedAirportWeatherError}
             weatherLayerEnabled={weatherLayerEnabled}
             bookmarked={selectedAirportBookmarked}
+            shareFeedback={shareFeedback}
             onSelectFlight={selectWatchedFlight}
             onRetry={() => loadSelectedAirportDashboard(selectedAirport)}
             onToggleWeather={() => {
@@ -5556,6 +5560,7 @@
             }}
             onToggleBookmark={() => toggleEntityBookmark(selectedAirport)}
             onAddAlert={addSelectedAirportAlert}
+            onShare={copyShareLink}
             onFilterAllTraffic={() => applyAirportTrafficFilter(selectedAirport, "all")}
             onFilterArrivals={() => applyAirportTrafficFilter(selectedAirport, "arrivals")}
             onFilterDepartures={() => applyAirportTrafficFilter(selectedAirport, "departures")}

@@ -10,11 +10,13 @@
   export let weatherError = null;
   export let weatherLayerEnabled = false;
   export let bookmarked = false;
+  export let shareFeedback = "";
   export let onSelectFlight = () => {};
   export let onRetry = () => {};
   export let onToggleWeather = () => {};
   export let onToggleBookmark = () => {};
   export let onAddAlert = () => {};
+  export let onShare = () => {};
   export let onFilterAllTraffic = () => {};
   export let onFilterArrivals = () => {};
   export let onFilterDepartures = () => {};
@@ -113,6 +115,9 @@
         </button>
         <button class:active={bookmarked} class="airport-action" type="button" on:click={onToggleBookmark}>
           {bookmarked ? "Bookmarked" : "Bookmark"}
+        </button>
+        <button class="airport-action" type="button" on:click={onShare}>
+          {shareFeedback || "Share"}
         </button>
       </div>
     {/if}

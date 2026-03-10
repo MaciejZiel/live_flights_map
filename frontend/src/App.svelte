@@ -2499,6 +2499,8 @@
   $: normalizedOperatorFilter = filters.operator.trim().toLowerCase();
   $: activeMonitoringSession =
     monitoringSessions.find((session) => session.id === activeMonitoringSessionId) ?? null;
+  $: activeWorkspaceProfile =
+    workspaceProfiles.find((profile) => profile.id === activeWorkspaceProfileId) ?? null;
   $: replaySourceSnapshots = activeMonitoringSession?.snapshots ?? snapshotHistory;
   $: replaySnapshotIndex = replaySnapshotCursor
     ? replaySourceSnapshots.findIndex((snapshot) => snapshot.fetchedAt === replaySnapshotCursor)
@@ -2982,54 +2984,64 @@
 
     <header class="radar-topbar">
       <div class="overlay-card center-bar">
-        <div class="brand-inline">
-          <div class="brand-copy">
-            <strong>liveflights<span>24</span></strong>
-            <span>live air traffic</span>
-          </div>
-        </div>
-
-        <div class="search-shell">
-          <label class="search-field">
-            <span class="search-icon">⌕</span>
-            <input
-              bind:this={searchInput}
-              bind:value={filters.query}
-              type="text"
-              placeholder="Search flights, airports, airlines, routes, locations"
-              title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
-            />
-          </label>
-
-          {#if showSearchSuggestions}
-            <div class="search-suggestions">
-              <EntitySearchPanel
-                query={searchQuery}
-                status={remoteSearchStatus}
-                error={remoteSearchError}
-                groups={remoteSearchGroups}
-                totalCount={remoteSearchCount}
-                onSelectResult={selectSearchResult}
-              />
+        <div class="center-bar-main">
+          <div class="brand-inline">
+            <div class="brand-copy">
+              <strong>liveflights<span>24</span></strong>
+              <span>live air traffic</span>
             </div>
-          {/if}
-        </div>
-
-        <div class="center-actions">
-          <div class="traffic-counter">
-            <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
-            <strong>{formatCompactCount(visibleTrackedCount)}</strong>
-            <small>aircraft</small>
           </div>
 
-          {#if isMobileViewport}
-            <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
-              Tools
-            </button>
-            <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
-              {selectedFlight ? "Flight" : "Traffic"}
-            </button>
-          {/if}
+          <div class="search-shell">
+            <label class="search-field">
+              <span class="search-icon">⌕</span>
+              <input
+                bind:this={searchInput}
+                bind:value={filters.query}
+                type="text"
+                placeholder="Search flights, airports, airlines, routes, locations"
+                title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
+              />
+            </label>
+
+            {#if showSearchSuggestions}
+              <div class="search-suggestions">
+                <EntitySearchPanel
+                  query={searchQuery}
+                  status={remoteSearchStatus}
+                  error={remoteSearchError}
+                  groups={remoteSearchGroups}
+                  totalCount={remoteSearchCount}
+                  onSelectResult={selectSearchResult}
+                />
+              </div>
+            {/if}
+          </div>
+
+          <div class="center-actions">
+            <div class="traffic-counter">
+              <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+              <strong>{formatCompactCount(visibleTrackedCount)}</strong>
+              <small>aircraft</small>
+            </div>
+
+            {#if isMobileViewport}
+              <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
+                Tools
+              </button>
+              <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
+                {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
+              </button>
+            {/if}
+          </div>
+        </div>
+
+        <div class="topbar-status-strip" aria-label="Radar status strip">
+          <span class="topbar-status-chip">{activeReplaySnapshot ? "Replay" : statusLabel}</span>
+          <span>{mapStyleLabel}</span>
+          <span>{showAirportMarkers ? "Airports on" : "Airports off"}</span>
+          <span>{weatherLayerEnabled ? "Weather on" : "Weather off"}</span>
+          <span>{workspaceSyncStatus === "success" ? activeWorkspaceProfile?.display_name ?? "Workspace" : workspaceSyncStatus}</span>
         </div>
       </div>
     </header>
@@ -3068,6 +3080,9 @@
     {/if}
 
     <aside class:open={mobileUtilityOpen} class="overlay-card radar-left-panel">
+      {#if isMobileViewport}
+        <span class="mobile-drawer-handle" aria-hidden="true"></span>
+      {/if}
       <div class="utility-header">
         <div class="utility-heading">
           <span>{utilityPanelEyebrow}</span>
@@ -3076,6 +3091,11 @@
         <div class="utility-meta">
           <span class="utility-pill">{statusLabel}</span>
           <span class="utility-count">{visibleTrackedCount}</span>
+          {#if isMobileViewport}
+            <button class="panel-dismiss" type="button" aria-label="Close tools panel" on:click={closeMobileUtility}>
+              ×
+            </button>
+          {/if}
         </div>
       </div>
 
@@ -3893,6 +3913,9 @@
     {/if}
 
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
+      {#if isMobileViewport}
+        <span class="mobile-drawer-handle" aria-hidden="true"></span>
+      {/if}
       <div class="rail-header">
         <div class="rail-brand">
           <span>
@@ -3991,6 +4014,11 @@
         {:else}
           <div class="rail-actions">
             <span class="rail-count">{visibleTrackedCount}</span>
+            {#if isMobileViewport}
+              <button class="panel-dismiss" type="button" aria-label="Close inspector panel" on:click={closeMobileSidebar}>
+                ×
+              </button>
+            {/if}
           </div>
         {/if}
       </div>
@@ -4301,14 +4329,19 @@
 
   .center-bar {
     display: grid;
+    gap: 0.58rem;
+    width: min(34rem, calc(100vw - 39rem));
+    min-width: 30rem;
+    padding: 0.48rem 0.54rem 0.52rem 0.62rem;
+    border-radius: 16px;
+    background: rgba(16, 18, 22, 0.96);
+  }
+
+  .center-bar-main {
+    display: grid;
     grid-template-columns: auto minmax(250px, 1fr) auto;
     align-items: center;
     gap: 0.6rem;
-    width: min(34rem, calc(100vw - 39rem));
-    min-width: 30rem;
-    padding: 0.42rem 0.48rem 0.42rem 0.58rem;
-    border-radius: 16px;
-    background: rgba(16, 18, 22, 0.96);
   }
 
   .brand-inline {
@@ -4351,6 +4384,12 @@
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.96);
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  }
+
+  .search-field:focus-within {
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      0 0 0 3px rgba(245, 185, 8, 0.18);
   }
 
   .search-shell {
@@ -4402,6 +4441,34 @@
     justify-content: flex-end;
     gap: 0.45rem;
     align-items: center;
+  }
+
+  .topbar-status-strip {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-left: 0.04rem;
+  }
+
+  .topbar-status-strip span {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.65rem;
+    padding: 0 0.58rem;
+    border-radius: 999px;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #d7e0ea;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .topbar-status-chip {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%) !important;
+    border-color: transparent !important;
   }
 
   .filter-token-list,
@@ -4635,6 +4702,12 @@
     justify-content: space-between;
     gap: 0.75rem;
     align-items: start;
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    padding-bottom: 0.15rem;
+    background: linear-gradient(180deg, rgba(12, 14, 17, 0.98) 0%, rgba(12, 14, 17, 0.92) 72%, rgba(12, 14, 17, 0) 100%);
+    backdrop-filter: blur(10px);
   }
 
   .utility-heading {
@@ -5133,7 +5206,12 @@
     justify-content: space-between;
     gap: 0.75rem;
     align-items: start;
+    position: sticky;
+    top: 0;
+    z-index: 4;
     padding: 0.08rem 0.08rem 0.72rem;
+    background: linear-gradient(180deg, rgba(12, 14, 17, 0.98) 0%, rgba(12, 14, 17, 0.92) 72%, rgba(12, 14, 17, 0) 100%);
+    backdrop-filter: blur(10px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
@@ -5213,6 +5291,28 @@
     color: #c8d0db;
     background: transparent;
     cursor: pointer;
+  }
+
+  .panel-dismiss {
+    border: 0;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 1.05rem;
+    line-height: 1;
+    color: #e7edf4;
+    background: rgba(255, 255, 255, 0.07);
+    cursor: pointer;
+  }
+
+  .mobile-drawer-handle {
+    align-self: center;
+    width: 3rem;
+    height: 0.28rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    margin: -0.1rem auto 0.1rem;
   }
 
   .inspector-tab-row {
@@ -5705,15 +5805,22 @@
     }
 
     .center-bar {
-      grid-template-columns: 1fr;
       width: auto;
       min-width: 0;
       padding: 0.62rem 0.68rem;
     }
 
+    .center-bar-main {
+      grid-template-columns: 1fr;
+    }
+
     .center-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
+    }
+
+    .topbar-status-strip {
+      padding-left: 0;
     }
 
     .filter-form-grid,

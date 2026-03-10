@@ -55,6 +55,7 @@
   } from "./lib/utils/userPreferences.js";
   import {
     buildAirportReportCsv,
+    buildEmbedSnippet,
     buildPrintableRadarReport,
     buildTrafficReportCsv,
   } from "./lib/utils/reporting.js";
@@ -104,6 +105,7 @@
   let selectedAirportSnapshot = null;
   let selectedEntityContext = null;
   let followAircraft = false;
+  let embedMode = false;
   let mapStyle = "standard";
   let weatherLayerEnabled = false;
   let showAirportMarkers = true;
@@ -1327,6 +1329,7 @@
     const sharedWeather = params.get("weather");
     const sharedAirportMarkers = params.get("airports");
     const sharedReplayWindow = Number(params.get("replayWindow"));
+    const sharedEmbedMode = params.get("embed");
 
     if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(zoom)) {
       mapViewport = {
@@ -1424,6 +1427,10 @@
 
     if ([30, 90, 180].includes(sharedReplayWindow)) {
       replayWindowMinutes = sharedReplayWindow;
+    }
+
+    if (sharedEmbedMode === "1") {
+      embedMode = true;
     }
 
     filters = nextFilters;
@@ -1579,6 +1586,12 @@
       params.delete("replayWindow");
     }
 
+    if (embedMode) {
+      params.set("embed", "1");
+    } else {
+      params.delete("embed");
+    }
+
     window.history.replaceState({}, "", `${url.pathname}${url.search}`);
   }
 
@@ -1602,6 +1615,23 @@
       shareFeedback = "";
       shareFeedbackTimer = null;
     }, 1800);
+  }
+
+  async function copyEmbedCode() {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const snippet = buildEmbedSnippet(window.location.href, {
+      title: selectedFlightCallsignLabel ?? "Live Flights Radar",
+    });
+
+    try {
+      await window.navigator.clipboard.writeText(snippet);
+      setReportFeedback("Embed code copied");
+    } catch {
+      setReportFeedback("Embed copy failed");
+    }
   }
 
   function setReportFeedback(message) {
@@ -3750,6 +3780,11 @@
         ? "Syncing details"
         : formatFlightStatus(selectedFlight)
     : null;
+  $: embedStatusCopy = selectedFlight
+    ? selectedFlightCallsignLabel
+    : selectedAirport
+      ? `${selectedAirport.iata ?? selectedAirport.icao ?? selectedAirport.entity_key} airport`
+      : `${visibleTrackedCount} aircraft`;
   $: replaySelectedFlightTrail = activeReplaySnapshot
     ? replaySourceSnapshots.flatMap((snapshot) => {
         const flight = snapshot.flights.find((candidate) => candidate.icao24 === selectedIcao24);
@@ -4026,70 +4061,84 @@
     </div>
 
     <header class="radar-topbar">
-      <div class="overlay-card center-bar">
-        <div class="center-bar-main">
-          <div class="brand-inline">
-            <div class="brand-copy">
-              <strong>liveflights<span>24</span></strong>
-              <span>live air traffic</span>
-            </div>
+      {#if embedMode}
+        <div class="overlay-card embed-bar">
+          <div class="brand-copy">
+            <strong>liveflights<span>24</span></strong>
+            <span>embedded radar</span>
           </div>
-
-          <div class="search-shell">
-            <label class="search-field">
-              <span class="search-icon">⌕</span>
-              <input
-                bind:this={searchInput}
-                bind:value={filters.query}
-                type="text"
-                placeholder="Search aircraft, flights, airports, airlines, routes, locations"
-                title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
-                on:keydown={handleSearchInputKeydown}
-              />
-            </label>
-
-            {#if showSearchSuggestions}
-              <div class="search-suggestions">
-                <EntitySearchPanel
-                  query={searchQuery}
-                  status={remoteSearchStatus}
-                  error={remoteSearchError}
-                  groups={remoteSearchGroups}
-                  totalCount={remoteSearchCount}
-                  activeResultKey={activeSearchResultKey}
-                  onHoverResult={handleSearchResultHover}
-                  onSelectResult={selectSearchResult}
-                />
+          <div class="traffic-counter">
+            <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+            <strong>{formatCompactCount(visibleTrackedCount)}</strong>
+            <small>{embedStatusCopy}</small>
+          </div>
+        </div>
+      {:else}
+        <div class="overlay-card center-bar">
+          <div class="center-bar-main">
+            <div class="brand-inline">
+              <div class="brand-copy">
+                <strong>liveflights<span>24</span></strong>
+                <span>live air traffic</span>
               </div>
-            {/if}
-          </div>
-
-          <div class="center-actions">
-            <div class="traffic-counter">
-              <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
-              <strong>{formatCompactCount(visibleTrackedCount)}</strong>
-              <small>aircraft</small>
             </div>
 
-            {#if isMobileViewport}
-              <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
-                Tools
-              </button>
-              <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
-                {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
-              </button>
-            {/if}
+            <div class="search-shell">
+              <label class="search-field">
+                <span class="search-icon">⌕</span>
+                <input
+                  bind:this={searchInput}
+                  bind:value={filters.query}
+                  type="text"
+                  placeholder="Search aircraft, flights, airports, airlines, routes, locations"
+                  title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
+                  on:keydown={handleSearchInputKeydown}
+                />
+              </label>
+
+              {#if showSearchSuggestions}
+                <div class="search-suggestions">
+                  <EntitySearchPanel
+                    query={searchQuery}
+                    status={remoteSearchStatus}
+                    error={remoteSearchError}
+                    groups={remoteSearchGroups}
+                    totalCount={remoteSearchCount}
+                    activeResultKey={activeSearchResultKey}
+                    onHoverResult={handleSearchResultHover}
+                    onSelectResult={selectSearchResult}
+                  />
+                </div>
+              {/if}
+            </div>
+
+            <div class="center-actions">
+              <div class="traffic-counter">
+                <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+                <strong>{formatCompactCount(visibleTrackedCount)}</strong>
+                <small>aircraft</small>
+              </div>
+
+              {#if isMobileViewport}
+                <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
+                  Tools
+                </button>
+                <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
+                  {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
+                </button>
+              {/if}
+            </div>
+          </div>
+
+          <div class="topbar-status-strip" aria-label="Radar status strip">
+            <span class="topbar-status-chip">{activeReplaySnapshot ? "Replay" : statusLabel}</span>
+            <span>{mapStyleLabel}</span>
+            <span>{showAirportMarkers ? "Airports on" : "Airports off"}</span>
+            <span>{weatherLayerEnabled ? "Weather on" : "Weather off"}</span>
+            <span>{workspaceSyncStatus === "success" ? activeWorkspaceProfile?.display_name ?? "Workspace" : workspaceSyncStatus}</span>
           </div>
         </div>
-
-        <div class="topbar-status-strip" aria-label="Radar status strip">
-          <span class="topbar-status-chip">{activeReplaySnapshot ? "Replay" : statusLabel}</span>
-          <span>{mapStyleLabel}</span>
-          <span>{showAirportMarkers ? "Airports on" : "Airports off"}</span>
-          <span>{weatherLayerEnabled ? "Weather on" : "Weather off"}</span>
-          <span>{workspaceSyncStatus === "success" ? activeWorkspaceProfile?.display_name ?? "Workspace" : workspaceSyncStatus}</span>
-        </div>
-      </div>
+      {/if}
     </header>
 
     <div class="floating-messages">
@@ -4118,7 +4167,7 @@
       {/if}
     </div>
 
-    {#if showMobileStartHint}
+    {#if showMobileStartHint && !embedMode}
       <section class="overlay-card mobile-start-hint">
         <span>Tryb mobilny</span>
         <strong>Panele sa schowane. Kliknij `Traffic` albo `Tools` u gory.</strong>
@@ -4129,6 +4178,7 @@
       </section>
     {/if}
 
+    {#if !embedMode}
     <aside class:open={mobileUtilityOpen} class="overlay-card radar-left-panel">
       {#if isMobileViewport}
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
@@ -4774,6 +4824,9 @@
                 <button class="widget-footer-button" type="button" on:click={printVisibleTrafficReport}>
                   Print traffic report
                 </button>
+                <button class="widget-footer-button" type="button" on:click={copyEmbedCode}>
+                  Copy embed code
+                </button>
                 {#if selectedAirport && selectedAirportDashboard}
                   <button class="widget-footer-button" type="button" on:click={exportSelectedAirportCsv}>
                     Export airport board CSV
@@ -5180,15 +5233,17 @@
         {/if}
       </div>
     </aside>
+    {/if}
 
-    {#if isMobileViewport && mobileUtilityOpen}
+    {#if isMobileViewport && mobileUtilityOpen && !embedMode}
       <button class="sidebar-backdrop utility-backdrop" type="button" aria-label="Close tools panel" on:click={closeMobileUtility}></button>
     {/if}
 
-    {#if isMobileViewport && mobileSidebarOpen}
+    {#if isMobileViewport && mobileSidebarOpen && !embedMode}
       <button class="sidebar-backdrop" type="button" aria-label="Close panel" on:click={closeMobileSidebar}></button>
     {/if}
 
+    {#if !embedMode}
     <aside class:open={mobileSidebarOpen} class="overlay-card radar-right-panel">
       {#if isMobileViewport}
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
@@ -5725,7 +5780,18 @@
         {/if}
       </div>
     </aside>
+    {/if}
 
+    {#if embedMode}
+      <section class="overlay-card embed-actions">
+        <button class="dock-button" type="button" on:click={copyShareLink}>
+          <span class="dock-label">Share</span>
+        </button>
+        <button class="dock-button" type="button" on:click={copyEmbedCode}>
+          <span class="dock-label">Embed</span>
+        </button>
+      </section>
+    {:else}
     <nav aria-label="Quick map controls" class="overlay-card bottom-dock">
       <button class="dock-button" type="button" on:click={() => triggerViewPreset("poland")}>
         <span class="dock-glyph dock-glyph-scope" aria-hidden="true"></span>
@@ -5744,6 +5810,7 @@
         <span class="dock-label">Fullscreen</span>
       </button>
     </nav>
+    {/if}
   </section>
 </div>
 
@@ -5783,7 +5850,8 @@
   .radar-left-panel,
   .radar-right-panel,
   .bottom-dock,
-  .floating-messages {
+  .floating-messages,
+  .embed-actions {
     position: absolute;
     z-index: 1100;
   }
@@ -5804,6 +5872,17 @@
     padding: 0.48rem 0.54rem 0.52rem 0.62rem;
     border-radius: 16px;
     background: rgba(16, 18, 22, 0.96);
+  }
+
+  .embed-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8rem;
+    width: min(28rem, calc(100vw - 1rem));
+    padding: 0.55rem 0.7rem;
+    border-radius: 14px;
+    background: rgba(16, 18, 22, 0.94);
   }
 
   .center-bar-main {
@@ -6064,6 +6143,14 @@
     display: grid;
     gap: 0.45rem;
     width: min(40rem, calc(100vw - 2rem));
+  }
+
+  .embed-actions {
+    right: 0.95rem;
+    bottom: 0.95rem;
+    display: flex;
+    gap: 0.42rem;
+    padding: 0.42rem;
   }
 
   .mobile-start-hint {

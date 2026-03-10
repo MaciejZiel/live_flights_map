@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   buildAirportReportCsv,
+  buildEmbedSnippet,
   buildPrintableRadarReport,
   buildTrafficReportCsv,
 } from "../src/lib/utils/reporting.js";
@@ -61,4 +62,18 @@ test("buildPrintableRadarReport renders a printable HTML report", () => {
   assert.match(html, /LOT285/);
   assert.match(html, /WAW-JFK/);
   assert.match(html, /Generated 2026-03-10 12:00 UTC/);
+});
+
+test("buildEmbedSnippet forces embed mode in the iframe URL", () => {
+  const snippet = buildEmbedSnippet("https://example.com/radar?airport=WAW", {
+    width: 800,
+    height: 500,
+    title: "Radar widget",
+  });
+
+  assert.match(snippet, /iframe/);
+  assert.match(snippet, /embed=1/);
+  assert.match(snippet, /width="800"/);
+  assert.match(snippet, /height="500"/);
+  assert.match(snippet, /Radar widget/);
 });

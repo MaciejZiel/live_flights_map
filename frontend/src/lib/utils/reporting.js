@@ -295,3 +295,14 @@ export function buildPrintableRadarReport({
   </body>
 </html>`;
 }
+
+export function buildEmbedSnippet(url, options = {}) {
+  const sourceUrl = new URL(String(url));
+  sourceUrl.searchParams.set("embed", "1");
+
+  const width = Number.isFinite(options.width) ? options.width : 960;
+  const height = Number.isFinite(options.height) ? options.height : 640;
+  const title = options.title ? String(options.title) : "Live Flights Radar";
+
+  return `<iframe src="${sourceUrl.toString()}" title="${escapeHtml(title)}" width="${width}" height="${height}" style="border:0;width:100%;max-width:${width}px;height:${height}px;" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>`;
+}

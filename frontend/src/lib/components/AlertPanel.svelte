@@ -13,6 +13,8 @@
     icao24: "ICAO24 match",
     airline: "Airline/operator match",
     country: "Country match",
+    registration: "Registration match",
+    type_code: "Aircraft type match",
   };
 
   function submitRule() {
@@ -60,6 +62,8 @@
         <option value="icao24">ICAO24</option>
         <option value="airline">Airline</option>
         <option value="country">Country</option>
+        <option value="registration">Registration</option>
+        <option value="type_code">Aircraft type</option>
       </select>
     </label>
     <label class="field">
@@ -67,7 +71,7 @@
       <input
         bind:value={ruleQuery}
         type="text"
-        placeholder="LOT, RYR, Poland, 48ad08"
+        placeholder="LOT, SP-LVQ, B38M, Poland, 48ad08"
         on:keydown={(event) => event.key === "Enter" && submitRule()}
       />
     </label>

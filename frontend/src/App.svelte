@@ -874,6 +874,57 @@
     }
   }
 
+  function isFlightInsideBbox(flight, bbox) {
+    if (!flight || !bbox) {
+      return false;
+    }
+
+    return (
+      Number.isFinite(flight.latitude) &&
+      Number.isFinite(flight.longitude) &&
+      flight.latitude >= bbox.lamin &&
+      flight.latitude <= bbox.lamax &&
+      flight.longitude >= bbox.lomin &&
+      flight.longitude <= bbox.lomax
+    );
+  }
+
+  function buildAirportShortcut(code, label = null) {
+    const normalizedCode = String(code ?? "").trim().toUpperCase();
+    if (!normalizedCode) {
+      return null;
+    }
+
+    return {
+      entity_key: normalizedCode,
+      iata: normalizedCode.length === 3 ? normalizedCode : null,
+      icao: normalizedCode.length === 4 ? normalizedCode : null,
+      label: normalizedCode,
+      name: label ?? normalizedCode,
+    };
+  }
+
+  function getEntityContextMatches(entity, flights) {
+    if (!entity || !Array.isArray(flights)) {
+      return [];
+    }
+
+    if (entity.entity_type === "airline") {
+      const target = String(entity.entity_key ?? entity.label ?? "").trim().toLowerCase();
+      if (!target) {
+        return [];
+      }
+
+      return flights.filter((flight) => deriveOperatorCode(flight).toLowerCase() === target);
+    }
+
+    if (entity.entity_type === "location" && entity.bbox) {
+      return flights.filter((flight) => isFlightInsideBbox(flight, entity.bbox));
+    }
+
+    return [];
+  }
+
   function buildSearchResultKey(result) {
     return `${result?.entity_type ?? "entity"}:${result?.entity_key ?? result?.icao24 ?? result?.label ?? "unknown"}`;
   }
@@ -1352,6 +1403,29 @@
     }, 3500);
   }
 
+  function getAlertRuleLabel(type) {
+    if (type === "callsign") {
+      return "Callsign";
+    }
+    if (type === "icao24") {
+      return "ICAO24";
+    }
+    if (type === "airline") {
+      return "Airline";
+    }
+    if (type === "country") {
+      return "Country";
+    }
+    if (type === "registration") {
+      return "Registration";
+    }
+    if (type === "type_code") {
+      return "Type";
+    }
+
+    return "Rule";
+  }
+
   function addAlertRule(rule) {
     const normalizedQuery = rule.query.trim().toLowerCase();
     if (!normalizedQuery) {
@@ -1475,6 +1549,14 @@
           return (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery);
         }
 
+        if (rule.type === "registration") {
+          return (flight.registration ?? "").toLowerCase().includes(normalizedQuery);
+        }
+
+        if (rule.type === "type_code") {
+          return (flight.type_code ?? "").toLowerCase().includes(normalizedQuery);
+        }
+
         return flight.icao24.includes(normalizedQuery);
       });
 
@@ -1486,13 +1568,13 @@
       if (matches.length > 0 && previousMatches === 0) {
         const leadFlight = matches[0];
         pushAlertEvent(
-          `${rule.type === "callsign" ? "Callsign" : rule.type === "airline" ? "Airline" : rule.type === "country" ? "Country" : "ICAO24"} ${rule.query} matched ${leadFlight.callsign ?? leadFlight.icao24}`
+          `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${leadFlight.callsign ?? leadFlight.registration ?? leadFlight.icao24}`
         );
       }
 
       if (matches.length === 0 && previousMatches > 0) {
         pushAlertEvent(
-          `${rule.type === "callsign" ? "Callsign" : rule.type === "airline" ? "Airline" : rule.type === "country" ? "Country" : "ICAO24"} ${rule.query} is no longer visible`
+          `${getAlertRuleLabel(rule.type)} ${rule.query} is no longer visible`
         );
       }
     }
@@ -1588,6 +1670,24 @@
       type: "icao24",
       query: selectedFlight.icao24,
     });
+  }
+
+  function addEntityContextAlert() {
+    if (!selectedEntityContext) {
+      return;
+    }
+
+    if (selectedEntityContext.entity_type === "airline") {
+      addAlertRule({
+        type: "airline",
+        query: selectedEntityContext.entity_key ?? selectedEntityContext.label ?? "",
+      });
+      return;
+    }
+
+    if (selectedEntityContext.entity_type === "location") {
+      pushAlertEvent(`Monitoring focus saved for ${selectedEntityContext.label ?? "selected area"}.`);
+    }
   }
 
   function buildFlightDetailsKey(flight) {
@@ -3045,6 +3145,21 @@
   $: selectedAirportBookmarked = selectedAirport
     ? isEntityBookmarked("airport", normalizeAirportKey(selectedAirport))
     : false;
+  $: selectedEntityContextMatches = getEntityContextMatches(selectedEntityContext, state.flights).slice(0, 6);
+  $: selectedEntityContextOriginAirport =
+    selectedEntityContext?.entity_type === "route"
+      ? buildAirportShortcut(
+          selectedEntityContext.origin_iata ?? selectedEntityContext.origin_icao,
+          selectedEntityContext.origin_iata ?? selectedEntityContext.origin_icao ?? "Origin"
+        )
+      : null;
+  $: selectedEntityContextDestinationAirport =
+    selectedEntityContext?.entity_type === "route"
+      ? buildAirportShortcut(
+          selectedEntityContext.destination_iata ?? selectedEntityContext.destination_icao,
+          selectedEntityContext.destination_iata ?? selectedEntityContext.destination_icao ?? "Destination"
+        )
+      : null;
   $: selectedOperatorCode = selectedFlight ? deriveOperatorCode(selectedFlight) || "N/A" : "N/A";
   $: selectedFlightCallsignLabel = selectedFlight
     ? selectedFlight.callsign ?? selectedFlight.registration ?? selectedFlight.icao24.toUpperCase()
@@ -4178,6 +4293,32 @@
                       Alert by airline
                     </button>
                   {/if}
+                  {#if selectedFlight.registration}
+                    <button
+                      class="widget-footer-button"
+                      type="button"
+                      on:click={() =>
+                        addAlertRule({
+                          type: "registration",
+                          query: selectedFlight.registration,
+                        })}
+                    >
+                      Alert by registration
+                    </button>
+                  {/if}
+                  {#if selectedFlight.type_code}
+                    <button
+                      class="widget-footer-button"
+                      type="button"
+                      on:click={() =>
+                        addAlertRule({
+                          type: "type_code",
+                          query: selectedFlight.type_code,
+                        })}
+                    >
+                      Alert by type
+                    </button>
+                  {/if}
                   <button
                     class="widget-footer-button"
                     type="button"
@@ -4304,7 +4445,7 @@
               <strong>{alertRules.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Alert rules sync with the active workspace profile and can watch callsigns, ICAO24s, airlines and countries.</p>
+              <p class="drawer-caption">Alert rules sync with the active workspace profile and can watch callsigns, ICAO24s, airlines, countries, registrations and aircraft types.</p>
               <AlertPanel
                 rules={alertRules}
                 events={alertEvents}
@@ -4446,6 +4587,14 @@
               on:click={() => toggleEntityBookmark(selectedEntityContext)}
             >
               {isEntityBookmarked(selectedEntityContext.entity_type, selectedEntityContext.entity_key) ? "Saved" : "Bookmark"}
+            </button>
+            {#if selectedEntityContext.entity_type === "airline" || selectedEntityContext.entity_type === "location"}
+              <button class="rail-toggle" type="button" on:click={addEntityContextAlert}>
+                Alert
+              </button>
+            {/if}
+            <button class="rail-toggle" type="button" on:click={copyShareLink}>
+              {shareFeedback || "Share"}
             </button>
             <button class="rail-close" type="button" aria-label="Close search focus" on:click={handleMapBackgroundClick}>
               ×
@@ -4670,6 +4819,16 @@
                   {/if}
                 </strong>
               </div>
+              <div>
+                <span>Live matches</span>
+                <strong>
+                  {#if selectedEntityContext.entity_type === "route"}
+                    Route shortcuts
+                  {:else}
+                    {selectedEntityContextMatches.length}
+                  {/if}
+                </strong>
+              </div>
             </div>
 
             <div class="local-tool-actions">
@@ -4687,14 +4846,106 @@
                 >
                   Filter by airline
                 </button>
+                <button class="workflow-button" type="button" on:click={addEntityContextAlert}>
+                  Alert by airline
+                </button>
               {/if}
               {#if selectedEntityContext.entity_type === "location"}
                 <button class="workflow-button primary" type="button" on:click={() => focusLocationEntity(selectedEntityContext)}>
                   Focus saved area
                 </button>
+                <button class="workflow-button" type="button" on:click={addEntityContextAlert}>
+                  Monitor area
+                </button>
+              {/if}
+              {#if selectedEntityContext.entity_type === "route"}
+                {#if selectedEntityContextOriginAirport}
+                  <button
+                    class="workflow-button primary"
+                    type="button"
+                    on:click={() => openAirportInspector(selectedEntityContextOriginAirport, { focusMap: true, zoom: 8.8 })}
+                  >
+                    Open origin
+                  </button>
+                {/if}
+                {#if selectedEntityContextDestinationAirport}
+                  <button
+                    class="workflow-button"
+                    type="button"
+                    on:click={() => openAirportInspector(selectedEntityContextDestinationAirport, { focusMap: true, zoom: 8.8 })}
+                  >
+                    Open destination
+                  </button>
+                {/if}
               {/if}
               <button class="workflow-button" type="button" on:click={copyShareLink}>Share view</button>
             </div>
+
+            {#if selectedEntityContext.entity_type === "route" && (selectedEntityContextOriginAirport || selectedEntityContextDestinationAirport)}
+              <div class="workflow-facts">
+                {#if selectedEntityContextOriginAirport}
+                  <div>
+                    <span>Origin</span>
+                    <strong>{selectedEntityContextOriginAirport.label}</strong>
+                  </div>
+                {/if}
+                {#if selectedEntityContextDestinationAirport}
+                  <div>
+                    <span>Destination</span>
+                    <strong>{selectedEntityContextDestinationAirport.label}</strong>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
+            {#if selectedEntityContext.entity_type !== "route"}
+              <section class="facts-panel">
+                <div class="facts-header">
+                  <strong>Matching live traffic</strong>
+                  <span>{selectedEntityContextMatches.length} visible now</span>
+                </div>
+
+                {#if selectedEntityContextMatches.length}
+                  <div class="mini-stat-list">
+                    {#each selectedEntityContextMatches as flight}
+                      <div>
+                        <span>
+                          <strong>{flight.callsign ?? flight.registration ?? flight.icao24.toUpperCase()}</strong>
+                          <small>
+                            {[
+                              flight.registration ?? flight.icao24.toUpperCase(),
+                              flight.type_code,
+                              flight.origin_country,
+                            ].filter(Boolean).join(" · ")}
+                          </small>
+                        </span>
+                        <div class="compact-entity-actions">
+                          <button
+                            class="widget-footer-button"
+                            type="button"
+                            on:click={() =>
+                              openFlightInspector(flight, {
+                                focusMap: true,
+                                zoom: 8.4,
+                                exitReplay: false,
+                                inspectorTab: "details",
+                              })}
+                          >
+                            Open
+                          </button>
+                        </div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else}
+                  <p class="widget-empty">
+                    {selectedEntityContext.entity_type === "location"
+                      ? "No current aircraft are visible inside this saved area."
+                      : "No visible aircraft match this search focus right now."}
+                  </p>
+                {/if}
+              </section>
+            {/if}
           </section>
         {:else}
           <TrafficBoardPanel

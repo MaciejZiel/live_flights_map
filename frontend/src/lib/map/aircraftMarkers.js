@@ -174,6 +174,11 @@ function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, d
   entry.marker.setTooltipContent(buildTooltipContent(flight));
   entry.marker.setPopupContent(buildPopupContent(flight));
   entry.marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
+
+  const markerElement = entry.marker.getElement();
+  if (markerElement) {
+    markerElement.dataset.icao24 = flight.icao24;
+  }
 }
 
 function createMarkerEntry(
@@ -238,6 +243,10 @@ function createMarkerEntry(
   );
 
   marker.addTo(layer);
+  const markerElement = marker.getElement();
+  if (markerElement) {
+    markerElement.dataset.icao24 = flight.icao24;
+  }
   return entry;
 }
 

@@ -256,6 +256,33 @@
     });
   }
 
+  function handleMarkerElementClick(event) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const markerElement = target.closest("[data-icao24]");
+    if (!(markerElement instanceof HTMLElement)) {
+      return;
+    }
+
+    const icao24 = markerElement.dataset.icao24?.trim().toLowerCase();
+    if (!icao24) {
+      return;
+    }
+
+    const entry = markerRegistry.get(icao24);
+    if (!entry?.flight) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    entry.marker.openPopup();
+    dispatch("select", { flight: entry.flight });
+  }
+
   function projectPoint(latitude, longitude, bearingDegrees, distanceMeters) {
     const earthRadiusMeters = 6371000;
     const angularDistance = distanceMeters / earthRadiusMeters;
@@ -658,6 +685,7 @@
     weatherRefreshTimer = window.setInterval(() => {
       loadWeatherFrame();
     }, 10 * 60 * 1000);
+    container.addEventListener("click", handleMarkerElementClick, true);
     map.on("click", (event) => {
       const target = event.originalEvent?.target;
       if (
@@ -676,6 +704,7 @@
     emitBounds();
 
     return () => {
+      container.removeEventListener("click", handleMarkerElementClick, true);
       map.off("click");
       map.off("moveend zoomend", emitBounds);
       document.removeEventListener("fullscreenchange", syncFullscreenState);

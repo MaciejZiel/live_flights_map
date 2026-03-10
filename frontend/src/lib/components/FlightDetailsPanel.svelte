@@ -13,10 +13,8 @@
   export let detailsStatus = "idle";
   export let detailsError = null;
   export let followAircraft = false;
-  export let isBookmarked = false;
   export let trailPoints = [];
   export let onToggleFollow = () => {};
-  export let onToggleBookmark = () => {};
   export let onRetryDetails = () => {};
 
   function formatRelativeContact(lastContact) {
@@ -339,9 +337,6 @@
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
             {followAircraft ? "Following on map" : "Track on map"}
           </button>
-          <button class:active={isBookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
-            {isBookmarked ? "Bookmarked" : "Save aircraft"}
-          </button>
           <button class="action-button secondary" type="button" on:click={onRetryDetails}>
             Refresh
           </button>
@@ -465,14 +460,15 @@
   }
 
   .status-chip {
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    color: #f4f7fb;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .route-badge {
-    color: #f8de88;
-    background: rgba(245, 185, 8, 0.12);
-    border: 1px solid rgba(245, 185, 8, 0.22);
+    color: rgba(244, 247, 251, 0.9);
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .panel-badge {
@@ -485,11 +481,8 @@
   .facts-panel {
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 16px;
-    background:
-      linear-gradient(180deg, rgba(31, 34, 39, 0.98) 0%, rgba(19, 21, 25, 0.98) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.02),
-      0 14px 26px rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.025);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
   }
 
   .hero-card {
@@ -537,7 +530,7 @@
     gap: 0.52rem;
     padding: 1rem 0.9rem 0.82rem;
     background:
-      linear-gradient(180deg, rgba(6, 7, 10, 0) 0%, rgba(7, 8, 11, 0.82) 42%, rgba(7, 8, 11, 0.96) 100%);
+      linear-gradient(180deg, rgba(6, 7, 10, 0) 0%, rgba(7, 8, 11, 0.7) 46%, rgba(7, 8, 11, 0.9) 100%);
   }
 
   .photo-badge-row {
@@ -548,7 +541,7 @@
   }
 
   .overlay-chip {
-    background: rgba(255, 211, 79, 0.95);
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .photo-copy {
@@ -593,8 +586,8 @@
     gap: 0.3rem;
     padding: 0.95rem;
     background:
-      radial-gradient(circle at top, rgba(245, 185, 8, 0.2), transparent 58%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02));
+      radial-gradient(circle at top, rgba(120, 200, 255, 0.14), transparent 58%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
   }
 
   .photo-placeholder.loading {
@@ -662,7 +655,7 @@
   }
 
   .route-summary strong {
-    color: #f8de88;
+    color: #f2f6fb;
     font-size: 0.8rem;
   }
 
@@ -695,7 +688,7 @@
   }
 
   .route-progress-header strong {
-    color: #f8de88;
+    color: #f2f6fb;
     font-size: 0.82rem;
   }
 
@@ -711,7 +704,7 @@
     position: absolute;
     inset: 0 auto 0 0;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(120, 200, 255, 0.7), rgba(245, 185, 8, 0.95));
+    background: linear-gradient(90deg, rgba(120, 200, 255, 0.7), rgba(120, 200, 255, 0.95));
   }
 
   .route-progress-marker {
@@ -721,8 +714,8 @@
     height: 1rem;
     border-radius: 999px;
     border: 2px solid rgba(20, 23, 28, 0.98);
-    background: #ffd34f;
-    box-shadow: 0 0 0 3px rgba(255, 211, 79, 0.18);
+    background: #78c8ff;
+    box-shadow: 0 0 0 3px rgba(120, 200, 255, 0.18);
     transform: translateY(-50%);
   }
 
@@ -743,7 +736,7 @@
   }
 
   .route-node.current {
-    border-color: rgba(245, 185, 8, 0.26);
+    border-color: rgba(120, 200, 255, 0.26);
   }
 
   .route-node strong {
@@ -754,7 +747,7 @@
     width: 100%;
     height: 2px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(120, 200, 255, 0.34), rgba(245, 185, 8, 0.92));
+    background: linear-gradient(90deg, rgba(120, 200, 255, 0.24), rgba(120, 200, 255, 0.82));
   }
 
   .identity-actions {
@@ -784,9 +777,9 @@
   }
 
   .action-button.active {
-    color: var(--button-primary-text);
-    background: var(--button-primary-bg);
-    border-color: transparent;
+    color: #f4f7fb;
+    background: rgba(120, 200, 255, 0.16);
+    border-color: rgba(120, 200, 255, 0.22);
   }
 
   .detail-warning,
@@ -795,7 +788,7 @@
   }
 
   .detail-warning strong {
-    color: #f8de88;
+    color: #f2f6fb;
     font-size: 0.8rem;
   }
 
@@ -860,7 +853,7 @@
       width: 2px;
       height: 36px;
       justify-self: center;
-      background: linear-gradient(180deg, rgba(120, 200, 255, 0.34), rgba(245, 185, 8, 0.92));
+      background: linear-gradient(180deg, rgba(120, 200, 255, 0.24), rgba(120, 200, 255, 0.82));
     }
 
     .fact-row {

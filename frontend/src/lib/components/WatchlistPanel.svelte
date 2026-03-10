@@ -10,17 +10,17 @@
 <section class="panel watchlist-panel">
   <div class="watchlist-header">
     <div>
-      <p class="eyebrow">Monitoring</p>
-      <h2>Watchlist</h2>
+      <p class="eyebrow">Local workspace</p>
+      <h2>Saved aircraft</h2>
     </div>
 
     <div class="watchlist-header-actions">
       <span class="count-pill">{entries.length}</span>
       <button class:active={watchModeEnabled} class="watch-mode-button" type="button" on:click={onToggleWatchMode}>
         {#if watchModeEnabled}
-          Watch mode on
+          Highlight saved
         {:else}
-          Watch mode off
+          Show all equally
         {/if}
       </button>
     </div>
@@ -47,7 +47,7 @@
       {/each}
     </div>
   {:else}
-    <p>Add a selected aircraft to keep it pinned for monitoring across refreshes.</p>
+    <p>Add an aircraft in Local workspace to keep it saved on this device.</p>
   {/if}
 </section>
 
@@ -162,8 +162,8 @@
     border-radius: 999px;
     font-size: 0.78rem;
     font-weight: 800;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   @media (max-width: 720px) {

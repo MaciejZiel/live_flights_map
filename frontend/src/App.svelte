@@ -2098,15 +2098,6 @@
     : { notes: "", tags: [] };
   $: selectedFlightTrailFirstPoint = selectedFlightTrail[0] ?? null;
   $: selectedFlightTrailLastPoint = selectedFlightTrail[selectedFlightTrail.length - 1] ?? null;
-  $: selectedFlightAlertRuleCount = selectedFlight
-    ? alertRules.filter(
-        (rule) =>
-          (rule.type === "icao24" && rule.query.toLowerCase() === selectedFlight.icao24) ||
-          (rule.type === "callsign" &&
-            selectedFlight.callsign &&
-            rule.query.toLowerCase() === selectedFlight.callsign.toLowerCase())
-      ).length
-    : 0;
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
   $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
@@ -2264,7 +2255,6 @@
     <header class="radar-topbar">
       <div class="overlay-card center-bar">
         <div class="brand-inline">
-          <div class="brand-mark">◎</div>
           <div class="brand-copy">
             <strong>liveflights<span>24</span></strong>
             <span>live air traffic</span>
@@ -2772,11 +2762,11 @@
 
           <details class="utility-drawer" open={Boolean(activeMonitoringSession) || monitoringSessions.length > 0}>
             <summary>
-              <span>Monitoring sessions</span>
+              <span>Saved replay sessions</span>
               <strong>{monitoringSessions.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Saved replay sessions stay available on this device.</p>
+              <p class="drawer-caption">Replay snapshots saved only on this device.</p>
               <MonitoringSessionsPanel
                 sessions={monitoringSessions}
                 activeSessionId={activeMonitoringSessionId}
@@ -2790,7 +2780,7 @@
           <section class="widget-card utility-summary-card">
             <div class="widget-header">
               <div class="widget-heading">
-                <strong>Browser workspace</strong>
+                <strong>Local workspace</strong>
                 <span class="live-pill utility-state-pill">LOCAL</span>
               </div>
             </div>
@@ -2831,6 +2821,9 @@
                 </p>
 
                 <div class="local-tool-actions">
+                  <button class="widget-footer-button" type="button" on:click={toggleSelectedFlightWatchlist}>
+                    {watchlist.includes(selectedFlight.icao24) ? "Remove bookmark" : "Bookmark aircraft"}
+                  </button>
                   {#if selectedFlight.callsign}
                     <button
                       class="widget-footer-button"
@@ -2949,7 +2942,7 @@
               <strong>{savedViews.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Saved in this browser for quick jumps back to your favorite airspace.</p>
+              <p class="drawer-caption">Saved only in this browser for quick jumps back to your favorite airspace.</p>
               <SavedViewsPanel
                 views={savedViews}
                 activeViewId={activeSavedViewId}
@@ -2970,7 +2963,7 @@
               <strong>{alertRules.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Alert rules are kept locally until we move them into account-backed workflows.</p>
+              <p class="drawer-caption">Alert rules stay local until the app gets account-backed workflows.</p>
               <AlertPanel
                 rules={alertRules}
                 events={alertEvents}
@@ -2987,7 +2980,7 @@
               <strong>{comparisonFlights.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Comparison stays available, but no longer competes with live radar by default.</p>
+              <p class="drawer-caption">Comparison stays available here without competing with the live radar by default.</p>
               <ComparisonPanel
                 flights={comparisonFlights}
                 selectedIcao24={selectedIcao24}
@@ -3020,14 +3013,6 @@
           <div class="rail-actions">
             <button class:active={followAircraft} class="rail-toggle" type="button" on:click={toggleFollowAircraft}>
               {followAircraft ? "Following" : "Follow"}
-            </button>
-            <button
-              class:active={watchlist.includes(selectedFlight.icao24)}
-              class="rail-toggle"
-              type="button"
-              on:click={toggleSelectedFlightWatchlist}
-            >
-              {watchlist.includes(selectedFlight.icao24) ? "Bookmarked" : "Bookmark"}
             </button>
             <button class="rail-toggle" type="button" on:click={copyShareLink}>
               {shareFeedback || "Share"}
@@ -3076,10 +3061,8 @@
               detailsStatus={selectedFlightDetailsStatus}
               detailsError={selectedFlightDetailsError}
               followAircraft={followAircraft}
-              isBookmarked={watchlist.includes(selectedFlight.icao24)}
               trailPoints={selectedFlightTrail}
               onToggleFollow={toggleFollowAircraft}
-              onToggleBookmark={toggleSelectedFlightWatchlist}
               onRetryDetails={retrySelectedFlightDetails}
             />
           {:else if inspectorTab === "tracking"}
@@ -3113,10 +3096,10 @@
                   </small>
                 </article>
                 <article>
-                  <span>Alerts</span>
-                  <strong>{selectedFlightAlertRuleCount}</strong>
+                  <span>Status</span>
+                  <strong>{formatFlightStatus(selectedFlight)}</strong>
                   <small>
-                    {selectedFlight.callsign ?? selectedFlight.icao24}
+                    {selectedFlight.registration ?? selectedFlight.icao24.toUpperCase()}
                   </small>
                 </article>
               </div>
@@ -3135,8 +3118,8 @@
                   </strong>
                 </div>
                 <div>
-                  <span>Monitoring</span>
-                  <strong>{watchlist.includes(selectedFlight.icao24) ? "Bookmarked" : "Not bookmarked"}</strong>
+                  <span>Map focus</span>
+                  <strong>{followAircraft ? "Auto-follow" : "Manual focus"}</strong>
                 </div>
                 <div>
                   <span>Replay archive</span>
@@ -3205,12 +3188,11 @@
   .overlay-card {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 18px;
-    background:
-      linear-gradient(180deg, rgba(31, 34, 39, 0.97) 0%, rgba(17, 19, 23, 0.97) 100%);
+    background: rgba(17, 19, 23, 0.94);
     backdrop-filter: blur(14px);
     box-shadow:
-      0 24px 44px rgba(0, 0, 0, 0.34),
-      inset 0 1px 0 rgba(255, 255, 255, 0.04);
+      0 18px 34px rgba(0, 0, 0, 0.28),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
   .radar-topbar,
@@ -3239,27 +3221,13 @@
     min-width: 30rem;
     padding: 0.42rem 0.48rem 0.42rem 0.58rem;
     border-radius: 16px;
-    background:
-      linear-gradient(180deg, rgba(30, 33, 38, 0.98) 0%, rgba(16, 18, 22, 0.98) 100%);
+    background: rgba(16, 18, 22, 0.96);
   }
 
   .brand-inline {
     display: flex;
     align-items: center;
-    gap: 0.62rem;
-  }
-
-  .brand-mark {
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 900;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-    box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.14);
+    gap: 0.38rem;
   }
 
   .brand-copy strong {
@@ -3267,6 +3235,8 @@
     margin: 0;
     font-size: 0.96rem;
     font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
     color: #f6f8fb;
     line-height: 1;
   }
@@ -3441,10 +3411,10 @@
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.46rem 0.72rem;
+    padding: 0.4rem 0.62rem;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.05);
   }
 
   .traffic-counter strong {
@@ -3581,8 +3551,7 @@
     grid-template-rows: auto auto auto minmax(0, 1fr);
     gap: 0.72rem;
     padding: 0.78rem;
-    background:
-      linear-gradient(180deg, rgba(20, 22, 26, 0.98) 0%, rgba(9, 10, 13, 0.98) 100%);
+    background: rgba(12, 14, 17, 0.96);
   }
 
   .radar-right-panel {
@@ -3594,8 +3563,7 @@
     grid-template-rows: auto minmax(0, 1fr);
     gap: 0.7rem;
     padding: 0.78rem;
-    background:
-      linear-gradient(180deg, rgba(20, 22, 26, 0.98) 0%, rgba(9, 10, 13, 0.98) 100%);
+    background: rgba(12, 14, 17, 0.97);
   }
 
   .panel-stack,
@@ -3702,11 +3670,8 @@
     padding: 0.84rem 0.82rem 0.78rem;
     border-radius: 18px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background:
-      linear-gradient(180deg, rgba(53, 56, 62, 0.98) 0%, rgba(29, 32, 36, 0.98) 100%);
-    box-shadow:
-      0 18px 30px rgba(0, 0, 0, 0.24),
-      inset 3px 0 0 #f5b908;
+    background: rgba(255, 255, 255, 0.03);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
   }
 
   .widget-card-secondary {
@@ -3714,15 +3679,11 @@
   }
 
   .utility-summary-card {
-    box-shadow:
-      0 18px 30px rgba(0, 0, 0, 0.24),
-      inset 3px 0 0 #45a7ee;
+    background: rgba(255, 255, 255, 0.028);
   }
 
   .utility-compact-card {
-    box-shadow:
-      0 18px 30px rgba(0, 0, 0, 0.18),
-      inset 3px 0 0 rgba(69, 167, 238, 0.7);
+    background: rgba(255, 255, 255, 0.022);
   }
 
   .utility-fact-grid {
@@ -3790,13 +3751,13 @@
     border-radius: 999px;
     font-size: 0.66rem;
     font-weight: 800;
-    color: #171a1f;
-    background: #f5b908;
+    color: #f4f7fb;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .utility-state-pill {
     min-width: 3.5rem;
-    background: #45a7ee;
   }
 
   .widget-list {
@@ -3872,8 +3833,7 @@
   .utility-drawer {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 18px;
-    background:
-      linear-gradient(180deg, rgba(39, 42, 47, 0.98) 0%, rgba(22, 24, 29, 0.98) 100%);
+    background: rgba(255, 255, 255, 0.022);
     overflow: hidden;
   }
 
@@ -3908,8 +3868,8 @@
     padding: 0 0.58rem;
     border-radius: 999px;
     font-size: 0.72rem;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    color: #f4f7fb;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .utility-drawer-body {
@@ -4155,8 +4115,8 @@
     border-radius: 999px;
     font-size: 0.78rem;
     font-weight: 800;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    color: #f4f7fb;
+    background: rgba(255, 255, 255, 0.08);
   }
 
   .rail-actions {
@@ -4422,8 +4382,7 @@
     gap: 0.32rem;
     padding: 0.28rem;
     border-radius: 18px;
-    background:
-      linear-gradient(180deg, rgba(25, 27, 31, 0.97) 0%, rgba(12, 14, 18, 0.97) 100%);
+    background: rgba(12, 14, 18, 0.94);
   }
 
   .dock-button {

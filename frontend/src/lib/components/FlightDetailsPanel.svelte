@@ -14,7 +14,10 @@
   export let detailsError = null;
   export let followAircraft = false;
   export let trailPoints = [];
+  export let bookmarked = false;
   export let onToggleFollow = () => {};
+  export let onToggleBookmark = () => {};
+  export let onOpenAirport = () => {};
   export let onRetryDetails = () => {};
 
   function formatRelativeContact(lastContact) {
@@ -127,6 +130,10 @@
 
   function formatAirportName(airport) {
     return airport?.location ?? airport?.name ?? "Route not resolved";
+  }
+
+  function canOpenAirport(airport) {
+    return Boolean(airport?.iata || airport?.icao || airport?.entity_key);
   }
 
   function formatRouteLabel(route) {
@@ -337,6 +344,9 @@
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
             {followAircraft ? "Following on map" : "Track on map"}
           </button>
+          <button class:active={bookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
+            {bookmarked ? "Saved to workspace" : "Save flight"}
+          </button>
           <button class="action-button secondary" type="button" on:click={onRetryDetails}>
             Refresh
           </button>
@@ -414,6 +424,60 @@
           <strong>{identity.originCountry ?? "Unknown"}</strong>
         </div>
       </div>
+    </section>
+
+    <section class="facts-panel airport-desks-panel">
+      <div class="facts-header">
+        <strong>Airport desks</strong>
+        <span>{route?.airports?.length ?? 0} airports in route</span>
+      </div>
+
+      <div class="airport-desk-grid">
+        {#if route?.origin}
+          <button
+            class="airport-desk-card"
+            disabled={!canOpenAirport(route.origin)}
+            type="button"
+            on:click={() => onOpenAirport(route.origin)}
+          >
+            <span>Origin board</span>
+            <strong>{formatAirportCode(route.origin)}</strong>
+            <small>{formatAirportName(route.origin)}</small>
+          </button>
+        {/if}
+
+        {#if route?.destination}
+          <button
+            class="airport-desk-card"
+            disabled={!canOpenAirport(route.destination)}
+            type="button"
+            on:click={() => onOpenAirport(route.destination)}
+          >
+            <span>Destination board</span>
+            <strong>{formatAirportCode(route.destination)}</strong>
+            <small>{formatAirportName(route.destination)}</small>
+          </button>
+        {/if}
+      </div>
+
+      {#if routeStops.length}
+        <div class="route-stops">
+          <span>Intermediate stops</span>
+          <div class="route-stop-list">
+            {#each routeStops as stop}
+              <button
+                class="route-stop-pill"
+                disabled={!canOpenAirport(stop)}
+                type="button"
+                on:click={() => onOpenAirport(stop)}
+              >
+                <strong>{formatAirportCode(stop)}</strong>
+                <small>{formatAirportName(stop)}</small>
+              </button>
+            {/each}
+          </div>
+        </div>
+      {/if}
     </section>
   {:else}
     <p class="empty-copy">Click an aircraft marker to open focused route and tracking details.</p>
@@ -836,6 +900,76 @@
     text-align: right;
   }
 
+  .airport-desks-panel,
+  .airport-desk-grid,
+  .route-stops,
+  .route-stop-list {
+    display: grid;
+    gap: 0.6rem;
+  }
+
+  .airport-desk-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .airport-desk-card,
+  .route-stop-pill {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: inherit;
+    background: rgba(255, 255, 255, 0.03);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .airport-desk-card {
+    display: grid;
+    gap: 0.18rem;
+    padding: 0.78rem 0.82rem;
+    border-radius: 14px;
+  }
+
+  .airport-desk-card span,
+  .route-stops > span,
+  .route-stop-pill small {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(180, 191, 203, 0.68);
+  }
+
+  .airport-desk-card strong,
+  .route-stop-pill strong {
+    color: #f5f7fb;
+    font-size: 0.92rem;
+  }
+
+  .airport-desk-card small {
+    font-size: 0.74rem;
+    color: rgba(194, 203, 216, 0.74);
+  }
+
+  .route-stop-list {
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+  }
+
+  .route-stop-pill {
+    display: grid;
+    gap: 0.16rem;
+    padding: 0.66rem 0.72rem;
+    border-radius: 12px;
+  }
+
+  .airport-desk-card:hover,
+  .route-stop-pill:hover {
+    border-color: rgba(255, 211, 79, 0.22);
+  }
+
+  .airport-desk-card:disabled,
+  .route-stop-pill:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
   @media (max-width: 720px) {
     .panel-heading,
     .facts-header,
@@ -845,7 +979,8 @@
 
     .hero-meta,
     .telemetry-grid,
-    .route-strip {
+    .route-strip,
+    .airport-desk-grid {
       grid-template-columns: 1fr;
     }
 

@@ -2765,6 +2765,7 @@
     : { notes: "", tags: [] };
   $: selectedFlightTrailFirstPoint = selectedFlightTrail[0] ?? null;
   $: selectedFlightTrailLastPoint = selectedFlightTrail[selectedFlightTrail.length - 1] ?? null;
+  $: selectedFlightTrailRecentPoints = [...selectedFlightTrail].slice(-5).reverse();
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
   $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
@@ -4023,7 +4024,10 @@
               detailsError={selectedFlightDetailsError}
               followAircraft={followAircraft}
               trailPoints={selectedFlightTrail}
+              bookmarked={watchlist.includes(selectedFlight.icao24)}
               onToggleFollow={toggleFollowAircraft}
+              onToggleBookmark={toggleSelectedFlightWatchlist}
+              onOpenAirport={(airport) => openAirportInspector(airport, { focusMap: true, zoom: 8.8 })}
               onRetryDetails={retrySelectedFlightDetails}
             />
           {:else if inspectorTab === "tracking"}
@@ -4087,6 +4091,54 @@
                   <strong>{replaySourceSnapshots.length} snapshots</strong>
                 </div>
               </div>
+
+              {#if selectedRouteAirports.length}
+                <div class="route-desk-row">
+                  {#if selectedRouteAirports[0]}
+                    <button
+                      class="workflow-button"
+                      type="button"
+                      on:click={() => openAirportInspector(selectedRouteAirports[0], { focusMap: true, zoom: 8.8 })}
+                    >
+                      Open {formatAirportCode(selectedRouteAirports[0])} desk
+                    </button>
+                  {/if}
+                  {#if selectedRouteAirports[selectedRouteAirports.length - 1]}
+                    <button
+                      class="workflow-button"
+                      type="button"
+                      on:click={() =>
+                        openAirportInspector(
+                          selectedRouteAirports[selectedRouteAirports.length - 1],
+                          { focusMap: true, zoom: 8.8 }
+                        )}
+                    >
+                      Open {formatAirportCode(selectedRouteAirports[selectedRouteAirports.length - 1])} desk
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+
+              {#if selectedFlightTrailRecentPoints.length}
+                <div class="tracking-timeline">
+                  <div class="workflow-header compact">
+                    <div>
+                      <p class="workflow-eyebrow">Recent trail</p>
+                      <h2>Latest positions</h2>
+                    </div>
+                  </div>
+
+                  <div class="timeline-list">
+                    {#each selectedFlightTrailRecentPoints as point}
+                      <div class="timeline-row">
+                        <span>{new Intl.DateTimeFormat("pl-PL", { hour: "2-digit", minute: "2-digit" }).format(new Date(point.timestamp))}</span>
+                        <strong>{formatAltitude(point.altitude)}</strong>
+                        <small>{formatSpeed(point.velocity)}</small>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
             </section>
           {/if}
         {:else if selectedAirport}
@@ -5200,6 +5252,10 @@
     align-items: start;
   }
 
+  .workflow-header.compact h2 {
+    font-size: 0.96rem;
+  }
+
   .workflow-header h2,
   .workflow-header p,
   .notes-empty {
@@ -5279,6 +5335,46 @@
   .workflow-facts {
     display: grid;
     gap: 0.45rem;
+  }
+
+  .route-desk-row,
+  .tracking-timeline,
+  .timeline-list {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .route-desk-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tracking-timeline {
+    padding: 0.76rem 0.8rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .timeline-row {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.55rem;
+    align-items: center;
+    padding: 0.62rem 0.66rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .timeline-row span,
+  .timeline-row small {
+    font-size: 0.72rem;
+    color: rgba(190, 203, 217, 0.72);
+  }
+
+  .timeline-row strong {
+    color: #eef3f8;
+    font-size: 0.82rem;
   }
 
   .workflow-button {
@@ -5627,7 +5723,8 @@
     .utility-fact-grid,
     .workflow-metrics,
     .inspector-tab-row,
-    .workflow-header {
+    .workflow-header,
+    .route-desk-row {
       grid-template-columns: 1fr;
       display: grid;
     }

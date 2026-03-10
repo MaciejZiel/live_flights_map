@@ -4,9 +4,11 @@
   export let syncStatus = "idle";
   export let updatedAt = null;
   export let draftName = "";
+  export let draftRole = "analyst";
   export let syncError = null;
   export let onSelectProfile = () => {};
   export let onDraftChange = () => {};
+  export let onRoleChange = () => {};
   export let onCreateProfile = () => {};
 
   function formatUpdatedAt(value) {
@@ -20,6 +22,15 @@
       month: "short",
       day: "2-digit",
     }).format(new Date(value));
+  }
+
+  function formatRole(value) {
+    if (!value) {
+      return "Analyst";
+    }
+
+    const normalized = String(value).trim().toLowerCase();
+    return normalized.charAt(0).toUpperCase() + normalized.slice(1);
   }
 </script>
 
@@ -53,7 +64,10 @@
           <strong>{profile.display_name}</strong>
           <small>{new Intl.DateTimeFormat("pl-PL", { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(profile.updated_at))}</small>
         </span>
-        <span class="profile-badge">{profile.id === activeProfileId ? "Active" : "Open"}</span>
+        <span class="profile-meta">
+          <span class="profile-role">{formatRole(profile.role)}</span>
+          <span class="profile-badge">{profile.id === activeProfileId ? "Active" : "Open"}</span>
+        </span>
       </button>
     {/each}
   </div>
@@ -66,6 +80,11 @@
       on:input={(event) => onDraftChange(event.currentTarget.value)}
       on:keydown={(event) => event.key === "Enter" && onCreateProfile()}
     />
+    <select value={draftRole} on:change={(event) => onRoleChange(event.currentTarget.value)}>
+      <option value="viewer">Viewer</option>
+      <option value="analyst">Analyst</option>
+      <option value="admin">Admin</option>
+    </select>
     <button type="button" on:click={onCreateProfile}>Create</button>
   </div>
 </section>
@@ -115,6 +134,7 @@
 
   .sync-pill,
   .profile-badge,
+  .profile-role,
   .profile-create button {
     display: inline-flex;
     align-items: center;
@@ -181,23 +201,44 @@
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
+  .profile-meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .profile-role {
+    min-height: 1.75rem;
+    padding: 0 0.6rem;
+    color: #d8e4f4;
+    background: rgba(108, 135, 175, 0.22);
+  }
+
   .profile-create {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 0.45rem;
   }
 
   .profile-create input,
+  .profile-create select,
   .profile-create button {
     border: 1px solid rgba(255, 255, 255, 0.08);
     font: inherit;
   }
 
-  .profile-create input {
+  .profile-create input,
+  .profile-create select {
     border-radius: 12px;
     padding: 0.7rem 0.74rem;
     color: #eef3f8;
     background: rgba(255, 255, 255, 0.04);
+  }
+
+  .profile-create select {
+    min-width: 7.25rem;
   }
 
   .profile-create button {

@@ -191,14 +191,14 @@ export async function fetchWorkspaceProfiles() {
   return parseApiResponse(response, "Failed to load workspace profiles.");
 }
 
-export async function createWorkspaceProfile(displayName) {
+export async function createWorkspaceProfile(displayName, role = "analyst") {
   const url = createApiUrl("/api/workspace/profiles");
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ display_name: displayName }),
+    body: JSON.stringify({ display_name: displayName, role }),
   });
   return parseApiResponse(response, "Failed to create a workspace profile.");
 }

@@ -9,6 +9,8 @@ from uuid import uuid4
 
 
 class WorkspaceService:
+    VALID_ROLES = {"viewer", "analyst", "admin"}
+
     def __init__(self, workspace_path: str) -> None:
         self.workspace_path = Path(workspace_path).expanduser()
         self._lock = Lock()
@@ -20,7 +22,7 @@ class WorkspaceService:
             try:
                 rows = connection.execute(
                     """
-                    SELECT id, display_name, created_at, updated_at
+                    SELECT id, display_name, role, created_at, updated_at
                     FROM profiles
                     ORDER BY updated_at DESC, created_at ASC
                     """
@@ -34,15 +36,21 @@ class WorkspaceService:
             "profiles": profiles,
         }
 
-    def create_profile(self, display_name: str) -> dict[str, object]:
+    def create_profile(
+        self,
+        display_name: str,
+        role: str = "analyst",
+    ) -> dict[str, object]:
         normalized_name = " ".join(str(display_name).split()).strip()
         if not normalized_name:
             raise ValueError("Display name is required.")
+        normalized_role = self._normalize_role(role)
 
         timestamp = self._timestamp()
         profile = {
             "id": str(uuid4()),
             "display_name": normalized_name[:48],
+            "role": normalized_role,
             "created_at": timestamp,
             "updated_at": timestamp,
         }
@@ -52,12 +60,13 @@ class WorkspaceService:
             try:
                 connection.execute(
                     """
-                    INSERT INTO profiles (id, display_name, created_at, updated_at)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO profiles (id, display_name, role, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
                     (
                         profile["id"],
                         profile["display_name"],
+                        profile["role"],
                         profile["created_at"],
                         profile["updated_at"],
                     ),
@@ -157,7 +166,7 @@ class WorkspaceService:
                 if profile_id:
                     row = connection.execute(
                         """
-                        SELECT id, display_name, created_at, updated_at
+                        SELECT id, display_name, role, created_at, updated_at
                         FROM profiles
                         WHERE id = ?
                         """,
@@ -168,7 +177,7 @@ class WorkspaceService:
 
                 row = connection.execute(
                     """
-                    SELECT id, display_name, created_at, updated_at
+                    SELECT id, display_name, role, created_at, updated_at
                     FROM profiles
                     ORDER BY created_at ASC
                     LIMIT 1
@@ -191,6 +200,7 @@ class WorkspaceService:
                 CREATE TABLE IF NOT EXISTS profiles (
                     id TEXT PRIMARY KEY,
                     display_name TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'analyst',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -202,6 +212,7 @@ class WorkspaceService:
                 );
                 """
             )
+            self._ensure_role_column(connection)
             connection.commit()
         finally:
             connection.close()
@@ -218,6 +229,26 @@ class WorkspaceService:
     @staticmethod
     def _timestamp() -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    @classmethod
+    def _normalize_role(cls, value: object) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized not in cls.VALID_ROLES:
+            raise ValueError("Invalid profile role.")
+        return normalized
+
+    @classmethod
+    def _ensure_role_column(cls, connection: sqlite3.Connection) -> None:
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(profiles)").fetchall()
+        }
+        if "role" in columns:
+            return
+
+        connection.execute(
+            "ALTER TABLE profiles ADD COLUMN role TEXT NOT NULL DEFAULT 'analyst'"
+        )
 
     @staticmethod
     def _default_state() -> dict[str, object]:

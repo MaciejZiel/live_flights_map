@@ -135,6 +135,7 @@
   let workspaceReady = false;
   let workspaceSaveTimer = null;
   let workspaceProfileDraft = "";
+  let workspaceProfileRoleDraft = "analyst";
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
   let mobileUtilityOpen = false;
@@ -833,8 +834,12 @@
     }
 
     try {
-      const payload = await createWorkspaceProfile(normalizedName);
+      const payload = await createWorkspaceProfile(
+        normalizedName,
+        workspaceProfileRoleDraft
+      );
       workspaceProfileDraft = "";
+      workspaceProfileRoleDraft = "analyst";
       workspaceProfiles = [payload.profile, ...workspaceProfiles];
       await loadWorkspaceProfile(payload.profile.id);
     } catch (error) {
@@ -4135,8 +4140,11 @@
             <span>{mapStyleLabel}</span>
             <span>{showAirportMarkers ? "Airports on" : "Airports off"}</span>
             <span>{weatherLayerEnabled ? "Weather on" : "Weather off"}</span>
-            <span>{workspaceSyncStatus === "success" ? activeWorkspaceProfile?.display_name ?? "Workspace" : workspaceSyncStatus}</span>
-          </div>
+          <span>{workspaceSyncStatus === "success" ? activeWorkspaceProfile?.display_name ?? "Workspace" : workspaceSyncStatus}</span>
+          {#if activeWorkspaceProfile?.role}
+            <span>{activeWorkspaceProfile.role}</span>
+          {/if}
+        </div>
         </div>
       {/if}
     </header>
@@ -4848,10 +4856,14 @@
                 syncStatus={workspaceSyncStatus}
                 updatedAt={workspaceUpdatedAt}
                 draftName={workspaceProfileDraft}
+                draftRole={workspaceProfileRoleDraft}
                 syncError={workspaceSyncError}
                 onSelectProfile={loadWorkspaceProfile}
                 onDraftChange={(value) => {
                   workspaceProfileDraft = value;
+                }}
+                onRoleChange={(value) => {
+                  workspaceProfileRoleDraft = value;
                 }}
                 onCreateProfile={createWorkspaceDesk}
               />

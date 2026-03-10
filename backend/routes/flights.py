@@ -299,9 +299,15 @@ def create_workspace_profile():
     display_name = _normalize_text(payload.get("display_name") if isinstance(payload, dict) else None)
     if not display_name:
         return jsonify({"error": "Missing 'display_name'."}), 400
+    role = _normalize_text(payload.get("role") if isinstance(payload, dict) else None)
+    if not role:
+        role = "analyst"
 
     try:
-        profile = current_app.extensions["workspace_service"].create_profile(display_name)
+        profile = current_app.extensions["workspace_service"].create_profile(
+            display_name,
+            role=role,
+        )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 

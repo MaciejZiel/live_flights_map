@@ -78,6 +78,7 @@
   let onboardingDismissed = false;
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
+  let mobileUtilityOpen = false;
   let sidebarMode = "traffic";
   let utilityPanelMode = "overview";
   let inspectorTab = "details";
@@ -159,6 +160,7 @@
     const syncViewportMode = (event) => {
       isMobileViewport = event.matches;
       mobileSidebarOpen = !event.matches;
+      mobileUtilityOpen = false;
     };
     syncViewportMode(mobileViewportQuery);
     mobileViewportQuery.addEventListener("change", syncViewportMode);
@@ -304,6 +306,7 @@
     inspectorTab = "details";
     if (isMobileViewport) {
       mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
     }
   }
 
@@ -697,6 +700,7 @@
     inspectorTab = "details";
     if (isMobileViewport) {
       mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
     }
   }
 
@@ -704,6 +708,7 @@
     sidebarMode = nextMode;
     if (isMobileViewport) {
       mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
     }
   }
 
@@ -711,6 +716,7 @@
     inspectorTab = tab;
     if (isMobileViewport) {
       mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
     }
   }
 
@@ -982,6 +988,7 @@
     sidebarMode = "traffic";
     if (isMobileViewport) {
       mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
     }
 
     filters = {
@@ -1317,11 +1324,25 @@
   }
 
   function toggleMobileSidebar() {
+    if (!mobileSidebarOpen) {
+      mobileUtilityOpen = false;
+    }
     mobileSidebarOpen = !mobileSidebarOpen;
   }
 
   function closeMobileSidebar() {
     mobileSidebarOpen = false;
+  }
+
+  function toggleMobileUtility() {
+    if (!mobileUtilityOpen) {
+      mobileSidebarOpen = false;
+    }
+    mobileUtilityOpen = !mobileUtilityOpen;
+  }
+
+  function closeMobileUtility() {
+    mobileUtilityOpen = false;
   }
 
   function selectReplaySnapshot(index) {
@@ -2042,7 +2063,12 @@
           </div>
 
           {#if isMobileViewport}
-            <button class="overlay-card topbar-icon" type="button" on:click={toggleMobileSidebar}>☰</button>
+            <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
+              Tools
+            </button>
+            <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
+              {selectedFlight ? "Flight" : sidebarMode === "watchlist" ? "List" : "Traffic"}
+            </button>
           {/if}
         </div>
       </div>
@@ -2103,7 +2129,7 @@
       {/if}
     </div>
 
-    <aside class="overlay-card radar-left-panel">
+    <aside class:open={mobileUtilityOpen} class="overlay-card radar-left-panel">
       <div class="utility-header">
         <div class="utility-heading">
           <span>Radar controls</span>
@@ -2544,6 +2570,10 @@
       <span>View</span>
       <strong>{mapStyleLabel}</strong>
     </button>
+
+    {#if isMobileViewport && mobileUtilityOpen}
+      <button class="sidebar-backdrop utility-backdrop" type="button" aria-label="Close tools panel" on:click={closeMobileUtility}></button>
+    {/if}
 
     {#if isMobileViewport && mobileSidebarOpen}
       <button class="sidebar-backdrop" type="button" aria-label="Close panel" on:click={closeMobileSidebar}></button>
@@ -3170,6 +3200,14 @@
     height: 2.25rem;
     padding: 0;
     flex: 0 0 auto;
+  }
+
+  .topbar-action-chip {
+    width: auto;
+    min-width: 4.4rem;
+    padding: 0 0.85rem;
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
   }
 
   .floating-messages {
@@ -4102,6 +4140,10 @@
     display: none;
   }
 
+  .utility-backdrop {
+    z-index: 1240;
+  }
+
   :global(.panel-stack::-webkit-scrollbar),
   :global(.inspector-scroll::-webkit-scrollbar) {
     width: 9px;
@@ -4127,7 +4169,18 @@
 
   @media (max-width: 960px) {
     .radar-left-panel {
-      display: none;
+      top: 4.65rem;
+      right: 0.75rem;
+      bottom: 0.75rem;
+      left: 0.75rem;
+      width: auto;
+      transform: translateY(110%);
+      transition: transform 180ms ease;
+      z-index: 1290;
+    }
+
+    .radar-left-panel.open {
+      transform: translateY(0);
     }
 
     .view-chip {

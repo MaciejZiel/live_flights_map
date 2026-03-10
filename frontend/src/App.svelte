@@ -486,6 +486,12 @@
         registration: entity?.registration ?? null,
         type_code: entity?.type_code ?? null,
         origin_country: entity?.origin_country ?? null,
+        altitude: entity?.altitude ?? null,
+        velocity: entity?.velocity ?? null,
+        vertical_rate: entity?.vertical_rate ?? null,
+        true_track: entity?.true_track ?? null,
+        on_ground: entity?.on_ground ?? null,
+        fetched_at: entity?.fetched_at ?? null,
         iata: entity?.iata ?? null,
         icao: entity?.icao ?? null,
       },
@@ -530,6 +536,60 @@
     savedEntities = savedEntities.filter(
       (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) !== bookmarkKey
     );
+  }
+
+  function openSavedEntity(entity) {
+    if (!entity) {
+      return;
+    }
+
+    if (entity.entity_type === "flight" || entity.entity_type === "aircraft") {
+      const payload = entity.payload ?? {};
+      openFlightInspector(
+        {
+          icao24: payload.icao24 ?? entity.entity_key,
+          callsign: payload.callsign ?? entity.label ?? null,
+          registration: payload.registration ?? null,
+          type_code: payload.type_code ?? null,
+          origin_country: payload.origin_country ?? null,
+          altitude: payload.altitude ?? null,
+          velocity: payload.velocity ?? null,
+          vertical_rate: payload.vertical_rate ?? null,
+          true_track: payload.true_track ?? null,
+          on_ground: payload.on_ground ?? null,
+          fetched_at: payload.fetched_at ?? null,
+          latitude: entity.latitude ?? null,
+          longitude: entity.longitude ?? null,
+        },
+        {
+          focusMap: Number.isFinite(entity.latitude) && Number.isFinite(entity.longitude),
+          zoom: 8.4,
+          exitReplay: true,
+        }
+      );
+      return;
+    }
+
+    if (entity.entity_type === "airport") {
+      openAirportInspector(entity, { focusMap: true, zoom: 8.8 });
+      return;
+    }
+
+    if (entity.entity_type === "location") {
+      focusLocationEntity(entity);
+      return;
+    }
+
+    if (entity.entity_type === "airline") {
+      filters = {
+        ...filters,
+        operator: entity.entity_key ?? entity.label ?? "",
+      };
+      openEntityContext(entity);
+      return;
+    }
+
+    openEntityContext(entity);
   }
 
   function buildWorkspacePayload() {
@@ -3008,6 +3068,7 @@
     };
   });
   $: savedFlightEntities = savedEntities.filter((entity) => entity.entity_type === "flight");
+  $: savedAircraftEntities = savedEntities.filter((entity) => entity.entity_type === "aircraft");
   $: savedAirportEntities = savedEntities.filter((entity) => entity.entity_type === "airport");
   $: savedLocationEntities = savedEntities.filter((entity) => entity.entity_type === "location");
   $: savedAirlineEntities = savedEntities.filter((entity) => entity.entity_type === "airline");
@@ -4162,13 +4223,47 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={savedAirportEntities.length > 0 || savedLocationEntities.length > 0 || savedAirlineEntities.length > 0 || savedRouteEntities.length > 0}>
+          <details class="utility-drawer" open={savedEntities.length > 0}>
             <summary>
               <span>Saved entities</span>
               <strong>{savedEntities.length}</strong>
             </summary>
             <div class="utility-drawer-body">
-              <p class="drawer-caption">Bookmarks are grouped by airports, locations, airlines and routes so search results stay reusable across sessions.</p>
+              <p class="drawer-caption">Bookmarks stay synced with the active workspace and now reopen flights, airports, locations, airlines and routes directly from one saved list.</p>
+
+              {#if savedFlightEntities.length}
+                <div class="mini-stat-list">
+                  {#each savedFlightEntities as entity}
+                    <div>
+                      <span>
+                        <strong>{entity.label}</strong>
+                        <small>{entity.subtitle}</small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => openSavedEntity(entity)}>Open</button>
+                        <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
+              {#if savedAircraftEntities.length}
+                <div class="mini-stat-list">
+                  {#each savedAircraftEntities as entity}
+                    <div>
+                      <span>
+                        <strong>{entity.label}</strong>
+                        <small>{entity.subtitle}</small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => openSavedEntity(entity)}>Open</button>
+                        <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
 
               {#if savedAirportEntities.length}
                 <div class="mini-stat-list">
@@ -4179,7 +4274,7 @@
                         <small>{entity.subtitle}</small>
                       </span>
                       <div class="compact-entity-actions">
-                        <button class="widget-footer-button" type="button" on:click={() => openAirportInspector(entity, { focusMap: true, zoom: 8.8 })}>Open</button>
+                        <button class="widget-footer-button" type="button" on:click={() => openSavedEntity(entity)}>Open</button>
                         <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
                       </div>
                     </div>
@@ -4196,7 +4291,7 @@
                         <small>{entity.subtitle}</small>
                       </span>
                       <div class="compact-entity-actions">
-                        <button class="widget-footer-button" type="button" on:click={() => focusLocationEntity(entity)}>Focus</button>
+                        <button class="widget-footer-button" type="button" on:click={() => openSavedEntity(entity)}>Focus</button>
                         <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
                       </div>
                     </div>
@@ -4217,11 +4312,7 @@
                           class="widget-footer-button"
                           type="button"
                           on:click={() => {
-                            filters = {
-                              ...filters,
-                              operator: entity.entity_key,
-                            };
-                            openEntityContext(entity);
+                            openSavedEntity(entity);
                           }}
                         >
                           Filter
@@ -4242,7 +4333,7 @@
                         <small>{entity.subtitle}</small>
                       </span>
                       <div class="compact-entity-actions">
-                        <button class="widget-footer-button" type="button" on:click={() => openEntityContext(entity)}>Open</button>
+                        <button class="widget-footer-button" type="button" on:click={() => openSavedEntity(entity)}>Open</button>
                         <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
                       </div>
                     </div>

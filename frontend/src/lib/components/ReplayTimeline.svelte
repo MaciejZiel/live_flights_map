@@ -3,6 +3,7 @@
   export let activeSnapshot = null;
   export let activeIndex = -1;
   export let isPlaying = false;
+  export let windowMinutes = 90;
   export let playbackSpeed = 1;
   export let canStepBackward = false;
   export let canStepForward = false;
@@ -10,6 +11,7 @@
   export let onReturnToLive = () => {};
   export let onJumpStart = () => {};
   export let onJumpLatest = () => {};
+  export let onSetWindowMinutes = () => {};
   export let onSetPlaybackSpeed = () => {};
   export let onStepBackward = () => {};
   export let onStepForward = () => {};
@@ -31,8 +33,16 @@
     onSetPlaybackSpeed(Number(event.currentTarget.value));
   }
 
+  function formatRangeLabel(value) {
+    return value < 60 ? `${value}m` : `${Math.round(value / 60)}h`;
+  }
+
   $: sliderValue = activeIndex >= 0 ? activeIndex : Math.max(0, snapshots.length - 1);
   $: activeSnapshotLabel = snapshots[sliderValue] ? formatSnapshotTime(snapshots[sliderValue].fetchedAt) : "--:--";
+  $: firstSnapshotLabel = snapshots[0] ? formatSnapshotTime(snapshots[0].fetchedAt) : "--:--";
+  $: lastSnapshotLabel = snapshots[snapshots.length - 1]
+    ? formatSnapshotTime(snapshots[snapshots.length - 1].fetchedAt)
+    : "--:--";
 </script>
 
 <section class="panel replay-panel">
@@ -53,6 +63,22 @@
   {#if snapshots.length < 2}
     <p>Collecting snapshots. Replay becomes available after the second update.</p>
   {:else}
+    <div class="timeline-range-row">
+      <span>Archive range</span>
+      <div class="range-chip-row">
+        {#each [30, 90, 180] as option}
+          <button
+            class:active={windowMinutes === option}
+            class="range-chip"
+            type="button"
+            on:click={() => onSetWindowMinutes(option)}
+          >
+            {formatRangeLabel(option)}
+          </button>
+        {/each}
+      </div>
+    </div>
+
     <label class="timeline-field">
       <span>{activeSnapshot ? "Inspecting recorded snapshot" : "Following the live tail"}</span>
       <input
@@ -68,6 +94,12 @@
     <div class="timeline-meta">
       <strong>{activeSnapshotLabel}</strong>
       <span>{snapshots[sliderValue].count} tracked aircraft</span>
+    </div>
+
+    <div class="timeline-range-summary">
+      <span>{firstSnapshotLabel}</span>
+      <strong>{snapshots.length} snapshots in archive</strong>
+      <span>{lastSnapshotLabel}</span>
     </div>
 
     <div class="timeline-speed-row">
@@ -210,6 +242,8 @@
     gap: 0.55rem;
   }
 
+  .timeline-range-row,
+  .timeline-range-summary,
   .timeline-speed-row {
     display: flex;
     justify-content: space-between;
@@ -217,9 +251,41 @@
     align-items: center;
   }
 
+  .timeline-range-row span,
+  .timeline-range-summary span,
   .timeline-speed-row span {
     font-size: 0.8rem;
     color: var(--color-muted);
+  }
+
+  .timeline-range-summary strong {
+    font-size: 0.78rem;
+    color: var(--color-text);
+  }
+
+  .range-chip-row {
+    display: inline-flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .range-chip {
+    border: 1px solid var(--surface-border);
+    border-radius: 999px;
+    padding: 0.42rem 0.68rem;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--button-secondary-text);
+    background: var(--button-secondary-bg);
+    cursor: pointer;
+  }
+
+  .range-chip.active {
+    color: #f4f7fb;
+    background: rgba(120, 200, 255, 0.16);
+    border-color: rgba(120, 200, 255, 0.22);
   }
 
   .timeline-speed-row select {
@@ -256,6 +322,8 @@
   @media (max-width: 720px) {
     .replay-header,
     .timeline-meta,
+    .timeline-range-row,
+    .timeline-range-summary,
     .timeline-speed-row {
       display: grid;
     }

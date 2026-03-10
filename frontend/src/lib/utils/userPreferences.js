@@ -11,6 +11,7 @@ const THEME_OPTIONS = new Set(["dark", "light"]);
 const RECENT_ACTIVITY_OPTIONS = new Set(["any", "30s", "2m", "5m", "15m"]);
 const HEADING_BAND_OPTIONS = new Set(["any", "north", "east", "south", "west"]);
 const TRAFFIC_STATE_OPTIONS = new Set(["all", "airborne", "ground"]);
+const REPLAY_WINDOW_OPTIONS = new Set([30, 90, 180]);
 const TRAFFIC_CATEGORY_OPTIONS = new Set([
   "all",
   "passenger",
@@ -145,6 +146,9 @@ export function normalizeUserPreferences(value) {
       typeof value.selectedAirportCode === "string" && value.selectedAirportCode.trim()
         ? value.selectedAirportCode.trim().toUpperCase()
         : null,
+    replayWindowMinutes: REPLAY_WINDOW_OPTIONS.has(value.replayWindowMinutes)
+      ? value.replayWindowMinutes
+      : 90,
     replayPlaybackSpeed:
       Number.isFinite(value.replayPlaybackSpeed) && value.replayPlaybackSpeed > 0
         ? value.replayPlaybackSpeed

@@ -3,6 +3,7 @@ from time import sleep
 
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
 
+from backend.services.airport_weather import AirportWeatherError
 from backend.services.provider_base import FlightProviderError
 
 api = Blueprint("api", __name__)
@@ -230,6 +231,22 @@ def airport_dashboard(airport_code: str):
     )
     if payload is None:
         return jsonify({"error": "Airport not found."}), 404
+    return jsonify(payload)
+
+
+@api.get("/airports/<airport_code>/weather")
+def airport_weather(airport_code: str):
+    normalized_code = _normalize_text(airport_code, uppercase=True)
+    if not normalized_code:
+        return jsonify({"error": "Invalid airport identifier."}), 400
+
+    service = current_app.extensions["airport_weather_service"]
+
+    try:
+        payload = service.get_weather(normalized_code)
+    except AirportWeatherError as exc:
+        return jsonify({"error": str(exc)}), 502
+
     return jsonify(payload)
 
 

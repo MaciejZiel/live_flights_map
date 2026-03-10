@@ -36,6 +36,14 @@ class Config:
     GLOBAL_TRAFFIC_BOARD_LOOKBACK_MINUTES = int(
         os.getenv("GLOBAL_TRAFFIC_BOARD_LOOKBACK_MINUTES", "120")
     )
+    AIRPORT_WEATHER_BASE_URL = os.getenv(
+        "AIRPORT_WEATHER_BASE_URL",
+        "https://aviationweather.gov/api/data/metar",
+    )
+    AIRPORT_WEATHER_TIMEOUT = float(os.getenv("AIRPORT_WEATHER_TIMEOUT", "10"))
+    AIRPORT_WEATHER_CACHE_TTL = float(
+        os.getenv("AIRPORT_WEATHER_CACHE_TTL", "600")
+    )
 
     OPENSKY_BASE_URL = os.getenv(
         "OPENSKY_BASE_URL",

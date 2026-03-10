@@ -180,31 +180,9 @@ export async function fetchAirportWeather(stationCode) {
     throw new Error("Missing airport weather station.");
   }
 
-  const url = new URL("https://aviationweather.gov/api/data/metar");
-  url.searchParams.set("ids", normalizedCode);
-  url.searchParams.set("format", "json");
-
-  const response = await fetch(url.toString());
-  const rawBody = await response.text();
-  let payload = [];
-
-  if (rawBody) {
-    try {
-      payload = JSON.parse(rawBody);
-    } catch {
-      throw new Error("Received an invalid airport weather response.");
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error("Failed to load airport weather.");
-  }
-
-  if (!Array.isArray(payload) || !payload.length) {
-    throw new Error("No current METAR is available for this airport.");
-  }
-
-  return payload[0];
+  const url = createApiUrl(`/api/airports/${encodeURIComponent(normalizedCode)}/weather`);
+  const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
+  return parseApiResponse(response, "Failed to load airport weather.");
 }
 
 export async function fetchWorkspaceProfiles() {

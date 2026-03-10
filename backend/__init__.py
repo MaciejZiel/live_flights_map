@@ -5,6 +5,7 @@ from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
 from .services.airport_catalog import AirportCatalogService
+from .services.airport_weather import AirportWeatherService
 from .services.airport_workflow import AirportWorkflowService
 from .services.entity_search import EntitySearchService
 from .services.flight_archive import FlightArchiveService
@@ -100,6 +101,11 @@ def create_app() -> Flask:
         airport_catalog_service=airport_catalog_service,
         traffic_intelligence_service=traffic_intelligence_service,
         snapshot_service=app.extensions["flight_snapshot_service"],
+    )
+    app.extensions["airport_weather_service"] = AirportWeatherService(
+        base_url=app.config["AIRPORT_WEATHER_BASE_URL"],
+        timeout=app.config["AIRPORT_WEATHER_TIMEOUT"],
+        cache_ttl=app.config["AIRPORT_WEATHER_CACHE_TTL"],
     )
     app.register_blueprint(api, url_prefix="/api")
 

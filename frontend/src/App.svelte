@@ -492,6 +492,7 @@
         "Saved entity",
       latitude: entity?.latitude ?? null,
       longitude: entity?.longitude ?? null,
+      zoom: entity?.zoom ?? null,
       bbox: entity?.bbox ?? null,
       payload: {
         icao24: entity?.icao24 ?? null,
@@ -518,6 +519,22 @@
     );
   }
 
+  function saveEntityBookmark(entity) {
+    const bookmark = buildEntityBookmark(entity);
+    if (!bookmark) {
+      return null;
+    }
+
+    const bookmarkKey = getEntityBookmarkKey(bookmark.entity_type, bookmark.entity_key);
+    savedEntities = [
+      bookmark,
+      ...savedEntities.filter(
+        (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) !== bookmarkKey
+      ),
+    ].slice(0, 36);
+    return bookmark;
+  }
+
   function toggleEntityBookmark(entity) {
     const bookmark = buildEntityBookmark(entity);
     if (!bookmark) {
@@ -542,6 +559,65 @@
         (entry) => getEntityBookmarkKey(entry.entity_type, entry.entity_key) !== bookmarkKey
       ),
     ].slice(0, 36);
+  }
+
+  function buildCurrentAreaEntity() {
+    if (!state.bbox || !mapViewport?.center) {
+      return null;
+    }
+
+    const bbox = {
+      lamin: Number(state.bbox.lamin.toFixed(4)),
+      lamax: Number(state.bbox.lamax.toFixed(4)),
+      lomin: Number(state.bbox.lomin.toFixed(4)),
+      lomax: Number(state.bbox.lomax.toFixed(4)),
+    };
+    const zoom = Number.isFinite(mapViewport.zoom) ? Number(mapViewport.zoom.toFixed(1)) : 6.5;
+    const centerLatitude = Number(mapViewport.center[0].toFixed(3));
+    const centerLongitude = Number(mapViewport.center[1].toFixed(3));
+    const entityKey = `bbox:${bbox.lamin}:${bbox.lamax}:${bbox.lomin}:${bbox.lomax}`;
+
+    return {
+      entity_type: "location",
+      entity_key: entityKey,
+      label: `Area ${centerLatitude}, ${centerLongitude}`,
+      subtitle: `Zoom ${zoom} · ${visibleTrackedCount} aircraft in view`,
+      latitude: mapViewport.center[0],
+      longitude: mapViewport.center[1],
+      zoom,
+      bbox,
+    };
+  }
+
+  function saveCurrentMapArea() {
+    const areaEntity = buildCurrentAreaEntity();
+    if (!areaEntity) {
+      return;
+    }
+
+    const bookmark = saveEntityBookmark(areaEntity);
+    if (bookmark) {
+      openEntityContext(bookmark);
+    }
+  }
+
+  function monitorCurrentMapArea() {
+    const areaEntity = buildCurrentAreaEntity();
+    if (!areaEntity) {
+      return;
+    }
+
+    const bookmark = saveEntityBookmark(areaEntity);
+    addAlertRule({
+      type: "area",
+      query: areaEntity.label,
+      payload: {
+        bbox: areaEntity.bbox,
+      },
+    });
+    if (bookmark) {
+      openEntityContext(bookmark);
+    }
   }
 
   function removeSavedEntity(entityType, entityKey) {
@@ -4452,6 +4528,18 @@
                   </button>
                 </div>
               </div>
+
+              <div class="suggestion-row">
+                <span>Area workflow</span>
+                <div>
+                  <button class="filter-chip" type="button" on:click={saveCurrentMapArea}>
+                    Save current area
+                  </button>
+                  <button class="filter-chip" type="button" on:click={monitorCurrentMapArea}>
+                    Monitor current area
+                  </button>
+                </div>
+              </div>
             </div>
 
             {#if activeFilterTokens.length}
@@ -4699,6 +4787,20 @@
                       </span>
                       <div class="compact-entity-actions">
                         <button class="widget-footer-button" type="button" on:click={() => openSavedEntity(entity)}>Focus</button>
+                        <button
+                          class="widget-footer-button"
+                          type="button"
+                          on:click={() =>
+                            addAlertRule({
+                              type: "area",
+                              query: entity.label ?? entity.entity_key,
+                              payload: {
+                                bbox: entity.bbox ?? null,
+                              },
+                            })}
+                        >
+                          Alert
+                        </button>
                         <button class="preset-delete" type="button" on:click={() => removeSavedEntity(entity.entity_type, entity.entity_key)}>Remove</button>
                       </div>
                     </div>

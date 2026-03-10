@@ -9,6 +9,7 @@
   export let weatherStatus = "idle";
   export let weatherError = null;
   export let weatherLayerEnabled = false;
+  export let historyWindowHours = 12;
   export let bookmarked = false;
   export let shareFeedback = "";
   export let onSelectFlight = () => {};
@@ -20,6 +21,7 @@
   export let onFilterAllTraffic = () => {};
   export let onFilterArrivals = () => {};
   export let onFilterDepartures = () => {};
+  export let onSetHistoryWindow = () => {};
 
   let activeTab = "overview";
   let lastAirportKey = null;
@@ -166,6 +168,22 @@
       <button class="airport-flow-button" type="button" on:click={onFilterDepartures}>
         Departures
       </button>
+    </div>
+
+    <div class="airport-history-window">
+      <span>History window</span>
+      <div>
+        {#each [6, 12, 24] as option}
+          <button
+            class:active={historyWindowHours === option}
+            class="airport-flow-button"
+            type="button"
+            on:click={() => onSetHistoryWindow(option)}
+          >
+            {option}h
+          </button>
+        {/each}
+      </div>
     </div>
 
     <div class="airport-tab-row" role="tablist" aria-label="Airport sections">
@@ -427,6 +445,28 @@
     gap: 0.42rem;
   }
 
+  .airport-history-window {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .airport-history-window span {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgba(188, 199, 211, 0.66);
+  }
+
+  .airport-history-window div {
+    display: inline-flex;
+    gap: 0.42rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
   .airport-action,
   .airport-flow-button,
   .airport-tab-row button,
@@ -667,8 +707,10 @@
     .airport-stat-grid,
     .pill-grid,
     .weather-grid,
+    .airport-history-window,
     .airport-tab-row {
       grid-template-columns: 1fr;
+      display: grid;
     }
   }
 </style>

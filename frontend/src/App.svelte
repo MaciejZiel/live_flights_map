@@ -260,6 +260,7 @@
   let selectedAirportWeather = null;
   let selectedAirportWeatherStatus = "idle";
   let selectedAirportWeatherError = null;
+  let selectedAirportHistoryHours = 12;
   let selectedAirportRequestId = 0;
   let selectedAirportWeatherRequestId = 0;
   let lastSelectedAirportKey = null;
@@ -291,6 +292,8 @@
       activeWorkspaceAccountId =
         savedPreferences.workspaceAccountId ?? activeWorkspaceAccountId;
       selectedAirportCode = savedPreferences.selectedAirportCode ?? selectedAirportCode;
+      selectedAirportHistoryHours =
+        savedPreferences.selectedAirportHistoryHours ?? selectedAirportHistoryHours;
       replayAnchorTimestamp =
         savedPreferences.replayAnchorTimestamp ?? replayAnchorTimestamp;
       replayWindowMinutes = savedPreferences.replayWindowMinutes ?? replayWindowMinutes;
@@ -750,6 +753,7 @@
       weatherLayerEnabled,
       showAirportMarkers,
       selectedAirportCode,
+      selectedAirportHistoryHours,
       replayAnchorTimestamp,
       replayWindowMinutes,
       replayPlaybackSpeed,
@@ -787,6 +791,8 @@
       normalizedWorkspaceState.showAirportMarkers ?? showAirportMarkers;
     selectedAirportCode =
       normalizedWorkspaceState.selectedAirportCode ?? selectedAirportCode;
+    selectedAirportHistoryHours =
+      normalizedWorkspaceState.selectedAirportHistoryHours ?? selectedAirportHistoryHours;
     replayAnchorTimestamp =
       normalizedWorkspaceState.replayAnchorTimestamp ?? replayAnchorTimestamp;
     replayWindowMinutes =
@@ -1440,6 +1446,7 @@
     const sharedMapStyle = params.get("map");
     const sharedSelectedIcao24 = params.get("sel");
     const sharedSelectedAirport = params.get("airport");
+    const sharedAirportHours = Number(params.get("airportHours"));
     const sharedGroundFlag = params.get("ground");
     const sharedWeather = params.get("weather");
     const sharedAirportMarkers = params.get("airports");
@@ -1527,6 +1534,10 @@
 
     if (sharedSelectedAirport) {
       selectedAirportCode = sharedSelectedAirport.toUpperCase();
+    }
+
+    if ([6, 12, 24].includes(sharedAirportHours)) {
+      selectedAirportHistoryHours = sharedAirportHours;
     }
 
     if (sharedGroundFlag === "0" || sharedGroundFlag === "1") {
@@ -1679,6 +1690,12 @@
       params.set("airport", selectedAirportCode);
     } else {
       params.delete("airport");
+    }
+
+    if (selectedAirportCode && selectedAirportHistoryHours !== 12) {
+      params.set("airportHours", String(selectedAirportHistoryHours));
+    } else {
+      params.delete("airportHours");
     }
 
     if (mapViewport?.center && Number.isFinite(mapViewport.zoom)) {
@@ -2451,7 +2468,7 @@
 
     try {
       const payload = await fetchAirportDashboard(airportKey, {
-        hours: 12,
+        hours: selectedAirportHistoryHours,
         limit: 10,
       });
       if (requestId !== selectedAirportRequestId || selectedAirportCode !== airportKey) {
@@ -3083,6 +3100,17 @@
     replayAnchorTimestamp = null;
     replayPlaybackActive = false;
     replaySnapshotCursor = null;
+  }
+
+  function setSelectedAirportHistoryWindow(hours) {
+    const numericHours = Number(hours);
+    selectedAirportHistoryHours = [6, 12, 24].includes(numericHours) ? numericHours : 12;
+
+    if (selectedAirport) {
+      loadSelectedAirportDashboard(selectedAirport);
+    } else if (selectedAirportCode) {
+      loadSelectedAirportDashboard({ entity_key: selectedAirportCode });
+    }
   }
 
   function focusTrailPoint(point, options = {}) {
@@ -4058,6 +4086,7 @@
     mapStyle;
     selectedIcao24;
     selectedAirportCode;
+    selectedAirportHistoryHours;
     mapViewport;
     weatherLayerEnabled;
     showAirportMarkers;
@@ -4088,6 +4117,7 @@
       showAirportMarkers,
       workspaceAccountId: activeWorkspaceAccountId,
       selectedAirportCode,
+      selectedAirportHistoryHours,
       replayWindowMinutes,
       replayAnchorTimestamp,
       replayPlaybackSpeed,
@@ -4112,6 +4142,7 @@
     weatherLayerEnabled;
     showAirportMarkers;
     selectedAirportCode;
+    selectedAirportHistoryHours;
     replayAnchorTimestamp;
     replayWindowMinutes;
     replayPlaybackSpeed;
@@ -5641,6 +5672,7 @@
             weatherStatus={selectedAirportWeatherStatus}
             weatherError={selectedAirportWeatherError}
             weatherLayerEnabled={weatherLayerEnabled}
+            historyWindowHours={selectedAirportHistoryHours}
             bookmarked={selectedAirportBookmarked}
             shareFeedback={shareFeedback}
             onSelectFlight={selectWatchedFlight}
@@ -5654,6 +5686,7 @@
             onFilterAllTraffic={() => applyAirportTrafficFilter(selectedAirport, "all")}
             onFilterArrivals={() => applyAirportTrafficFilter(selectedAirport, "arrivals")}
             onFilterDepartures={() => applyAirportTrafficFilter(selectedAirport, "departures")}
+            onSetHistoryWindow={setSelectedAirportHistoryWindow}
           />
         {:else if selectedEntityContext}
           <section class="panel aircraft-workflow-panel">

@@ -19,6 +19,7 @@ const RECENT_ACTIVITY_OPTIONS = new Set(["any", "30s", "2m", "5m", "15m"]);
 const HEADING_BAND_OPTIONS = new Set(["any", "north", "east", "south", "west"]);
 const TRAFFIC_STATE_OPTIONS = new Set(["all", "airborne", "ground"]);
 const AIRPORT_FLOW_OPTIONS = new Set(["all", "arrivals", "departures"]);
+const AIRPORT_HISTORY_OPTIONS = new Set([6, 12, 24]);
 const REPLAY_WINDOW_OPTIONS = new Set([30, 90, 180]);
 const TRAFFIC_CATEGORY_OPTIONS = new Set([
   "all",
@@ -178,6 +179,9 @@ export function normalizeUserPreferences(value) {
       typeof value.selectedAirportCode === "string" && value.selectedAirportCode.trim()
         ? value.selectedAirportCode.trim().toUpperCase()
         : null,
+    selectedAirportHistoryHours: AIRPORT_HISTORY_OPTIONS.has(value.selectedAirportHistoryHours)
+      ? value.selectedAirportHistoryHours
+      : 12,
     replayAnchorTimestamp: sanitizeTimestamp(value.replayAnchorTimestamp),
     replayWindowMinutes: REPLAY_WINDOW_OPTIONS.has(value.replayWindowMinutes)
       ? value.replayWindowMinutes

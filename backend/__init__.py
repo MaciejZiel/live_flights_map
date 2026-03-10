@@ -7,6 +7,7 @@ from .services.adsb_lol_routes import ADSBLolRouteClient
 from .services.airport_catalog import AirportCatalogService
 from .services.airport_weather import AirportWeatherService
 from .services.airport_workflow import AirportWorkflowService
+from .services.diagnostics import DiagnosticsService
 from .services.entity_search import EntitySearchService
 from .services.flight_archive import FlightArchiveService
 from .services.flight_details import FlightDetailsService
@@ -107,10 +108,15 @@ def create_app() -> Flask:
         timeout=app.config["AIRPORT_WEATHER_TIMEOUT"],
         cache_ttl=app.config["AIRPORT_WEATHER_CACHE_TTL"],
     )
+    app.extensions["diagnostics_service"] = DiagnosticsService(
+        snapshot_service=app.extensions["flight_snapshot_service"],
+        archive_service=archive_service,
+        workspace_service=workspace_service,
+    )
     app.register_blueprint(api, url_prefix="/api")
 
     @app.get("/health")
     def healthcheck():
-        return {"status": "ok"}
+        return app.extensions["diagnostics_service"].build_healthcheck()
 
     return app

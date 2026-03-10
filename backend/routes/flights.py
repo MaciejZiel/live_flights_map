@@ -149,6 +149,11 @@ def list_flights():
     return jsonify(_enrich_live_payload(flights_payload))
 
 
+@api.get("/health")
+def api_healthcheck():
+    return jsonify(current_app.extensions["diagnostics_service"].build_healthcheck())
+
+
 @api.get("/flights/<icao24>/details")
 def flight_details(icao24: str):
     normalized_icao24 = _normalize_text(icao24, uppercase=False)

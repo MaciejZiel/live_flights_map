@@ -76,8 +76,10 @@
     query: "",
     minAltitude: "",
     minSpeed: "",
+    aircraftType: "",
     country: "",
     operator: "",
+    trafficState: "all",
     trafficCategory: "all",
     headingBand: "any",
     hideGroundTraffic: true,
@@ -343,16 +345,33 @@
   }
 
   function countActiveFilters(currentFilters) {
+    const normalizedFilters = {
+      query: "",
+      minAltitude: "",
+      minSpeed: "",
+      aircraftType: "",
+      country: "",
+      operator: "",
+      trafficState: "all",
+      trafficCategory: "all",
+      headingBand: "any",
+      hideGroundTraffic: true,
+      recentActivity: "any",
+      ...currentFilters,
+    };
+
     return [
-      currentFilters.query.trim(),
-      currentFilters.minAltitude,
-      currentFilters.minSpeed,
-      currentFilters.country.trim(),
-      currentFilters.operator.trim(),
-      currentFilters.trafficCategory !== "all",
-      currentFilters.headingBand !== "any",
-      !currentFilters.hideGroundTraffic,
-      currentFilters.recentActivity !== "any",
+      normalizedFilters.query.trim(),
+      normalizedFilters.minAltitude,
+      normalizedFilters.minSpeed,
+      normalizedFilters.aircraftType.trim(),
+      normalizedFilters.country.trim(),
+      normalizedFilters.operator.trim(),
+      normalizedFilters.trafficState !== "all",
+      normalizedFilters.trafficCategory !== "all",
+      normalizedFilters.headingBand !== "any",
+      !normalizedFilters.hideGroundTraffic,
+      normalizedFilters.recentActivity !== "any",
     ].filter(Boolean).length;
   }
 
@@ -1044,8 +1063,10 @@
     const sharedQuery = params.get("q");
     const sharedMinAltitude = params.get("minAlt");
     const sharedMinSpeed = params.get("minSpeed");
+    const sharedAircraftType = params.get("typeCode");
     const sharedCountry = params.get("country");
     const sharedOperator = params.get("operator");
+    const sharedTrafficState = params.get("flightState");
     const sharedCategory = params.get("category");
     const sharedHeadingBand = params.get("heading");
     const sharedRecentActivity = params.get("recent");
@@ -1077,12 +1098,20 @@
       nextFilters.minSpeed = sharedMinSpeed;
     }
 
+    if (sharedAircraftType !== null) {
+      nextFilters.aircraftType = sharedAircraftType;
+    }
+
     if (sharedCountry !== null) {
       nextFilters.country = sharedCountry;
     }
 
     if (sharedOperator !== null) {
       nextFilters.operator = sharedOperator;
+    }
+
+    if (["all", "airborne", "ground"].includes(sharedTrafficState)) {
+      nextFilters.trafficState = sharedTrafficState;
     }
 
     if (
@@ -1161,6 +1190,12 @@
       params.delete("minSpeed");
     }
 
+    if (filters.aircraftType.trim()) {
+      params.set("typeCode", filters.aircraftType.trim().toUpperCase());
+    } else {
+      params.delete("typeCode");
+    }
+
     if (filters.country.trim()) {
       params.set("country", filters.country.trim());
     } else {
@@ -1171,6 +1206,12 @@
       params.set("operator", filters.operator.trim());
     } else {
       params.delete("operator");
+    }
+
+    if (filters.trafficState !== "all") {
+      params.set("flightState", filters.trafficState);
+    } else {
+      params.delete("flightState");
     }
 
     if (filters.trafficCategory !== "all") {
@@ -2042,8 +2083,10 @@
       query: "",
       minAltitude: "",
       minSpeed: "",
+      aircraftType: "",
       country: "",
       operator: "",
+      trafficState: "all",
       trafficCategory: "all",
       headingBand: "any",
       hideGroundTraffic: true,
@@ -2124,6 +2167,11 @@
       return;
     }
 
+    if (tokenKey === "aircraftType") {
+      filters = { ...filters, aircraftType: "" };
+      return;
+    }
+
     if (tokenKey === "country") {
       filters = { ...filters, country: "" };
       return;
@@ -2131,6 +2179,11 @@
 
     if (tokenKey === "operator") {
       filters = { ...filters, operator: "" };
+      return;
+    }
+
+    if (tokenKey === "trafficState") {
+      filters = { ...filters, trafficState: "all" };
       return;
     }
 
@@ -2714,6 +2767,7 @@
   $: hasMinimumAltitude = Number.isFinite(minimumAltitude) && filters.minAltitude !== "";
   $: minimumSpeed = Number(filters.minSpeed);
   $: hasMinimumSpeed = Number.isFinite(minimumSpeed) && filters.minSpeed !== "";
+  $: normalizedAircraftTypeFilter = filters.aircraftType.trim().toLowerCase();
   $: normalizedCountryFilter = filters.country.trim().toLowerCase();
   $: normalizedOperatorFilter = filters.operator.trim().toLowerCase();
   $: activeMonitoringSession =
@@ -2747,12 +2801,20 @@
         flight.velocity !== undefined &&
         flight.velocity * 3.6 >= minimumSpeed);
 
+    const matchesAircraftType =
+      !normalizedAircraftTypeFilter ||
+      (flight.type_code ?? "").toLowerCase().includes(normalizedAircraftTypeFilter);
+
     const matchesCountry =
       !normalizedCountryFilter ||
       (flight.origin_country ?? "").toLowerCase().includes(normalizedCountryFilter);
 
     const matchesOperator =
       !normalizedOperatorFilter || operatorCode.includes(normalizedOperatorFilter);
+
+    const matchesTrafficState =
+      filters.trafficState === "all" ||
+      (filters.trafficState === "ground" ? flight.on_ground : !flight.on_ground);
 
     const matchesCategory = matchesTrafficCategory(flight, filters.trafficCategory);
 
@@ -2780,8 +2842,10 @@
       matchesQuery &&
       matchesAltitude &&
       matchesSpeed &&
+      matchesAircraftType &&
       matchesCountry &&
       matchesOperator &&
+      matchesTrafficState &&
       matchesCategory &&
       matchesHeading &&
       matchesGroundFilter &&
@@ -2838,14 +2902,24 @@
           filteredFlights.length
       )
     : 0;
+  $: topTypeSuggestions = getTopValues(replayFlights, (flight) => flight.type_code ?? "", 4);
   $: topOperatorSuggestions = getTopValues(replayFlights, (flight) => deriveOperatorCode(flight) || "", 4);
   $: topCountrySuggestions = getTopValues(replayFlights, (flight) => flight.origin_country ?? "", 4);
   $: activeFilterTokens = [
     filters.query.trim() ? { key: "query", label: `Search: ${filters.query.trim()}` } : null,
     filters.minAltitude ? { key: "minAltitude", label: `Min altitude ${filters.minAltitude} m` } : null,
     filters.minSpeed ? { key: "minSpeed", label: `Min speed ${filters.minSpeed} km/h` } : null,
+    filters.aircraftType.trim()
+      ? { key: "aircraftType", label: `Type: ${filters.aircraftType.trim().toUpperCase()}` }
+      : null,
     filters.country.trim() ? { key: "country", label: `Country: ${filters.country.trim()}` } : null,
     filters.operator.trim() ? { key: "operator", label: `Operator: ${filters.operator.trim().toUpperCase()}` } : null,
+    filters.trafficState !== "all"
+      ? {
+          key: "trafficState",
+          label: `State: ${filters.trafficState === "ground" ? "Ground only" : "Airborne only"}`,
+        }
+      : null,
     filters.trafficCategory !== "all"
       ? {
           key: "trafficCategory",
@@ -3528,6 +3602,21 @@
               </label>
 
               <label class="filter-field">
+                <span>Aircraft type</span>
+                <input
+                  type="text"
+                  value={filters.aircraftType}
+                  placeholder="B38M"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      aircraftType: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
                 <span>Country</span>
                 <input
                   type="text"
@@ -3555,6 +3644,23 @@
                     };
                   }}
                 />
+              </label>
+
+              <label class="filter-field">
+                <span>Traffic state</span>
+                <select
+                  value={filters.trafficState}
+                  on:change={(event) => {
+                    filters = {
+                      ...filters,
+                      trafficState: event.currentTarget.value,
+                    };
+                  }}
+                >
+                  <option value="all">Airborne + ground</option>
+                  <option value="airborne">Airborne only</option>
+                  <option value="ground">Ground only</option>
+                </select>
               </label>
 
               <label class="filter-field">
@@ -3640,6 +3746,28 @@
             </div>
 
             <div class="filter-suggestion-group">
+              {#if topTypeSuggestions.length}
+                <div class="suggestion-row">
+                  <span>Top types</span>
+                  <div>
+                    {#each topTypeSuggestions as suggestion}
+                      <button
+                        class="suggestion-pill"
+                        type="button"
+                        on:click={() => {
+                          filters = {
+                            ...filters,
+                            aircraftType: suggestion,
+                          };
+                        }}
+                      >
+                        {suggestion}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
               {#if topOperatorSuggestions.length}
                 <div class="suggestion-row">
                   <span>Top operators</span>

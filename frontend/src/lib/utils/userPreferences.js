@@ -10,6 +10,7 @@ const SORT_OPTIONS = new Set([
 const THEME_OPTIONS = new Set(["dark", "light"]);
 const RECENT_ACTIVITY_OPTIONS = new Set(["any", "30s", "2m", "5m", "15m"]);
 const HEADING_BAND_OPTIONS = new Set(["any", "north", "east", "south", "west"]);
+const TRAFFIC_STATE_OPTIONS = new Set(["all", "airborne", "ground"]);
 const TRAFFIC_CATEGORY_OPTIONS = new Set([
   "all",
   "passenger",
@@ -89,8 +90,14 @@ function sanitizeFilters(value) {
       typeof value.minSpeed === "string" || typeof value.minSpeed === "number"
         ? String(value.minSpeed)
         : "",
+    aircraftType: sanitizeString(value.aircraftType),
     country: sanitizeString(value.country),
     operator: sanitizeString(value.operator),
+    trafficState: sanitizeOption(
+      sanitizeString(value.trafficState, "all"),
+      TRAFFIC_STATE_OPTIONS,
+      "all"
+    ),
     trafficCategory: sanitizeOption(
       sanitizeString(value.trafficCategory, "all"),
       TRAFFIC_CATEGORY_OPTIONS,

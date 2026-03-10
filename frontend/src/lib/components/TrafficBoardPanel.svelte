@@ -1,5 +1,6 @@
 <script>
   import { formatAltitude, formatSpeed } from "../utils/flightFormatters.js";
+  import { deriveOperatorCode } from "../utils/flightMatching.js";
 
   export let flights = [];
   export let selectedIcao24 = null;
@@ -18,22 +19,13 @@
     return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m`;
   }
 
-  function deriveOperatorCode(flight) {
-    const explicitCode = (flight?.operator_code ?? flight?.airline_code ?? "").trim().toUpperCase();
-    if (explicitCode) {
-      return explicitCode;
-    }
-
-    const normalizedCallsign = (flight?.callsign ?? "").trim().toUpperCase();
-    const match = normalizedCallsign.match(/^[A-Z]{3}/);
-    return match ? match[0] : "N/A";
-  }
-
   function buildFlightSubtitle(flight) {
     return (
       flight?.route_label ??
       flight?.iata_codes ??
-      [flight?.origin_country ?? "Unknown", deriveOperatorCode(flight)].filter(Boolean).join(" · ")
+      [flight?.origin_country ?? "Unknown", deriveOperatorCode(flight) || "N/A"]
+        .filter(Boolean)
+        .join(" · ")
     );
   }
 

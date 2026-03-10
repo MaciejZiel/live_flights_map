@@ -44,6 +44,11 @@
     TRAFFIC_CATEGORY_OPTIONS,
   } from "./lib/utils/trafficCategories.js";
   import {
+    deriveOperatorCode,
+    matchesAirportTrafficFilter,
+    matchesFlightSearch,
+  } from "./lib/utils/flightMatching.js";
+  import {
     loadUserPreferences,
     normalizeUserPreferences,
     saveUserPreferences,
@@ -3154,93 +3159,6 @@
     }
 
     return "High";
-  }
-
-  function deriveOperatorCode(flight) {
-    const explicitCode = (flight?.operator_code ?? flight?.airline_code ?? "").trim().toUpperCase();
-    if (explicitCode) {
-      return explicitCode;
-    }
-
-    const rawCallsign = (flight.callsign ?? "").trim().toUpperCase();
-    const match = rawCallsign.match(/^[A-Z]{3}/);
-    return match ? match[0] : "";
-  }
-
-  function getFlightSearchFields(flight) {
-    return [
-      flight?.icao24,
-      flight?.callsign,
-      flight?.registration,
-      flight?.type_code,
-      flight?.origin_country,
-      flight?.operator_code,
-      flight?.airline_code,
-      flight?.flight_number,
-      flight?.route_label,
-      flight?.route_verbose,
-      flight?.airport_codes,
-      flight?.iata_codes,
-      flight?.origin,
-      flight?.destination,
-      flight?.origin_iata,
-      flight?.origin_icao,
-      flight?.origin_name,
-      flight?.destination_iata,
-      flight?.destination_icao,
-      flight?.destination_name,
-    ]
-      .filter(Boolean)
-      .map((value) => String(value).toLowerCase());
-  }
-
-  function matchesFlightSearch(flight, query) {
-    if (!query) {
-      return true;
-    }
-
-    return getFlightSearchFields(flight).some((value) => value.includes(query));
-  }
-
-  function getAirportFlowFields(flight, flow) {
-    if (flow === "departures") {
-      return [
-        flight?.origin,
-        flight?.origin_iata,
-        flight?.origin_icao,
-        flight?.origin_name,
-      ];
-    }
-
-    if (flow === "arrivals") {
-      return [
-        flight?.destination,
-        flight?.destination_iata,
-        flight?.destination_icao,
-        flight?.destination_name,
-      ];
-    }
-
-    return [
-      flight?.origin,
-      flight?.origin_iata,
-      flight?.origin_icao,
-      flight?.origin_name,
-      flight?.destination,
-      flight?.destination_iata,
-      flight?.destination_icao,
-      flight?.destination_name,
-    ];
-  }
-
-  function matchesAirportTrafficFilter(flight, airportCode, airportFlow) {
-    if (!airportCode) {
-      return true;
-    }
-
-    return getAirportFlowFields(flight, airportFlow)
-      .filter(Boolean)
-      .some((value) => String(value).toLowerCase().includes(airportCode));
   }
 
   function applyAirportTrafficFilter(airport, flow = "all") {

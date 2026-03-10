@@ -1,3 +1,5 @@
+import { deriveOperatorCode } from "./flightMatching.js";
+
 const CARGO_OPERATORS = new Set([
   "FDX",
   "UPS",
@@ -38,12 +40,6 @@ const LIGHT_TYPE_PREFIXES = ["P28", "C15", "C17", "C18", "DA4", "PA2", "SR2", "M
 const HELICOPTER_PREFIXES = ["H", "EC", "AS3", "BK", "R44", "R66", "B06", "A109", "S76"];
 const GLIDER_PREFIXES = ["GL", "LAK", "ASK", "DG", "LS", "ASW"];
 
-function operatorFromCallsign(callsign) {
-  const normalized = (callsign ?? "").trim().toUpperCase();
-  const match = normalized.match(/^[A-Z]{3}/);
-  return match ? match[0] : "";
-}
-
 function hasPrefix(value, prefixes) {
   const normalized = (value ?? "").trim().toUpperCase();
   if (!normalized) {
@@ -67,7 +63,7 @@ export const TRAFFIC_CATEGORY_OPTIONS = [
 ];
 
 export function classifyTrafficCategory(flight) {
-  const operator = operatorFromCallsign(flight?.callsign);
+  const operator = deriveOperatorCode(flight);
   const typeCode = (flight?.type_code ?? "").trim().toUpperCase();
   const altitude = Number(flight?.altitude);
   const speedKmh = Number(flight?.velocity ?? 0) * 3.6;

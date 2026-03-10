@@ -77,6 +77,19 @@ function sanitizeViewport(value) {
   };
 }
 
+function sanitizeTimestamp(value) {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  const timestamp = new Date(value);
+  if (Number.isNaN(timestamp.getTime())) {
+    return null;
+  }
+
+  return timestamp.toISOString();
+}
+
 function sanitizeFilters(value) {
   if (!isPlainObject(value)) {
     return {};
@@ -158,6 +171,7 @@ export function normalizeUserPreferences(value) {
       typeof value.selectedAirportCode === "string" && value.selectedAirportCode.trim()
         ? value.selectedAirportCode.trim().toUpperCase()
         : null,
+    replayAnchorTimestamp: sanitizeTimestamp(value.replayAnchorTimestamp),
     replayWindowMinutes: REPLAY_WINDOW_OPTIONS.has(value.replayWindowMinutes)
       ? value.replayWindowMinutes
       : 90,

@@ -3,6 +3,7 @@
   export let activeSnapshot = null;
   export let activeIndex = -1;
   export let isPlaying = false;
+  export let anchorTimestamp = null;
   export let windowMinutes = 90;
   export let playbackSpeed = 1;
   export let canStepBackward = false;
@@ -11,6 +12,8 @@
   export let onReturnToLive = () => {};
   export let onJumpStart = () => {};
   export let onJumpLatest = () => {};
+  export let onSetAnchorTimestamp = () => {};
+  export let onClearAnchorTimestamp = () => {};
   export let onSetWindowMinutes = () => {};
   export let onSetPlaybackSpeed = () => {};
   export let onStepBackward = () => {};
@@ -37,12 +40,31 @@
     return value < 60 ? `${value}m` : `${Math.round(value / 60)}h`;
   }
 
+  function formatDateTimeInputValue(value) {
+    if (!value) {
+      return "";
+    }
+
+    const timestamp = new Date(value);
+    if (Number.isNaN(timestamp.getTime())) {
+      return "";
+    }
+
+    const timezoneOffset = timestamp.getTimezoneOffset() * 60000;
+    return new Date(timestamp.getTime() - timezoneOffset).toISOString().slice(0, 16);
+  }
+
+  function handleAnchorChange(event) {
+    onSetAnchorTimestamp(event.currentTarget.value);
+  }
+
   $: sliderValue = activeIndex >= 0 ? activeIndex : Math.max(0, snapshots.length - 1);
   $: activeSnapshotLabel = snapshots[sliderValue] ? formatSnapshotTime(snapshots[sliderValue].fetchedAt) : "--:--";
   $: firstSnapshotLabel = snapshots[0] ? formatSnapshotTime(snapshots[0].fetchedAt) : "--:--";
   $: lastSnapshotLabel = snapshots[snapshots.length - 1]
     ? formatSnapshotTime(snapshots[snapshots.length - 1].fetchedAt)
     : "--:--";
+  $: anchorInputValue = formatDateTimeInputValue(anchorTimestamp);
 </script>
 
 <section class="panel replay-panel">
@@ -57,6 +79,16 @@
       {#if activeSnapshot}
         <button class="live-button" type="button" on:click={onReturnToLive}>Back to live</button>
       {/if}
+    </div>
+  </div>
+
+  <div class="timeline-anchor-row">
+    <span>{anchorTimestamp ? "Replay end" : "Following live tail"}</span>
+    <div class="timeline-anchor-controls">
+      <input type="datetime-local" value={anchorInputValue} on:change={handleAnchorChange} />
+      <button class="live-button" type="button" on:click={onClearAnchorTimestamp}>
+        Live tail
+      </button>
     </div>
   </div>
 
@@ -244,6 +276,7 @@
 
   .timeline-range-row,
   .timeline-range-summary,
+  .timeline-anchor-row,
   .timeline-speed-row {
     display: flex;
     justify-content: space-between;
@@ -253,9 +286,17 @@
 
   .timeline-range-row span,
   .timeline-range-summary span,
+  .timeline-anchor-row span,
   .timeline-speed-row span {
     font-size: 0.8rem;
     color: var(--color-muted);
+  }
+
+  .timeline-anchor-controls {
+    display: inline-flex;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .timeline-range-summary strong {
@@ -297,6 +338,15 @@
     background: var(--surface-input-bg);
   }
 
+  .timeline-anchor-controls input {
+    border: 1px solid var(--surface-border);
+    border-radius: 12px;
+    padding: 0.56rem 0.72rem;
+    font: inherit;
+    color: var(--color-text);
+    background: var(--surface-input-bg);
+  }
+
   .control-button {
     border: 1px solid var(--surface-border);
     border-radius: 16px;
@@ -324,6 +374,7 @@
     .timeline-meta,
     .timeline-range-row,
     .timeline-range-summary,
+    .timeline-anchor-row,
     .timeline-speed-row {
       display: grid;
     }

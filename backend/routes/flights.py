@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from time import sleep
 
 from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
@@ -69,6 +70,24 @@ def _parse_optional_int(name: str, default: int) -> int:
         raise ValueError(f"'{name}' must be greater than 0.")
 
     return value
+
+
+def _parse_optional_timestamp(name: str) -> str | None:
+    raw_value = request.args.get(name)
+    if raw_value is None or not str(raw_value).strip():
+        return None
+
+    try:
+        timestamp = datetime.fromisoformat(str(raw_value).strip().replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"Invalid '{name}' query parameter.") from exc
+
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
+    else:
+        timestamp = timestamp.astimezone(timezone.utc)
+
+    return timestamp.isoformat()
 
 
 def _normalize_text(raw_value: str | None, uppercase: bool = False) -> str | None:
@@ -210,6 +229,7 @@ def replay_history():
         bbox = _parse_bbox()
         minutes = _parse_optional_int("minutes", default=30)
         limit = _parse_optional_int("limit", default=60)
+        end_at = _parse_optional_timestamp("end_at")
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
@@ -219,6 +239,7 @@ def replay_history():
             bbox=bbox,
             minutes=minutes,
             limit=limit,
+            end_at=end_at,
         )
     )
 

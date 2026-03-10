@@ -129,6 +129,9 @@ export async function fetchReplayHistory(bbox, options = {}) {
   if (options.limit) {
     url.searchParams.set("limit", String(options.limit));
   }
+  if (options.endAt) {
+    url.searchParams.set("end_at", String(options.endAt));
+  }
 
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);
   return parseApiResponse(response, "Failed to load replay history.");

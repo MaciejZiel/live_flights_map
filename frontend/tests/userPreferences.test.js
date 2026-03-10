@@ -13,6 +13,7 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
     },
     workspaceAccountId: "ops-account",
     selectedAirportCode: "waw",
+    replayAnchorTimestamp: "2026-03-10T12:00:00Z",
     replayWindowMinutes: 180,
     replayPlaybackSpeed: 1.5,
   });
@@ -36,6 +37,7 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
   });
   assert.equal(normalized.workspaceAccountId, "ops-account");
   assert.equal(normalized.selectedAirportCode, "WAW");
+  assert.equal(normalized.replayAnchorTimestamp, "2026-03-10T12:00:00.000Z");
   assert.equal(normalized.replayWindowMinutes, 180);
   assert.equal(normalized.replayPlaybackSpeed, 1.5);
 });

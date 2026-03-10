@@ -524,6 +524,7 @@ class WorkspaceService:
             "weatherLayerEnabled": False,
             "showAirportMarkers": True,
             "selectedAirportCode": None,
+            "replayAnchorTimestamp": None,
             "replayWindowMinutes": 90,
             "replayPlaybackSpeed": 1,
         }

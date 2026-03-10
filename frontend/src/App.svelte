@@ -206,6 +206,7 @@
   let archivedReplayRequestId = 0;
   let lastArchivedReplayBboxKey = null;
   let replayHydrationTimer = null;
+  let replayAnchorTimestamp = null;
   let replayWindowMinutes = 90;
   let flattenedSearchResults = [];
   let activeSearchResult = null;
@@ -281,6 +282,8 @@
       activeWorkspaceAccountId =
         savedPreferences.workspaceAccountId ?? activeWorkspaceAccountId;
       selectedAirportCode = savedPreferences.selectedAirportCode ?? selectedAirportCode;
+      replayAnchorTimestamp =
+        savedPreferences.replayAnchorTimestamp ?? replayAnchorTimestamp;
       replayWindowMinutes = savedPreferences.replayWindowMinutes ?? replayWindowMinutes;
       replayPlaybackSpeed = savedPreferences.replayPlaybackSpeed ?? replayPlaybackSpeed;
     }
@@ -738,6 +741,7 @@
       weatherLayerEnabled,
       showAirportMarkers,
       selectedAirportCode,
+      replayAnchorTimestamp,
       replayWindowMinutes,
       replayPlaybackSpeed,
     };
@@ -774,6 +778,8 @@
       normalizedWorkspaceState.showAirportMarkers ?? showAirportMarkers;
     selectedAirportCode =
       normalizedWorkspaceState.selectedAirportCode ?? selectedAirportCode;
+    replayAnchorTimestamp =
+      normalizedWorkspaceState.replayAnchorTimestamp ?? replayAnchorTimestamp;
     replayWindowMinutes =
       normalizedWorkspaceState.replayWindowMinutes ?? replayWindowMinutes;
     replayPlaybackSpeed =
@@ -1428,6 +1434,7 @@
     const sharedGroundFlag = params.get("ground");
     const sharedWeather = params.get("weather");
     const sharedAirportMarkers = params.get("airports");
+    const sharedReplayAt = params.get("replayAt");
     const sharedReplayWindow = Number(params.get("replayWindow"));
     const sharedEmbedMode = params.get("embed");
 
@@ -1523,6 +1530,13 @@
 
     if (sharedAirportMarkers === "1" || sharedAirportMarkers === "0") {
       showAirportMarkers = sharedAirportMarkers !== "0";
+    }
+
+    if (sharedReplayAt) {
+      const replayAnchor = new Date(sharedReplayAt);
+      replayAnchorTimestamp = Number.isNaN(replayAnchor.getTime())
+        ? null
+        : replayAnchor.toISOString();
     }
 
     if ([30, 90, 180].includes(sharedReplayWindow)) {
@@ -1678,6 +1692,12 @@
       params.set("airports", "0");
     } else {
       params.delete("airports");
+    }
+
+    if (replayAnchorTimestamp) {
+      params.set("replayAt", replayAnchorTimestamp);
+    } else {
+      params.delete("replayAt");
     }
 
     if (replayWindowMinutes !== 90) {
@@ -2338,6 +2358,7 @@
       const replayPayload = await fetchReplayHistory(bbox, {
         minutes: replayWindowMinutes,
         limit: 120,
+        endAt: replayAnchorTimestamp,
       });
       if (requestId !== archivedReplayRequestId || buildBboxKey(state.bbox) !== bboxKey) {
         return;
@@ -3035,6 +3056,24 @@
   function setReplayWindowMinutes(minutes) {
     const numericMinutes = Number(minutes);
     replayWindowMinutes = [30, 90, 180].includes(numericMinutes) ? numericMinutes : 90;
+  }
+
+  function setReplayAnchorTimestamp(value) {
+    if (!value) {
+      replayAnchorTimestamp = null;
+      return;
+    }
+
+    const timestamp = new Date(value);
+    replayAnchorTimestamp = Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString();
+    replayPlaybackActive = false;
+    replaySnapshotCursor = null;
+  }
+
+  function clearReplayAnchorTimestamp() {
+    replayAnchorTimestamp = null;
+    replayPlaybackActive = false;
+    replaySnapshotCursor = null;
   }
 
   function focusTrailPoint(point, options = {}) {
@@ -3874,7 +3913,7 @@
   $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
   $: replayArchiveBboxKey = buildBboxKey(state.bbox);
   $: replayArchiveRequestKey = replayArchiveBboxKey
-    ? `${replayArchiveBboxKey}:${replayWindowMinutes}`
+    ? `${replayArchiveBboxKey}:${replayWindowMinutes}:${replayAnchorTimestamp ?? "live"}`
     : null;
   $: mapStyleLabel = {
     standard: "Map",
@@ -4003,7 +4042,11 @@
     theme;
     mapStyle;
     selectedIcao24;
+    selectedAirportCode;
     mapViewport;
+    weatherLayerEnabled;
+    showAirportMarkers;
+    replayAnchorTimestamp;
     replayWindowMinutes;
     syncShareUrl();
   }
@@ -4031,6 +4074,7 @@
       workspaceAccountId: activeWorkspaceAccountId,
       selectedAirportCode,
       replayWindowMinutes,
+      replayAnchorTimestamp,
       replayPlaybackSpeed,
     });
   }
@@ -4052,6 +4096,8 @@
     savedEntities;
     weatherLayerEnabled;
     showAirportMarkers;
+    selectedAirportCode;
+    replayAnchorTimestamp;
     replayWindowMinutes;
     replayPlaybackSpeed;
     queueWorkspaceSave();
@@ -4798,6 +4844,7 @@
             activeSnapshot={activeReplaySnapshot}
             activeIndex={replaySnapshotIndex}
             isPlaying={replayPlaybackActive}
+            anchorTimestamp={replayAnchorTimestamp}
             windowMinutes={replayWindowMinutes}
             playbackSpeed={replayPlaybackSpeed}
             canStepBackward={canStepReplayBackward}
@@ -4806,6 +4853,8 @@
             onReturnToLive={returnToLiveReplay}
             onJumpStart={jumpReplayToStart}
             onJumpLatest={jumpReplayToLatest}
+            onSetAnchorTimestamp={setReplayAnchorTimestamp}
+            onClearAnchorTimestamp={clearReplayAnchorTimestamp}
             onSetWindowMinutes={setReplayWindowMinutes}
             onSetPlaybackSpeed={setReplayPlaybackSpeed}
             onStepBackward={() => stepReplay(-1)}

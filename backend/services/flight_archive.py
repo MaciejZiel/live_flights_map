@@ -116,6 +116,7 @@ class FlightArchiveService:
         bbox: dict[str, float],
         minutes: int,
         limit: int,
+        end_at: object | None = None,
     ) -> dict[str, object]:
         normalized_bbox = self._normalize_bbox(bbox)
         if normalized_bbox is None:
@@ -123,8 +124,9 @@ class FlightArchiveService:
 
         normalized_limit = min(max(limit, 1), self.max_snapshots)
         normalized_minutes = max(minutes, 1)
+        normalized_end_at = self._normalize_timestamp(end_at) or datetime.now(timezone.utc)
         cutoff_timestamp = (
-            datetime.now(timezone.utc) - timedelta(minutes=normalized_minutes)
+            normalized_end_at - timedelta(minutes=normalized_minutes)
         ).isoformat()
 
         with self._lock:
@@ -134,13 +136,14 @@ class FlightArchiveService:
                     """
                     SELECT payload_json
                     FROM snapshots
-                    WHERE bbox_key = ? AND fetched_at >= ?
+                    WHERE bbox_key = ? AND fetched_at BETWEEN ? AND ?
                     ORDER BY fetched_at DESC
                     LIMIT ?
                     """,
                     (
                         self._bbox_key(normalized_bbox),
                         cutoff_timestamp,
+                        normalized_end_at.isoformat(),
                         normalized_limit,
                     ),
                 ).fetchall()
@@ -157,6 +160,8 @@ class FlightArchiveService:
         return {
             "bbox": normalized_bbox,
             "count": len(snapshots),
+            "end_at": normalized_end_at.isoformat(),
+            "lookback_minutes": normalized_minutes,
             "snapshots": snapshots,
         }
 

@@ -17,6 +17,10 @@ class Config:
         "FLIGHT_ARCHIVE_PATH",
         os.path.join(gettempdir(), "live-flights-map-history.sqlite3"),
     )
+    WORKSPACE_DB_PATH = os.getenv(
+        "WORKSPACE_DB_PATH",
+        os.path.join(gettempdir(), "live-flights-map-workspace.sqlite3"),
+    )
     FLIGHT_ARCHIVE_RETENTION_HOURS = float(
         os.getenv("FLIGHT_ARCHIVE_RETENTION_HOURS", "24")
     )

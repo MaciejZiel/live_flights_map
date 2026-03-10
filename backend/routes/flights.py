@@ -79,13 +79,22 @@ def _normalize_text(raw_value: str | None, uppercase: bool = False) -> str | Non
     return cleaned.upper() if uppercase else cleaned
 
 
+def _parse_json_body() -> dict[str, object]:
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return {}
+    if not isinstance(payload, dict):
+        raise ValueError("Expected a JSON object body.")
+    return payload
+
+
 @api.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"] = current_app.config[
         "CORS_ALLOWED_ORIGIN"
     ]
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
-    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, OPTIONS"
     return response
 
 
@@ -127,6 +136,9 @@ def flight_details(icao24: str):
         latitude=latitude,
         longitude=longitude,
         origin_country=_normalize_text(request.args.get("origin_country")),
+    )
+    current_app.extensions["traffic_intelligence_service"].store_flight_enrichment(
+        details_payload
     )
     return jsonify(details_payload)
 
@@ -183,12 +195,95 @@ def search_flights():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    archive_service = current_app.extensions["flight_archive_service"]
+    search_service = current_app.extensions["entity_search_service"]
+    return jsonify(search_service.search(query=query, limit=limit))
+
+
+@api.get("/airports")
+def list_airports():
+    try:
+        bbox = _parse_bbox()
+        limit = _parse_optional_int("limit", default=16)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    service = current_app.extensions["airport_workflow_service"]
+    return jsonify(service.list_airports(bbox=bbox, limit=limit))
+
+
+@api.get("/airports/<airport_code>")
+def airport_dashboard(airport_code: str):
+    normalized_code = _normalize_text(airport_code, uppercase=True)
+    if not normalized_code:
+        return jsonify({"error": "Invalid airport identifier."}), 400
+
+    try:
+        hours = _parse_optional_int("hours", default=6)
+        limit = _parse_optional_int("limit", default=8)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    payload = current_app.extensions["airport_workflow_service"].get_airport_dashboard(
+        airport_code=normalized_code,
+        hours=hours,
+        limit=limit,
+    )
+    if payload is None:
+        return jsonify({"error": "Airport not found."}), 404
+    return jsonify(payload)
+
+
+@api.get("/workspace/profiles")
+def list_workspace_profiles():
+    service = current_app.extensions["workspace_service"]
+    return jsonify(service.list_profiles())
+
+
+@api.post("/workspace/profiles")
+def create_workspace_profile():
+    try:
+        payload = _parse_json_body()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    display_name = _normalize_text(payload.get("display_name") if isinstance(payload, dict) else None)
+    if not display_name:
+        return jsonify({"error": "Missing 'display_name'."}), 400
+
+    try:
+        profile = current_app.extensions["workspace_service"].create_profile(display_name)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    return jsonify({"profile": profile}), 201
+
+
+@api.get("/workspace/state")
+def get_workspace_state():
+    profile_id = _normalize_text(request.args.get("profile_id"))
+    payload = current_app.extensions["workspace_service"].get_workspace_state(profile_id)
+    return jsonify(payload)
+
+
+@api.put("/workspace/state")
+def save_workspace_state():
+    try:
+        payload = _parse_json_body()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    profile_id = _normalize_text(payload.get("profile_id") if isinstance(payload, dict) else None)
+    if not profile_id:
+        return jsonify({"error": "Missing 'profile_id'."}), 400
+
+    state = payload.get("state")
+    if state is not None and not isinstance(state, dict):
+        return jsonify({"error": "Expected 'state' to be a JSON object."}), 400
+
     return jsonify(
-        archive_service.search_recent_flights(
-            query=query,
-            limit=limit,
-            lookback_hours=current_app.config["FLIGHT_SEARCH_LOOKBACK_HOURS"],
+        current_app.extensions["workspace_service"].save_workspace_state(
+            profile_id=profile_id,
+            state=state,
         )
     )
 

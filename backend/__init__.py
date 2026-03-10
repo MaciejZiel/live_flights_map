@@ -4,12 +4,17 @@ from .config import Config
 from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
+from .services.airport_catalog import AirportCatalogService
+from .services.airport_workflow import AirportWorkflowService
+from .services.entity_search import EntitySearchService
 from .services.flight_archive import FlightArchiveService
 from .services.flight_details import FlightDetailsService
 from .services.global_traffic_board import GlobalTrafficBoardService
 from .services.flight_snapshot import FlightSnapshotService
 from .services.opensky import OpenSkyClient
 from .services.planespotting import PlanespottingClient
+from .services.traffic_intelligence import TrafficIntelligenceService
+from .services.workspace import WorkspaceService
 
 
 def create_app() -> Flask:
@@ -20,6 +25,13 @@ def create_app() -> Flask:
         archive_path=app.config["FLIGHT_ARCHIVE_PATH"],
         retention_hours=app.config["FLIGHT_ARCHIVE_RETENTION_HOURS"],
         max_snapshots=app.config["FLIGHT_ARCHIVE_MAX_SNAPSHOTS"],
+    )
+    traffic_intelligence_service = TrafficIntelligenceService(
+        archive_path=app.config["FLIGHT_ARCHIVE_PATH"],
+    )
+    airport_catalog_service = AirportCatalogService()
+    workspace_service = WorkspaceService(
+        workspace_path=app.config["WORKSPACE_DB_PATH"],
     )
 
     for provider_name in app.config["FLIGHT_DATA_PROVIDERS"]:
@@ -56,6 +68,9 @@ def create_app() -> Flask:
         archive_service=archive_service,
     )
     app.extensions["flight_archive_service"] = archive_service
+    app.extensions["traffic_intelligence_service"] = traffic_intelligence_service
+    app.extensions["airport_catalog_service"] = airport_catalog_service
+    app.extensions["workspace_service"] = workspace_service
     app.extensions["global_traffic_board_service"] = GlobalTrafficBoardService(
         snapshot_service=app.extensions["flight_snapshot_service"],
         archive_service=archive_service,
@@ -74,6 +89,17 @@ def create_app() -> Flask:
             max_retries=app.config["PLANESPOTTING_RETRY_COUNT"],
         ),
         cache_ttl=app.config["FLIGHT_DETAILS_CACHE_TTL"],
+    )
+    app.extensions["entity_search_service"] = EntitySearchService(
+        archive_service=archive_service,
+        airport_catalog_service=airport_catalog_service,
+        traffic_intelligence_service=traffic_intelligence_service,
+        lookback_hours=app.config["FLIGHT_SEARCH_LOOKBACK_HOURS"],
+    )
+    app.extensions["airport_workflow_service"] = AirportWorkflowService(
+        airport_catalog_service=airport_catalog_service,
+        traffic_intelligence_service=traffic_intelligence_service,
+        snapshot_service=app.extensions["flight_snapshot_service"],
     )
     app.register_blueprint(api, url_prefix="/api")
 

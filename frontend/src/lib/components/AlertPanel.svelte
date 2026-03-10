@@ -1,4 +1,10 @@
 <script>
+  import {
+    ALERT_RULE_OPTIONS,
+    getAlertRuleLabel,
+    getAlertRuleOption,
+  } from "../utils/alertRules.js";
+
   export let rules = [];
   export let events = [];
   export let onAddRule = () => {};
@@ -8,29 +14,20 @@
   let ruleType = "callsign";
   let ruleQuery = "";
 
-  const RULE_LABELS = {
-    callsign: "Callsign match",
-    icao24: "ICAO24 match",
-    airline: "Airline/operator match",
-    country: "Country match",
-    registration: "Registration match",
-    type_code: "Aircraft type match",
-    route: "Route match",
-    airport: "Airport proximity",
-    area: "Saved area match",
-  };
-
   function submitRule() {
+    const option = getAlertRuleOption(ruleType);
     const normalizedQuery = ruleQuery.trim();
-    if (!normalizedQuery) {
+    if (!normalizedQuery && !option?.queryOptional) {
       return;
     }
 
     onAddRule({
       type: ruleType,
-      query: normalizedQuery,
+      query: option?.queryOptional ? option?.placeholder || "" : normalizedQuery,
     });
-    ruleQuery = "";
+    if (!option?.queryOptional) {
+      ruleQuery = "";
+    }
   }
 
   function formatEventTime(timestamp) {
@@ -61,13 +58,9 @@
     <label class="field">
       <span>Match by</span>
       <select bind:value={ruleType}>
-        <option value="callsign">Callsign</option>
-        <option value="icao24">ICAO24</option>
-        <option value="airline">Airline</option>
-        <option value="country">Country</option>
-        <option value="registration">Registration</option>
-        <option value="type_code">Aircraft type</option>
-        <option value="route">Route</option>
+        {#each ALERT_RULE_OPTIONS as option}
+          <option value={option.value}>{option.label}</option>
+        {/each}
       </select>
     </label>
     <label class="field">
@@ -75,7 +68,8 @@
       <input
         bind:value={ruleQuery}
         type="text"
-        placeholder="LOT, SP-LVQ, B38M, Poland, 48ad08"
+        placeholder={getAlertRuleOption(ruleType)?.placeholder ?? "LOT, SP-LVQ, B38M, Poland, 48ad08"}
+        disabled={Boolean(getAlertRuleOption(ruleType)?.queryOptional)}
         on:keydown={(event) => event.key === "Enter" && submitRule()}
       />
     </label>
@@ -88,7 +82,7 @@
         <article class="rule-card">
           <div>
             <strong>{rule.query}</strong>
-            <p>{RULE_LABELS[rule.type] ?? "Traffic match"}</p>
+            <p>{getAlertRuleLabel(rule.type)} match</p>
           </div>
           <button class="remove-button" type="button" on:click={() => onRemoveRule(rule.id)}>Remove</button>
         </article>

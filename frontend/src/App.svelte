@@ -59,6 +59,12 @@
     buildPrintableRadarReport,
     buildTrafficReportCsv,
   } from "./lib/utils/reporting.js";
+  import {
+    findTransitionAlertMatches,
+    getAlertRuleLabel,
+    matchesAlertRule,
+    normalizeAlertRuleDraft,
+  } from "./lib/utils/alertRules.js";
 
   let state = {
     status: "idle",
@@ -70,6 +76,9 @@
   };
 
   function handleFlightsStoreChange(value) {
+    previousLiveFlightsByIcao24 = new Map(
+      (state.flights ?? []).map((flight) => [flight.icao24, flight])
+    );
     state = value;
 
     if (value.fetchedAt && value.fetchedAt !== lastHistoryFetchKey) {
@@ -161,6 +170,7 @@
   let alertMatchState = {};
   let alertToast = null;
   let alertToastTimer = null;
+  let previousLiveFlightsByIcao24 = new Map();
   let lastAlertCheckKey = null;
   let monitoringSessions = [];
   let activeMonitoringSessionId = null;
@@ -1748,48 +1758,16 @@
     }, 3500);
   }
 
-  function getAlertRuleLabel(type) {
-    if (type === "callsign") {
-      return "Callsign";
-    }
-    if (type === "icao24") {
-      return "ICAO24";
-    }
-    if (type === "airline") {
-      return "Airline";
-    }
-    if (type === "country") {
-      return "Country";
-    }
-    if (type === "registration") {
-      return "Registration";
-    }
-    if (type === "type_code") {
-      return "Type";
-    }
-    if (type === "route") {
-      return "Route";
-    }
-    if (type === "airport") {
-      return "Airport";
-    }
-    if (type === "area") {
-      return "Area";
-    }
-
-    return "Rule";
-  }
-
   function addAlertRule(rule) {
-    const normalizedQuery = rule.query.trim().toLowerCase();
-    if (!normalizedQuery) {
+    const normalizedRule = normalizeAlertRuleDraft(rule);
+    if (!normalizedRule) {
       return;
     }
 
     const duplicate = alertRules.some(
       (existingRule) =>
-        existingRule.type === rule.type &&
-        existingRule.query.toLowerCase() === normalizedQuery
+        existingRule.type === normalizedRule.type &&
+        existingRule.query.toLowerCase() === normalizedRule.query.toLowerCase()
     );
     if (duplicate) {
       return;
@@ -1798,9 +1776,9 @@
     alertRules = [
       {
         id: crypto.randomUUID(),
-        type: rule.type,
-        query: rule.query.trim(),
-        payload: rule.payload ?? null,
+        type: normalizedRule.type,
+        query: normalizedRule.query,
+        payload: normalizedRule.payload ?? null,
       },
       ...alertRules,
     ].slice(0, 12);
@@ -1892,80 +1870,41 @@
 
     const nextMatchState = {};
     for (const rule of alertRules) {
-      const normalizedQuery = rule.query.toLowerCase();
-      const matches = state.flights.filter((flight) => {
-        if (rule.type === "callsign") {
-          return (flight.callsign ?? "").toLowerCase().includes(normalizedQuery);
-        }
+      const matches =
+        rule.type === "takeoff" || rule.type === "landing"
+          ? findTransitionAlertMatches(state.flights, previousLiveFlightsByIcao24, rule)
+          : state.flights.filter((flight) =>
+              matchesAlertRule(flight, rule, {
+                calculateDistanceKm,
+                isFlightInsideBbox,
+              })
+            );
+      const previousMatchIds = new Set(alertMatchState[rule.id]?.matchedIds ?? []);
+      const currentMatchIds = matches.map((flight) => flight.icao24);
 
-        if (rule.type === "airline") {
-          return deriveOperatorCode(flight).toLowerCase().includes(normalizedQuery);
-        }
-
-        if (rule.type === "country") {
-          return (flight.origin_country ?? "").toLowerCase().includes(normalizedQuery);
-        }
-
-        if (rule.type === "registration") {
-          return (flight.registration ?? "").toLowerCase().includes(normalizedQuery);
-        }
-
-        if (rule.type === "type_code") {
-          return (flight.type_code ?? "").toLowerCase().includes(normalizedQuery);
-        }
-
-        if (rule.type === "route") {
-          return [
-            flight.route_label,
-            flight.route_verbose,
-            flight.airport_codes,
-            flight.iata_codes,
-            flight.origin,
-            flight.destination,
-            flight.origin_iata,
-            flight.origin_icao,
-            flight.destination_iata,
-            flight.destination_icao,
-          ]
-            .filter(Boolean)
-            .some((value) => String(value).toLowerCase().includes(normalizedQuery));
-        }
-
-        if (rule.type === "airport") {
-          const radiusKm = Number(rule.payload?.radiusKm ?? 48);
-          return (
-            Number.isFinite(rule.payload?.latitude) &&
-            Number.isFinite(rule.payload?.longitude) &&
-            calculateDistanceKm(
-              flight.latitude,
-              flight.longitude,
-              {
-                center: [rule.payload.latitude, rule.payload.longitude],
-              }
-            ) <= radiusKm
-          );
-        }
-
-        if (rule.type === "area") {
-          return isFlightInsideBbox(flight, rule.payload?.bbox ?? null);
-        }
-
-        return flight.icao24.includes(normalizedQuery);
-      });
-
-      const previousMatches = alertMatchState[rule.id]?.count ?? 0;
       nextMatchState[rule.id] = {
         count: matches.length,
+        matchedIds: currentMatchIds,
       };
 
-      if (matches.length > 0 && previousMatches === 0) {
+      if ((rule.type === "takeoff" || rule.type === "landing") && matches.length > 0) {
+        const newMatches = matches.filter((flight) => !previousMatchIds.has(flight.icao24));
+        for (const match of newMatches.slice(0, 3)) {
+          pushAlertEvent(
+            `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${match.callsign ?? match.registration ?? match.icao24}`
+          );
+        }
+        continue;
+      }
+
+      if (matches.length > 0 && previousMatchIds.size === 0) {
         const leadFlight = matches[0];
         pushAlertEvent(
           `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${leadFlight.callsign ?? leadFlight.registration ?? leadFlight.icao24}`
         );
       }
 
-      if (matches.length === 0 && previousMatches > 0) {
+      if (matches.length === 0 && previousMatchIds.size > 0) {
         pushAlertEvent(
           `${getAlertRuleLabel(rule.type)} ${rule.query} is no longer visible`
         );

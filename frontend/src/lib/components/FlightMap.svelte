@@ -1004,26 +1004,6 @@
   :global(.aircraft-marker) {
     display: inline-flex;
     align-items: center;
-    gap: 0.42rem;
-  }
-
-  :global(.aircraft-callout) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.55rem;
-    max-width: 8rem;
-    padding: 0 0.55rem;
-    overflow: hidden;
-    border-radius: 999px;
-    font-size: 0.68rem;
-    font-weight: 900;
-    letter-spacing: 0.08em;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: #eff7fd;
-    background: rgba(14, 19, 25, 0.92);
-    border: 1px solid rgba(134, 210, 255, 0.3);
-    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
   }
 
   :global(.aircraft-icon-wrap) {
@@ -1133,7 +1113,7 @@
     display: none;
   }
 
-  :global(.leaflet-popup.aircraft-stats-popup .leaflet-popup-content-wrapper) {
+  :global(.leaflet-tooltip.aircraft-selected-tooltip) {
     padding: 0;
     border-radius: 16px;
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -1144,12 +1124,12 @@
       inset 0 1px 0 rgba(255, 255, 255, 0.03);
   }
 
-  :global(.leaflet-popup.aircraft-stats-popup .leaflet-popup-content) {
-    margin: 0;
+  :global(.leaflet-tooltip.aircraft-selected-tooltip:before) {
+    border-top-color: rgba(11, 13, 17, 0.98);
   }
 
-  :global(.leaflet-popup.aircraft-stats-popup .leaflet-popup-tip) {
-    background: rgba(11, 13, 17, 0.98);
+  :global(.leaflet-tooltip.aircraft-selected-tooltip .leaflet-tooltip-content) {
+    margin: 0;
   }
 
   :global(.aircraft-popup-card) {

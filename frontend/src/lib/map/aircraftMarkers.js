@@ -38,7 +38,7 @@ function buildTooltipContent(flight) {
   `;
 }
 
-function buildPopupContent(flight) {
+function buildSelectedTooltipContent(flight) {
   return `
     <div class="aircraft-popup-card">
       <div class="aircraft-popup-head">
@@ -71,23 +71,52 @@ function buildPopupContent(flight) {
   `;
 }
 
+function bindMarkerTooltip(entry, selected) {
+  if (!entry?.marker) {
+    return;
+  }
+
+  const nextTooltipMode = selected ? "selected" : "hover";
+  if (entry.tooltipMode !== nextTooltipMode) {
+    entry.marker.unbindTooltip();
+    entry.marker.bindTooltip(
+      selected ? buildSelectedTooltipContent(entry.flight) : buildTooltipContent(entry.flight),
+      selected
+        ? {
+            permanent: true,
+            direction: "top",
+            offset: [0, -24],
+            opacity: 1,
+            className: "aircraft-selected-tooltip",
+          }
+        : {
+            direction: "top",
+            offset: [0, -18],
+            opacity: 1,
+            className: "aircraft-hover-tooltip",
+          }
+    );
+    entry.tooltipMode = nextTooltipMode;
+  } else {
+    entry.marker.setTooltipContent(
+      selected ? buildSelectedTooltipContent(entry.flight) : buildTooltipContent(entry.flight)
+    );
+  }
+}
+
 function syncMarkerOverlayState(entry, selected) {
   if (!entry?.marker) {
     return;
   }
 
+  bindMarkerTooltip(entry, selected);
+
   if (selected) {
-    entry.marker.closeTooltip();
-    if (!entry.marker.isPopupOpen()) {
-      entry.marker.openPopup();
-    }
+    entry.marker.openTooltip();
     return;
   }
 
   entry.marker.closeTooltip();
-  if (entry.marker.isPopupOpen()) {
-    entry.marker.closePopup();
-  }
 }
 
 function easeOutCubic(progress) {
@@ -126,7 +155,6 @@ export function createAircraftIcon(
   selected = false,
   watched = false,
   watchModeEnabled = false,
-  label = null,
   dimmed = false
 ) {
   const fillColor = selected
@@ -149,12 +177,10 @@ export function createAircraftIcon(
   ]
     .filter(Boolean)
     .join(" ");
-  const resolvedLabel = label ? escapeHtml(label) : "";
-  const iconWidth = selected ? Math.min(176, Math.max(88, resolvedLabel.length * 8 + 42)) : 28;
 
   return L.divIcon({
     className: shellClassNames,
-    iconSize: [iconWidth, 30],
+    iconSize: [28, 30],
     iconAnchor: [14, 14],
     html: `
       <div class="aircraft-marker">
@@ -169,7 +195,6 @@ export function createAircraftIcon(
             />
           </svg>
         </div>
-        ${selected ? `<span class="aircraft-callout">${resolvedLabel}</span>` : ""}
       </div>
     `,
   });
@@ -187,12 +212,10 @@ function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, d
       selected,
       watched,
       watchModeEnabled,
-      selected ? getMarkerLabel(flight) : null,
       dimmed
     )
   );
   entry.marker.setTooltipContent(buildTooltipContent(flight));
-  entry.marker.setPopupContent(buildPopupContent(flight));
   entry.marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
 
   const markerElement = entry.marker.getElement();
@@ -221,27 +244,16 @@ function createMarkerEntry(
       selectedIcao24 === flight.icao24,
       watchedIcao24s.has(flight.icao24),
       watchModeEnabled,
-      selectedIcao24 === flight.icao24 ? getMarkerLabel(flight) : null,
       dimmedIcao24s.has(flight.icao24)
     ),
     keyboard: false,
-  }).bindTooltip(buildTooltipContent(flight), {
-    direction: "top",
-    offset: [0, -18],
-    opacity: 1,
-    className: "aircraft-hover-tooltip",
-  }).bindPopup(buildPopupContent(flight), {
-    autoPan: true,
-    autoClose: false,
-    closeButton: false,
-    className: "aircraft-stats-popup",
-    offset: [0, -16],
   });
 
   const entry = {
     marker,
     flight,
     selected: selectedIcao24 === flight.icao24,
+    tooltipMode: null,
     animationFrame: null,
   };
 

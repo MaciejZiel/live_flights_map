@@ -4,7 +4,15 @@
   import FlightDetailsPanel from "./lib/components/FlightDetailsPanel.svelte";
   import TrafficBoardPanel from "./lib/components/TrafficBoardPanel.svelte";
   import WatchlistPanel from "./lib/components/WatchlistPanel.svelte";
+  import ReplayTimeline from "./lib/components/ReplayTimeline.svelte";
+  import AlertPanel from "./lib/components/AlertPanel.svelte";
+  import ComparisonPanel from "./lib/components/ComparisonPanel.svelte";
   import FlightMap from "./lib/components/FlightMap.svelte";
+  import LegendPanel from "./lib/components/LegendPanel.svelte";
+  import MonitoringSessionsPanel from "./lib/components/MonitoringSessionsPanel.svelte";
+  import OnboardingPanel from "./lib/components/OnboardingPanel.svelte";
+  import SavedViewsPanel from "./lib/components/SavedViewsPanel.svelte";
+  import ShortcutsPanel from "./lib/components/ShortcutsPanel.svelte";
   import {
     fetchFlightDetails,
     fetchFlightTrail,
@@ -71,6 +79,7 @@
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
   let sidebarMode = "traffic";
+  let utilityPanelMode = "overview";
   let inspectorTab = "details";
   let snapshotHistory = [];
   let replaySnapshotCursor = null;
@@ -1185,6 +1194,11 @@
     onboardingDismissed = true;
   }
 
+  function showOnboardingTips() {
+    onboardingDismissed = false;
+    utilityPanelMode = "guide";
+  }
+
   function buildBboxKey(bbox) {
     if (!bbox) {
       return null;
@@ -1743,9 +1757,19 @@
   $: activeAlertEvents = alertEvents.slice(0, 4);
   $: compactLeaderboardFlights = leaderboardFlights.slice(0, 3);
   $: countryActivity = buildCountryActivity(filteredFlights, 3);
-  $: leftBookmarks = savedViews.slice(0, 3);
-  $: leftWatchPreview = watchedFlightEntries.slice(0, 3);
   $: leadFeedFlight = compactLeaderboardFlights[0] ?? null;
+  $: replayPanelBadge = activeReplaySnapshot
+    ? "Replay"
+    : activeMonitoringSession
+      ? "Session"
+      : archivedReplayStatus === "loading" || archivedReplayStatus === "refreshing"
+        ? "Syncing"
+        : "Live";
+  $: replayPanelSummary = activeReplaySnapshot
+    ? `${activeReplaySnapshot.count} aircraft in selected frame`
+    : archivedReplayStatus === "loading" || archivedReplayStatus === "refreshing"
+      ? "Loading archived snapshots for the current airspace"
+      : `${replaySourceSnapshots.length} snapshots ready for replay`;
   $: statusLabel = getStatusLabel(state);
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
@@ -2024,72 +2048,206 @@
     </div>
 
     <aside class="overlay-card radar-left-panel">
-      <div class="panel-stack">
-        <section class="widget-card">
-          <div class="widget-header">
-            <div class="widget-heading">
-              <strong>Most tracked flights</strong>
-              <span class="live-pill">LIVE</span>
-            </div>
-          </div>
+      <div class="utility-header">
+        <div class="utility-heading">
+          <span>Radar controls</span>
+          <strong>{utilityPanelMode === "overview" ? "Overview" : utilityPanelMode === "replay" ? "Replay" : utilityPanelMode === "workspace" ? "Workspace" : "Guide"}</strong>
+        </div>
+        <div class="utility-meta">
+          <span class="utility-pill">{statusLabel}</span>
+          <span class="utility-count">{visibleTrackedCount}</span>
+        </div>
+      </div>
 
-          {#if compactLeaderboardFlights.length}
-            <div class="widget-list">
-              {#each compactLeaderboardFlights as flight, index}
-                <button class="widget-row" type="button" on:click={() => selectWatchedFlight(flight.icao24)}>
-                  <span class="widget-rank">{index + 1}.</span>
-                  <span class="widget-main">
-                    <strong>{flight.callsign ?? flight.icao24}</strong>
-                    <span class="widget-codes">
-                      <small>{flight.icao24.toUpperCase()}</small>
-                      {#if deriveOperatorCode(flight)}
-                        <small>{deriveOperatorCode(flight)}</small>
-                      {/if}
-                    </span>
-                    <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
-                  </span>
-                  <span class="widget-highlight">{formatSpeed(flight.velocity).replace(" km/h", "")}</span>
-                </button>
-              {/each}
-            </div>
-          {:else}
-            <p class="widget-empty">Waiting for flights in the active map view.</p>
-          {/if}
-        </section>
-
-        <section class="widget-card widget-card-secondary">
-          <div class="widget-header">
-            <div class="widget-heading">
-              <strong>Airspace focus</strong>
-              <span class="live-pill">LIVE</span>
-            </div>
-          </div>
-
-          {#if countryActivity.length}
-            <div class="mini-stat-list">
-              {#each countryActivity as entry}
-                <div>
-                  <span>
-                    <strong>{entry.country}</strong>
-                    <small>{entry.ground} ground</small>
-                  </span>
-                  <strong>{entry.count}</strong>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <p class="widget-empty">Waiting for traffic clusters in view.</p>
-          {/if}
-
-          <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("europe")}>
-            Wider airspace
-          </button>
-        </section>
-
-        <button class="widget-footer-bar" type="button" on:click={() => openSidebarMode("watchlist")}>
-          <span>Bookmarks</span>
-          <strong>{watchlist.length}</strong>
+      <div class="utility-tabs" role="tablist" aria-label="Radar utility sections">
+        <button
+          class:active={utilityPanelMode === "overview"}
+          class="utility-tab"
+          type="button"
+          on:click={() => {
+            utilityPanelMode = "overview";
+          }}
+        >
+          Overview
         </button>
+        <button
+          class:active={utilityPanelMode === "replay"}
+          class="utility-tab"
+          type="button"
+          on:click={() => {
+            utilityPanelMode = "replay";
+          }}
+        >
+          Replay
+        </button>
+        <button
+          class:active={utilityPanelMode === "workspace"}
+          class="utility-tab"
+          type="button"
+          on:click={() => {
+            utilityPanelMode = "workspace";
+          }}
+        >
+          Workspace
+        </button>
+        <button
+          class:active={utilityPanelMode === "guide"}
+          class="utility-tab"
+          type="button"
+          on:click={() => {
+            utilityPanelMode = "guide";
+          }}
+        >
+          Guide
+        </button>
+      </div>
+
+      <div class="panel-stack">
+        {#if utilityPanelMode === "overview"}
+          <section class="widget-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Most tracked flights</strong>
+                <span class="live-pill">LIVE</span>
+              </div>
+            </div>
+
+            {#if compactLeaderboardFlights.length}
+              <div class="widget-list">
+                {#each compactLeaderboardFlights as flight, index}
+                  <button class="widget-row" type="button" on:click={() => selectWatchedFlight(flight.icao24)}>
+                    <span class="widget-rank">{index + 1}.</span>
+                    <span class="widget-main">
+                      <strong>{flight.callsign ?? flight.icao24}</strong>
+                      <span class="widget-codes">
+                        <small>{flight.icao24.toUpperCase()}</small>
+                        {#if deriveOperatorCode(flight)}
+                          <small>{deriveOperatorCode(flight)}</small>
+                        {/if}
+                      </span>
+                      <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
+                    </span>
+                    <span class="widget-highlight">{formatSpeed(flight.velocity).replace(" km/h", "")}</span>
+                  </button>
+                {/each}
+              </div>
+            {:else}
+              <p class="widget-empty">Waiting for flights in the active map view.</p>
+            {/if}
+          </section>
+
+          <section class="widget-card widget-card-secondary">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Airspace focus</strong>
+                <span class="live-pill">LIVE</span>
+              </div>
+            </div>
+
+            {#if countryActivity.length}
+              <div class="mini-stat-list">
+                {#each countryActivity as entry}
+                  <div>
+                    <span>
+                      <strong>{entry.country}</strong>
+                      <small>{entry.ground} ground</small>
+                    </span>
+                    <strong>{entry.count}</strong>
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <p class="widget-empty">Waiting for traffic clusters in view.</p>
+            {/if}
+
+            <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("europe")}>
+              Wider airspace
+            </button>
+          </section>
+
+          <ComparisonPanel
+            flights={comparisonFlights}
+            selectedIcao24={selectedIcao24}
+            onSelectFlight={selectWatchedFlight}
+          />
+
+          <button class="widget-footer-bar" type="button" on:click={() => openSidebarMode("watchlist")}>
+            <span>Bookmarks</span>
+            <strong>{watchlist.length}</strong>
+          </button>
+        {:else if utilityPanelMode === "replay"}
+          <section class="widget-card utility-summary-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Replay archive</strong>
+                <span class="live-pill utility-state-pill">{replayPanelBadge}</span>
+              </div>
+            </div>
+            <p class="widget-empty">{replayPanelSummary}</p>
+          </section>
+
+          <ReplayTimeline
+            snapshots={replaySourceSnapshots}
+            activeSnapshot={activeReplaySnapshot}
+            activeIndex={replaySnapshotIndex}
+            isPlaying={replayPlaybackActive}
+            canStepBackward={canStepReplayBackward}
+            canStepForward={canStepReplayForward}
+            onSelectIndex={selectReplaySnapshot}
+            onReturnToLive={returnToLiveReplay}
+            onStepBackward={() => stepReplay(-1)}
+            onStepForward={() => stepReplay(1)}
+            onTogglePlayback={toggleReplayPlayback}
+          />
+
+          <MonitoringSessionsPanel
+            sessions={monitoringSessions}
+            activeSessionId={activeMonitoringSessionId}
+            onSaveSession={saveCurrentMonitoringSession}
+            onLoadSession={loadMonitoringSession}
+            onDeleteSession={deleteMonitoringSession}
+          />
+        {:else if utilityPanelMode === "workspace"}
+          <SavedViewsPanel
+            views={savedViews}
+            activeViewId={activeSavedViewId}
+            currentName={savedViewName}
+            onNameChange={(value) => {
+              savedViewName = value;
+            }}
+            onSaveView={saveCurrentView}
+            onLoadView={loadSavedView}
+            onDeleteView={deleteSavedView}
+          />
+
+          <AlertPanel
+            rules={alertRules}
+            events={alertEvents}
+            onAddRule={addAlertRule}
+            onRemoveRule={removeAlertRule}
+            onClearEvents={clearAlertEvents}
+          />
+        {:else}
+          {#if !onboardingDismissed}
+            <OnboardingPanel onDismiss={dismissOnboarding} />
+          {:else}
+            <section class="widget-card utility-summary-card">
+              <div class="widget-header">
+                <div class="widget-heading">
+                  <strong>Quick start hidden</strong>
+                  <span class="live-pill utility-state-pill">Guide</span>
+                </div>
+              </div>
+              <p class="widget-empty">Bring back the onboarding tips at any time.</p>
+              <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
+                Show tips again
+              </button>
+            </section>
+          {/if}
+
+          <LegendPanel />
+          <ShortcutsPanel />
+        {/if}
       </div>
     </aside>
 
@@ -2508,12 +2666,14 @@
   .radar-left-panel {
     top: 5.2rem;
     left: 0.95rem;
-    width: min(16.25rem, calc(100vw - 2rem));
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
+    bottom: 5.9rem;
+    width: min(18rem, calc(100vw - 23rem));
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    gap: 0.72rem;
+    padding: 0.78rem;
+    background:
+      linear-gradient(180deg, rgba(20, 22, 26, 0.98) 0%, rgba(9, 10, 13, 0.98) 100%);
   }
 
   .radar-right-panel {
@@ -2540,8 +2700,91 @@
   }
 
   .panel-stack {
-    overflow: visible;
-    padding-right: 0;
+    padding-right: 0.08rem;
+  }
+
+  .utility-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    align-items: start;
+  }
+
+  .utility-heading {
+    display: grid;
+    gap: 0.18rem;
+  }
+
+  .utility-heading span {
+    color: #98a4b3;
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+  }
+
+  .utility-heading strong {
+    color: #eef3f8;
+    font-size: 1rem;
+    line-height: 1.15;
+  }
+
+  .utility-meta {
+    display: flex;
+    gap: 0.38rem;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .utility-pill,
+  .utility-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.95rem;
+    padding: 0 0.68rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 800;
+  }
+
+  .utility-pill {
+    color: #dfe7f1;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .utility-count {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .utility-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.35rem;
+  }
+
+  .utility-tab {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.48rem 0.3rem;
+    font: inherit;
+    font-size: 0.69rem;
+    font-weight: 800;
+    color: #cdd6e1;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease,
+      color 160ms ease;
+  }
+
+  .utility-tab.active {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
   }
 
   .widget-card {
@@ -2559,6 +2802,12 @@
 
   .widget-card-secondary {
     gap: 0.62rem;
+  }
+
+  .utility-summary-card {
+    box-shadow:
+      0 18px 30px rgba(0, 0, 0, 0.24),
+      inset 3px 0 0 #45a7ee;
   }
 
   .widget-header {
@@ -2592,6 +2841,11 @@
     font-weight: 800;
     color: #171a1f;
     background: #f5b908;
+  }
+
+  .utility-state-pill {
+    min-width: 3.5rem;
+    background: #45a7ee;
   }
 
   .widget-list {

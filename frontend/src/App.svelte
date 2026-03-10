@@ -2023,6 +2023,39 @@
           {/if}
         </div>
       </div>
+
+      <div class="overlay-card topbar-ribbon">
+        <div class="ribbon-row">
+          <button class="ribbon-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast jets</button>
+          <button class="ribbon-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
+          <button class="ribbon-chip" type="button" on:click={() => applyQuickFilter("recent")}>Recent only</button>
+          <button
+            class:active={!filters.hideGroundTraffic}
+            class="ribbon-chip"
+            type="button"
+            on:click={() => {
+              filters = {
+                ...filters,
+                hideGroundTraffic: !filters.hideGroundTraffic,
+              };
+            }}
+          >
+            Ground traffic
+          </button>
+          <button class="ribbon-chip ribbon-chip-reset" type="button" on:click={resetFilters}>Reset</button>
+        </div>
+
+        {#if activeFilterTokens.length}
+          <div class="filter-token-row">
+            {#each activeFilterTokens as token}
+              <button class="filter-token" type="button" on:click={() => clearFilterToken(token.key)}>
+                <span>{token.label}</span>
+                <strong>×</strong>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      </div>
     </header>
 
     <div class="floating-messages">
@@ -2133,6 +2166,239 @@
               </div>
             {:else}
               <p class="widget-empty">Waiting for flights in the active map view.</p>
+            {/if}
+          </section>
+
+          <section class="widget-card filter-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Radar filters</strong>
+                <span class="live-pill utility-state-pill">{activeFilterCount}</span>
+              </div>
+            </div>
+
+            <div class="filter-chip-row">
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast jets</button>
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("recent")}>Recent</button>
+              <button
+                class:active={!filters.hideGroundTraffic}
+                class="filter-chip"
+                type="button"
+                on:click={() => {
+                  filters = {
+                    ...filters,
+                    hideGroundTraffic: !filters.hideGroundTraffic,
+                  };
+                }}
+              >
+                Ground
+              </button>
+            </div>
+
+            <div class="filter-form-grid">
+              <label class="filter-field">
+                <span>Min altitude</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="500"
+                  value={filters.minAltitude}
+                  placeholder="9000"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      minAltitude: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
+                <span>Min speed km/h</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="50"
+                  value={filters.minSpeed}
+                  placeholder="700"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      minSpeed: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
+                <span>Country</span>
+                <input
+                  type="text"
+                  value={filters.country}
+                  placeholder="Poland"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      country: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
+                <span>Operator</span>
+                <input
+                  type="text"
+                  value={filters.operator}
+                  placeholder="LOT"
+                  on:input={(event) => {
+                    filters = {
+                      ...filters,
+                      operator: event.currentTarget.value,
+                    };
+                  }}
+                />
+              </label>
+
+              <label class="filter-field">
+                <span>Heading</span>
+                <select
+                  value={filters.headingBand}
+                  on:change={(event) => {
+                    filters = {
+                      ...filters,
+                      headingBand: event.currentTarget.value,
+                    };
+                  }}
+                >
+                  <option value="any">Any</option>
+                  <option value="north">Northbound</option>
+                  <option value="east">Eastbound</option>
+                  <option value="south">Southbound</option>
+                  <option value="west">Westbound</option>
+                </select>
+              </label>
+
+              <label class="filter-field">
+                <span>Freshness</span>
+                <select
+                  value={filters.recentActivity}
+                  on:change={(event) => {
+                    filters = {
+                      ...filters,
+                      recentActivity: event.currentTarget.value,
+                    };
+                  }}
+                >
+                  <option value="any">Any age</option>
+                  <option value="30s">30 seconds</option>
+                  <option value="2m">2 minutes</option>
+                  <option value="5m">5 minutes</option>
+                  <option value="15m">15 minutes</option>
+                </select>
+              </label>
+
+              <label class="filter-field filter-field-wide">
+                <span>Sort traffic board</span>
+                <select bind:value={sortBy}>
+                  <option value="altitude_desc">Altitude first</option>
+                  <option value="speed_desc">Speed first</option>
+                  <option value="distance_asc">Nearest first</option>
+                  <option value="last_contact_desc">Most recent first</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="filter-suggestion-group">
+              {#if topOperatorSuggestions.length}
+                <div class="suggestion-row">
+                  <span>Top operators</span>
+                  <div>
+                    {#each topOperatorSuggestions as suggestion}
+                      <button
+                        class="suggestion-pill"
+                        type="button"
+                        on:click={() => {
+                          filters = {
+                            ...filters,
+                            operator: suggestion,
+                          };
+                        }}
+                      >
+                        {suggestion}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+
+              {#if topCountrySuggestions.length}
+                <div class="suggestion-row">
+                  <span>Top countries</span>
+                  <div>
+                    {#each topCountrySuggestions as suggestion}
+                      <button
+                        class="suggestion-pill"
+                        type="button"
+                        on:click={() => {
+                          filters = {
+                            ...filters,
+                            country: suggestion,
+                          };
+                        }}
+                      >
+                        {suggestion}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
+
+            {#if activeFilterTokens.length}
+              <div class="filter-token-list">
+                {#each activeFilterTokens as token}
+                  <button class="filter-token" type="button" on:click={() => clearFilterToken(token.key)}>
+                    <span>{token.label}</span>
+                    <strong>×</strong>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            <div class="preset-save-row">
+              <input
+                type="text"
+                placeholder="Arrival bank, Cargo sweep..."
+                value={presetName}
+                on:input={(event) => {
+                  presetName = event.currentTarget.value;
+                }}
+                on:keydown={(event) => event.key === "Enter" && saveCurrentPreset()}
+              />
+              <button class="widget-footer-button" type="button" on:click={saveCurrentPreset}>Save preset</button>
+            </div>
+
+            {#if filterPresets.length}
+              <div class="preset-list">
+                {#each filterPresets as preset}
+                  <article class="preset-card">
+                    <div>
+                      <strong>{preset.name}</strong>
+                      <span>{countActiveFilters(preset.filters)} active rules</span>
+                    </div>
+                    <div class="preset-actions">
+                      <button class="widget-footer-button" type="button" on:click={() => applyFilterPreset(preset)}>
+                        Apply
+                      </button>
+                      <button class="preset-delete" type="button" on:click={() => deleteFilterPreset(preset.name)}>
+                        Delete
+                      </button>
+                    </div>
+                  </article>
+                {/each}
+              </div>
             {/if}
           </section>
 
@@ -2568,6 +2834,81 @@
     align-items: center;
   }
 
+  .topbar-ribbon {
+    margin-top: 0.55rem;
+    display: grid;
+    gap: 0.42rem;
+    width: min(34rem, calc(100vw - 39rem));
+    min-width: 30rem;
+    padding: 0.48rem 0.52rem;
+    border-radius: 16px;
+    background:
+      linear-gradient(180deg, rgba(27, 30, 35, 0.98) 0%, rgba(14, 16, 20, 0.98) 100%);
+  }
+
+  .ribbon-row,
+  .filter-token-row,
+  .filter-token-list,
+  .filter-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+  }
+
+  .ribbon-chip,
+  .filter-chip,
+  .filter-token,
+  .suggestion-pill {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .ribbon-chip,
+  .filter-chip,
+  .suggestion-pill {
+    padding: 0.42rem 0.68rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #d8e1eb;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .ribbon-chip.active,
+  .filter-chip.active {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
+  }
+
+  .ribbon-chip-reset {
+    color: #ffd9d9;
+    background: rgba(118, 41, 41, 0.24);
+  }
+
+  .filter-token {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+    padding: 0.34rem 0.42rem 0.34rem 0.62rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: #edf2f7;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .filter-token strong {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.15rem;
+    height: 1.15rem;
+    border-radius: 999px;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
   .traffic-counter {
     display: inline-flex;
     align-items: center;
@@ -2810,6 +3151,10 @@
       inset 3px 0 0 #45a7ee;
   }
 
+  .filter-card {
+    gap: 0.78rem;
+  }
+
   .widget-header {
     display: flex;
     justify-content: space-between;
@@ -2910,6 +3255,110 @@
   .widget-empty {
     font-size: 0.72rem;
     color: #b3bcc8;
+  }
+
+  .filter-form-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .filter-field {
+    display: grid;
+    gap: 0.3rem;
+  }
+
+  .filter-field span,
+  .suggestion-row > span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(179, 188, 200, 0.72);
+  }
+
+  .filter-field input,
+  .filter-field select,
+  .preset-save-row input {
+    width: 100%;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 0.62rem 0.7rem;
+    font: inherit;
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.04);
+    box-sizing: border-box;
+  }
+
+  .filter-field-wide {
+    grid-column: 1 / -1;
+  }
+
+  .filter-suggestion-group {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .suggestion-row {
+    display: grid;
+    gap: 0.35rem;
+  }
+
+  .suggestion-row div {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+  }
+
+  .preset-save-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 0.5rem;
+  }
+
+  .preset-list {
+    display: grid;
+    gap: 0.45rem;
+  }
+
+  .preset-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: start;
+    padding: 0.72rem 0.74rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.16);
+  }
+
+  .preset-card strong {
+    display: block;
+    color: #f4f7fb;
+    font-size: 0.8rem;
+  }
+
+  .preset-card span {
+    color: #b4becb;
+    font-size: 0.7rem;
+  }
+
+  .preset-actions {
+    display: flex;
+    gap: 0.38rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .preset-delete {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 0.62rem 0.74rem;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #ffd9d9;
+    background: rgba(118, 41, 41, 0.24);
+    cursor: pointer;
   }
 
   .widget-highlight {
@@ -3243,6 +3692,11 @@
       width: min(32rem, calc(100vw - 24rem));
       min-width: 0;
     }
+
+    .topbar-ribbon {
+      width: min(32rem, calc(100vw - 24rem));
+      min-width: 0;
+    }
   }
 
   @media (max-width: 960px) {
@@ -3292,6 +3746,11 @@
     .center-bar {
       width: min(32rem, calc(100vw - 1.5rem));
     }
+
+    .topbar-ribbon {
+      width: min(32rem, calc(100vw - 1.5rem));
+      min-width: 0;
+    }
   }
 
   @media (max-width: 720px) {
@@ -3310,9 +3769,22 @@
       padding: 0.62rem 0.68rem;
     }
 
+    .topbar-ribbon {
+      width: auto;
+      min-width: 0;
+      padding: 0.54rem 0.58rem;
+    }
+
     .center-actions {
       justify-content: flex-start;
       flex-wrap: wrap;
+    }
+
+    .filter-form-grid,
+    .preset-save-row,
+    .preset-card {
+      grid-template-columns: 1fr;
+      display: grid;
     }
 
     .view-chip {

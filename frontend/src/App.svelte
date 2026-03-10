@@ -436,6 +436,17 @@
     }
   }
 
+  function clearSelectedFlight(options = {}) {
+    selectedIcao24 = null;
+    selectedFlightSnapshot = null;
+    followAircraft = false;
+    inspectorTab = "details";
+
+    if (options.closeSidebar && isMobileViewport) {
+      closeMobileSidebar();
+    }
+  }
+
   function handleBoundsChange(event) {
     flightsStore.setBbox(event.detail.bbox);
   }
@@ -445,6 +456,14 @@
       focusMap: false,
       exitReplay: false,
     });
+  }
+
+  function handleMapBackgroundClick() {
+    if (!selectedIcao24) {
+      return;
+    }
+
+    clearSelectedFlight({ closeSidebar: isMobileViewport });
   }
 
   function handleViewportChange(event) {
@@ -1681,6 +1700,11 @@
       return;
     }
 
+    if (event.key === "Escape") {
+      clearSelectedFlight({ closeSidebar: isMobileViewport });
+      return;
+    }
+
     if (isTypingField) {
       return;
     }
@@ -2242,6 +2266,7 @@
         on:boundschange={handleBoundsChange}
         on:viewportchange={handleViewportChange}
         on:select={handleFlightSelect}
+        on:backgroundclick={handleMapBackgroundClick}
       />
     </div>
 
@@ -2414,10 +2439,7 @@
               class="quick-card-close"
               type="button"
               aria-label="Close selected aircraft"
-              on:click={() => {
-                selectedIcao24 = null;
-                selectedFlightSnapshot = null;
-              }}
+              on:click={() => clearSelectedFlight()}
             >
               ×
             </button>
@@ -2948,13 +2970,7 @@
             class="rail-close"
             type="button"
             aria-label="Close selected aircraft"
-            on:click={() => {
-              selectedIcao24 = null;
-              selectedFlightSnapshot = null;
-              if (isMobileViewport) {
-                closeMobileSidebar();
-              }
-            }}
+            on:click={() => clearSelectedFlight({ closeSidebar: true })}
           >
             ×
           </button>

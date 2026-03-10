@@ -29,6 +29,7 @@
   let trailLayer;
   let motionVectorLayer;
   let routeLayer;
+  let selectionLayer;
   const markerRegistry = new Map();
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
@@ -338,6 +339,44 @@
     ]).addTo(map);
   }
 
+  function syncSelectionLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (selectionLayer) {
+      map.removeLayer(selectionLayer);
+      selectionLayer = null;
+    }
+
+    if (!selectedIcao24) {
+      return;
+    }
+
+    const selectedFlight = flights.find((flight) => flight.icao24 === selectedIcao24);
+    if (!selectedFlight) {
+      return;
+    }
+
+    selectionLayer = L.layerGroup([
+      L.circleMarker([selectedFlight.latitude, selectedFlight.longitude], {
+        radius: 14,
+        weight: 2.5,
+        color: "#e6f6ff",
+        fillOpacity: 0,
+        opacity: 0.95,
+      }),
+      L.circleMarker([selectedFlight.latitude, selectedFlight.longitude], {
+        radius: 22,
+        weight: 1.4,
+        color: "#86d2ff",
+        fillOpacity: 0,
+        opacity: 0.42,
+        dashArray: "5 5",
+      }),
+    ]).addTo(map);
+  }
+
   function getSelectedRouteAirports() {
     return (selectedRouteAirports ?? [])
       .filter(
@@ -460,19 +499,47 @@
       disableClusteringAtZoom: 9,
       maxClusterRadius: 38,
       iconCreateFunction(cluster) {
+        const childCount = cluster.getChildCount();
+        const clusterSizeClass =
+          childCount >= 40 ? "cluster-large" : childCount >= 12 ? "cluster-medium" : "cluster-small";
         return L.divIcon({
-          html: `<span>${cluster.getChildCount()}</span>`,
-          className: "aircraft-cluster",
+          html: `<span>${childCount}</span>`,
+          className: `aircraft-cluster ${clusterSizeClass}`,
           iconSize: [30, 30],
         });
       },
     }).addTo(map);
+    aircraftLayer.on("clusterclick", (event) => {
+      const cluster = event.layer;
+      if (map.getZoom() >= 8) {
+        cluster.spiderfy();
+        return;
+      }
+
+      cluster.zoomToBounds({
+        padding: [52, 52],
+      });
+    });
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
+    map.on("click", (event) => {
+      const target = event.originalEvent?.target;
+      if (
+        target instanceof Element &&
+        target.closest(
+          ".aircraft-icon-shell, .aircraft-cluster, .leaflet-tooltip, .leaflet-control, .route-airport-label"
+        )
+      ) {
+        return;
+      }
+
+      dispatch("backgroundclick");
+    });
     map.on("moveend zoomend", emitBounds);
     document.addEventListener("fullscreenchange", syncFullscreenState);
     emitBounds();
 
     return () => {
+      map.off("click");
       map.off("moveend zoomend", emitBounds);
       document.removeEventListener("fullscreenchange", syncFullscreenState);
       map.remove();
@@ -481,6 +548,7 @@
       trailLayer = null;
       motionVectorLayer = null;
       routeLayer = null;
+      selectionLayer = null;
       markerRegistry.clear();
     };
   });
@@ -528,6 +596,7 @@
 
   $: syncTrailLayer();
   $: syncMotionVectorLayer();
+  $: syncSelectionLayer();
   $: syncRouteLayer();
   $: focusSelectedRoute();
 
@@ -541,6 +610,12 @@
   <div bind:this={container} class="map-root"></div>
   <div class="map-tint" aria-hidden="true"></div>
   <div class="map-vignette" aria-hidden="true"></div>
+
+  {#if selectedIcao24}
+    <div class="selection-hint">
+      <span>Press `Esc` or click empty map to clear selection</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -613,6 +688,25 @@
     line-height: 1.45;
   }
 
+  .selection-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 9.25rem;
+    transform: translateX(-50%);
+    z-index: 1080;
+    pointer-events: none;
+    padding: 0.42rem 0.72rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: rgba(236, 244, 251, 0.86);
+    background: rgba(13, 16, 21, 0.8);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+    backdrop-filter: blur(10px);
+  }
+
   :global(.leaflet-control-zoom) {
     border: 0;
     box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22);
@@ -648,6 +742,52 @@
     border: 0;
   }
 
+  :global(.aircraft-marker) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.42rem;
+  }
+
+  :global(.aircraft-callout) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.55rem;
+    max-width: 8rem;
+    padding: 0 0.55rem;
+    overflow: hidden;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #eff7fd;
+    background: rgba(14, 19, 25, 0.92);
+    border: 1px solid rgba(134, 210, 255, 0.3);
+    box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
+  }
+
+  :global(.aircraft-icon-wrap) {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+  }
+
+  :global(.aircraft-icon-wrap::before) {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 999px;
+    opacity: 0;
+    transform: scale(0.72);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      box-shadow 160ms ease;
+  }
+
   :global(.aircraft-cluster) {
     display: grid;
     place-items: center;
@@ -663,6 +803,18 @@
       inset 0 0 0 2px rgba(0, 0, 0, 0.12);
   }
 
+  :global(.aircraft-cluster.cluster-medium) {
+    transform: scale(1.08);
+  }
+
+  :global(.aircraft-cluster.cluster-large) {
+    transform: scale(1.18);
+    box-shadow:
+      0 10px 22px rgba(0, 0, 0, 0.28),
+      inset 0 0 0 2px rgba(0, 0, 0, 0.12),
+      0 0 0 6px rgba(245, 185, 8, 0.12);
+  }
+
   :global(.aircraft-cluster span) {
     transform: translateY(1px);
   }
@@ -672,6 +824,100 @@
     height: 22px;
     filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.24));
     transform-origin: center;
+    transition:
+      transform 160ms ease,
+      filter 160ms ease;
+  }
+
+  :global(.aircraft-icon-shell:hover .aircraft-icon) {
+    filter: drop-shadow(0 6px 10px rgba(0, 0, 0, 0.3));
+    transform: scale(1.08);
+  }
+
+  :global(.aircraft-icon-shell:hover .aircraft-icon-wrap::before) {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: inset 0 0 0 2px rgba(255, 211, 79, 0.42);
+  }
+
+  :global(.aircraft-icon-shell.is-selected .aircraft-icon-wrap::before) {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow:
+      inset 0 0 0 2px rgba(134, 210, 255, 0.85),
+      0 0 0 6px rgba(134, 210, 255, 0.18);
+  }
+
+  :global(.aircraft-icon-shell.is-watched .aircraft-icon-wrap::before) {
+    opacity: 1;
+    transform: scale(0.94);
+    box-shadow: inset 0 0 0 2px rgba(125, 240, 177, 0.7);
+  }
+
+  :global(.aircraft-icon-shell.is-muted .aircraft-icon-wrap::before) {
+    box-shadow: none;
+  }
+
+  :global(.leaflet-tooltip.aircraft-hover-tooltip) {
+    padding: 0;
+    border: 0;
+    border-radius: 15px;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  :global(.leaflet-tooltip.aircraft-hover-tooltip:before) {
+    display: none;
+  }
+
+  :global(.aircraft-hover-card) {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 10.5rem;
+    padding: 0.64rem 0.72rem;
+    border-radius: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #ecf3fa;
+    background:
+      linear-gradient(180deg, rgba(25, 28, 33, 0.98) 0%, rgba(12, 14, 18, 0.98) 100%);
+    box-shadow:
+      0 18px 28px rgba(0, 0, 0, 0.24),
+      inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  }
+
+  :global(.aircraft-hover-card strong) {
+    font-size: 0.82rem;
+    color: #f8fbff;
+  }
+
+  :global(.aircraft-hover-card span),
+  :global(.aircraft-hover-card small) {
+    color: rgba(198, 209, 221, 0.78);
+  }
+
+  :global(.aircraft-hover-card span) {
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  :global(.aircraft-hover-card small) {
+    font-size: 0.66rem;
+  }
+
+  :global(.aircraft-hover-metrics) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+    margin-top: 0.18rem;
+  }
+
+  :global(.aircraft-hover-metrics span) {
+    padding: 0.18rem 0.38rem;
+    border-radius: 999px;
+    font-size: 0.64rem;
+    font-weight: 800;
+    color: #eaf1f8;
+    background: rgba(255, 255, 255, 0.06);
   }
 
   :global(.leaflet-tooltip.route-airport-label) {
@@ -690,6 +936,12 @@
   }
 
   @media (max-width: 960px) {
+    .selection-hint {
+      bottom: 8.7rem;
+      max-width: calc(100vw - 1.5rem);
+      text-align: center;
+    }
+
     :global(.leaflet-top.leaflet-right) {
       top: 5rem;
       right: 0.75rem;

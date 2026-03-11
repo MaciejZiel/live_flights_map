@@ -75,6 +75,9 @@ class ADSBLolRouteClient:
         return {
             "callsign": route.get("callsign") or normalized_callsign,
             "airline_code": self._normalize_text(route.get("airline_code"), uppercase=True),
+            "airline_name": self._normalize_text(
+                route.get("airline_name") or route.get("airline")
+            ),
             "flight_number": self._normalize_text(route.get("number"), uppercase=True),
             "airport_codes": self._normalize_text(route.get("airport_codes"), uppercase=True),
             "iata_codes": self._normalize_text(route.get("_airport_codes_iata"), uppercase=True),

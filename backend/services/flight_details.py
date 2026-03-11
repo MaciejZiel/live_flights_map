@@ -63,7 +63,17 @@ class FlightDetailsService:
             warnings.append(str(exc))
 
         try:
-            photo = self.photo_client.fetch_photo(normalized_registration)
+            photo = self.photo_client.fetch_photo(
+                normalized_registration,
+                type_code=normalized_type_code,
+                operator_code=self._derive_operator_code(normalized_callsign),
+                airline_code=self._normalize_text(route.get("airline_code"), uppercase=True)
+                if isinstance(route, dict)
+                else None,
+                airline_name=self._normalize_text(route.get("airline_name"))
+                if isinstance(route, dict)
+                else None,
+            )
         except FlightProviderError as exc:
             photo = None
             warnings.append(str(exc))

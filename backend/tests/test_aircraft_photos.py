@@ -47,16 +47,25 @@ class _ProviderStub:
         self,
         photo: dict[str, object] | None = None,
         error: Exception | None = None,
+        query_photos: dict[str, dict[str, object] | None] | None = None,
     ) -> None:
         self.photo = photo
         self.error = error
         self.calls: list[str | None] = []
+        self.query_photos = query_photos or {}
+        self.query_calls: list[str] = []
 
     def fetch_photo(self, registration: str | None) -> dict[str, object] | None:
         self.calls.append(registration)
         if self.error:
             raise self.error
         return self.photo
+
+    def fetch_photo_query(self, query: str, **_: object) -> dict[str, object] | None:
+        self.query_calls.append(query)
+        if self.error:
+            raise self.error
+        return self.query_photos.get(query)
 
 
 class WikimediaCommonsClientTests(unittest.TestCase):
@@ -179,6 +188,52 @@ class AircraftPhotoServiceTests(unittest.TestCase):
         self.assertIn("Primary unavailable.", str(context.exception))
         self.assertIn("Fallback unavailable.", str(context.exception))
 
+    def test_tries_registration_variants_before_giving_up(self) -> None:
+        primary = _ProviderStub(photo=None)
+        service = AircraftPhotoService([primary])
+
+        service.fetch_photo("SP-LVF")
+
+        self.assertEqual(primary.calls, ["SP-LVF", "SPLVF"])
+
+    def test_uses_contextual_query_when_exact_registration_lookup_fails(self) -> None:
+        provider = _ProviderStub(
+            photo=None,
+            query_photos={
+                "SP-LVF E75": {
+                    "thumbnail_url": "https://example.com/contextual.jpg",
+                    "source": "contextual",
+                }
+            },
+        )
+        service = AircraftPhotoService([provider])
+
+        photo = service.fetch_photo("SP-LVF", type_code="E75")
+
+        self.assertEqual(photo["source"], "contextual")
+        self.assertIn("SP-LVF E75", provider.query_calls)
+
+    def test_uses_representative_query_after_exact_queries_fail(self) -> None:
+        provider = _ProviderStub(
+            photo=None,
+            query_photos={
+                "LOT E75 aircraft": {
+                    "thumbnail_url": "https://example.com/representative.jpg",
+                    "source": "representative",
+                }
+            },
+        )
+        service = AircraftPhotoService([provider])
+
+        photo = service.fetch_photo(
+            "SP-LVF",
+            type_code="E75",
+            airline_code="LOT",
+        )
+
+        self.assertEqual(photo["source"], "representative")
+        self.assertEqual(photo["match_type"], "representative")
+
 
 class OpenverseClientTests(unittest.TestCase):
     def test_fetch_photo_parses_openverse_result(self) -> None:
@@ -245,6 +300,41 @@ class OpenverseClientTests(unittest.TestCase):
 
         self.assertIsNotNone(photo)
         self.assertEqual(photo["thumbnail_url"], "https://images.example.com/matched-thumb.jpg")
+
+    def test_fetch_photo_query_uses_type_and_airline_terms_for_scoring(self) -> None:
+        client = _OpenverseClientStub(
+            {
+                "results": [
+                    {
+                        "title": "Boeing 787",
+                        "url": "https://images.example.com/generic.jpg",
+                        "thumbnail": "https://images.example.com/generic-thumb.jpg",
+                        "provider": "flickr",
+                        "fields_matched": ["title"],
+                        "tags": [{"name": "boeing787"}],
+                        "mature": False,
+                    },
+                    {
+                        "title": "United Airlines Boeing 787-9",
+                        "url": "https://images.example.com/united.jpg",
+                        "thumbnail": "https://images.example.com/united-thumb.jpg",
+                        "provider": "flickr",
+                        "fields_matched": ["title", "tags.name"],
+                        "tags": [{"name": "unitedairlines"}, {"name": "b789"}],
+                        "mature": False,
+                    },
+                ]
+            }
+        )
+
+        photo = client.fetch_photo_query(
+            "United Airlines B789 aircraft",
+            type_code="B789",
+            airline_name="United Airlines",
+        )
+
+        self.assertIsNotNone(photo)
+        self.assertEqual(photo["thumbnail_url"], "https://images.example.com/united-thumb.jpg")
 
 
 if __name__ == "__main__":

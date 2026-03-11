@@ -37,7 +37,32 @@ class WikimediaCommonsClient:
         if not normalized_registration:
             return None
 
-        response = self._request_photo_lookup(normalized_registration)
+        return self.fetch_photo_query(
+            normalized_registration,
+            registration=normalized_registration,
+        )
+
+    def fetch_photo_query(
+        self,
+        query: str,
+        *,
+        registration: str | None = None,
+        type_code: str | None = None,
+        operator_code: str | None = None,
+        airline_code: str | None = None,
+        airline_name: str | None = None,
+    ) -> dict[str, Any] | None:
+        normalized_query = self._normalize_text(query)
+        if not normalized_query:
+            return None
+
+        normalized_registration = self._normalize_text(registration, uppercase=True)
+        normalized_type_code = self._normalize_text(type_code, uppercase=True)
+        normalized_operator_code = self._normalize_text(operator_code, uppercase=True)
+        normalized_airline_code = self._normalize_text(airline_code, uppercase=True)
+        normalized_airline_name = self._normalize_text(airline_name)
+
+        response = self._request_photo_lookup(normalized_query)
         payload = response.json()
         pages = payload.get("query", {}).get("pages") or []
         if not isinstance(pages, list) or not pages:
@@ -45,14 +70,21 @@ class WikimediaCommonsClient:
 
         normalized_pages = sorted(
             (
-                self._normalize_page(page, normalized_registration)
+                self._normalize_page(
+                    page,
+                    registration=normalized_registration,
+                    type_code=normalized_type_code,
+                    operator_code=normalized_operator_code,
+                    airline_code=normalized_airline_code,
+                    airline_name=normalized_airline_name,
+                )
                 for page in pages
                 if isinstance(page, dict)
             ),
             key=lambda item: item["score"],
             reverse=True,
         )
-        normalized_pages = [page for page in normalized_pages if page["photo"]]
+        normalized_pages = [page for page in normalized_pages if page["photo"] and page["score"] > 0]
         if not normalized_pages:
             return None
 
@@ -109,7 +141,12 @@ class WikimediaCommonsClient:
     def _normalize_page(
         cls,
         page: dict[str, Any],
-        registration: str,
+        *,
+        registration: str | None,
+        type_code: str | None,
+        operator_code: str | None,
+        airline_code: str | None,
+        airline_name: str | None,
     ) -> dict[str, object]:
         title = cls._normalize_text(page.get("title")) or ""
         imageinfo = page.get("imageinfo") or []
@@ -149,28 +186,49 @@ class WikimediaCommonsClient:
             "license": license_name,
             "description": description,
         }
-        score = cls._score_candidate(title, registration, description)
+        score = cls._score_candidate(
+            title=title,
+            registration=registration,
+            description=description,
+            type_code=type_code,
+            operator_code=operator_code,
+            airline_code=airline_code,
+            airline_name=airline_name,
+        )
         return {"score": score, "photo": photo}
 
     @classmethod
     def _score_candidate(
         cls,
+        *,
         title: str,
-        registration: str,
+        registration: str | None,
         description: str | None,
+        type_code: str | None,
+        operator_code: str | None,
+        airline_code: str | None,
+        airline_name: str | None,
     ) -> int:
         normalized_title = title.upper()
         normalized_description = (description or "").upper()
         score = 0
 
-        if registration in normalized_title:
+        if registration and registration in normalized_title:
             score += 10
-        if registration in normalized_description:
+        if registration and registration in normalized_description:
             score += 6
         if normalized_title.startswith("FILE:"):
             score += 1
         if any(token in normalized_title for token in ("AIRCRAFT", "BOEING", "AIRBUS", "EMBRAER", "CESSNA")):
             score += 1
+        for token in (type_code, operator_code, airline_code, airline_name):
+            normalized_token = cls._normalize_text(token, uppercase=True)
+            if not normalized_token:
+                continue
+            if normalized_token in normalized_title:
+                score += 3
+            if normalized_token in normalized_description:
+                score += 2
 
         return score
 

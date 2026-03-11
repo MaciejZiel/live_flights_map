@@ -35,7 +35,32 @@ class OpenverseClient:
         if not normalized_registration:
             return None
 
-        response = self._request_photo_lookup(normalized_registration)
+        return self.fetch_photo_query(
+            normalized_registration,
+            registration=normalized_registration,
+        )
+
+    def fetch_photo_query(
+        self,
+        query: str,
+        *,
+        registration: str | None = None,
+        type_code: str | None = None,
+        operator_code: str | None = None,
+        airline_code: str | None = None,
+        airline_name: str | None = None,
+    ) -> dict[str, Any] | None:
+        normalized_query = self._normalize_text(query)
+        if not normalized_query:
+            return None
+
+        normalized_registration = self._normalize_text(registration, uppercase=True)
+        normalized_type_code = self._normalize_text(type_code, uppercase=True)
+        normalized_operator_code = self._normalize_text(operator_code, uppercase=True)
+        normalized_airline_code = self._normalize_text(airline_code, uppercase=True)
+        normalized_airline_name = self._normalize_text(airline_name)
+
+        response = self._request_photo_lookup(normalized_query)
         payload = response.json()
         results = payload.get("results") or []
         if not isinstance(results, list) or not results:
@@ -43,22 +68,29 @@ class OpenverseClient:
 
         normalized_results = sorted(
             (
-                self._normalize_result(result, normalized_registration)
+                self._normalize_result(
+                    result,
+                    registration=normalized_registration,
+                    type_code=normalized_type_code,
+                    operator_code=normalized_operator_code,
+                    airline_code=normalized_airline_code,
+                    airline_name=normalized_airline_name,
+                )
                 for result in results
                 if isinstance(result, dict)
             ),
             key=lambda item: item["score"],
             reverse=True,
         )
-        normalized_results = [item for item in normalized_results if item["photo"]]
+        normalized_results = [item for item in normalized_results if item["photo"] and item["score"] > 0]
         if not normalized_results:
             return None
 
         return normalized_results[0]["photo"]
 
-    def _request_photo_lookup(self, registration: str) -> requests.Response:
+    def _request_photo_lookup(self, query: str) -> requests.Response:
         params = {
-            "q": registration,
+            "q": query,
             "page_size": 6,
         }
 
@@ -95,7 +127,12 @@ class OpenverseClient:
     def _normalize_result(
         cls,
         result: dict[str, Any],
-        registration: str,
+        *,
+        registration: str | None,
+        type_code: str | None,
+        operator_code: str | None,
+        airline_code: str | None,
+        airline_name: str | None,
     ) -> dict[str, object]:
         if result.get("mature"):
             return {"score": -1, "photo": None}
@@ -129,19 +166,33 @@ class OpenverseClient:
             "license": license_name,
             "attribution": attribution,
         }
-        score = cls._score_candidate(title, registration, tags, result.get("fields_matched") or [])
+        score = cls._score_candidate(
+            title=title,
+            registration=registration,
+            tags=tags,
+            fields_matched=result.get("fields_matched") or [],
+            type_code=type_code,
+            operator_code=operator_code,
+            airline_code=airline_code,
+            airline_name=airline_name,
+        )
         return {"score": score, "photo": photo}
 
     @classmethod
     def _score_candidate(
         cls,
+        *,
         title: str,
-        registration: str,
+        registration: str | None,
         tags: list[object],
         fields_matched: list[object],
+        type_code: str | None,
+        operator_code: str | None,
+        airline_code: str | None,
+        airline_name: str | None,
     ) -> int:
         normalized_title = title.upper()
-        normalized_registration = registration.upper()
+        normalized_registration = registration.upper() if registration else None
         normalized_tags = {
             cls._normalize_text(tag.get("name"), uppercase=True)
             for tag in tags
@@ -155,12 +206,12 @@ class OpenverseClient:
         }
 
         score = 0
-        if normalized_title == normalized_registration:
+        if normalized_registration and normalized_title == normalized_registration:
             score += 14
-        elif normalized_registration in normalized_title:
+        elif normalized_registration and normalized_registration in normalized_title:
             score += 10
 
-        if normalized_registration in normalized_tags:
+        if normalized_registration and normalized_registration in normalized_tags:
             score += 8
 
         if "tags.name" in normalized_fields:
@@ -168,6 +219,15 @@ class OpenverseClient:
 
         if "title" in normalized_fields:
             score += 1
+
+        for token in (type_code, operator_code, airline_code, airline_name):
+            normalized_token = cls._normalize_text(token, uppercase=True)
+            if not normalized_token:
+                continue
+            if normalized_token in normalized_title:
+                score += 3
+            if normalized_token in normalized_tags:
+                score += 4
 
         return score
 

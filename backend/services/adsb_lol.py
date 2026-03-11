@@ -38,26 +38,32 @@ class ADSBLolClient:
         self.session = requests.Session()
 
     def fetch_flights(self, bbox: dict[str, float]) -> dict[str, object]:
-        center_latitude, center_longitude, radius_nm = self._build_search_area(bbox)
-        response = self._request_snapshot(center_latitude, center_longitude, radius_nm)
-        payload = response.json()
-        now_timestamp = self._as_float(payload.get("now"))
-        aircraft = payload.get("ac") or []
+        flights_by_icao24: dict[str, dict[str, object]] = {}
+        search_areas = self._build_search_areas(bbox)
 
-        flights = []
-        for aircraft_state in aircraft:
-            normalized = self._normalize_aircraft(aircraft_state, now_timestamp)
-            if not normalized:
-                continue
+        for center_latitude, center_longitude, radius_nm in search_areas:
+            response = self._request_snapshot(center_latitude, center_longitude, radius_nm)
+            payload = response.json()
+            now_timestamp = self._as_float(payload.get("now"))
+            aircraft = payload.get("ac") or []
 
-            if not self._is_within_bbox(
-                normalized["latitude"],
-                normalized["longitude"],
-                bbox,
-            ):
-                continue
+            for aircraft_state in aircraft:
+                normalized = self._normalize_aircraft(aircraft_state, now_timestamp)
+                if not normalized:
+                    continue
 
-            flights.append(normalized)
+                if not self._is_within_bbox(
+                    normalized["latitude"],
+                    normalized["longitude"],
+                    bbox,
+                ):
+                    continue
+
+                icao24 = normalized["icao24"]
+                existing = flights_by_icao24.get(icao24)
+                flights_by_icao24[icao24] = self._merge_aircraft(existing, normalized)
+
+        flights = list(flights_by_icao24.values())
 
         return {
             "fetched_at": datetime.now(timezone.utc).isoformat(),
@@ -97,7 +103,48 @@ class ADSBLolClient:
 
         raise ADSBLolError("Unable to fetch data from ADSB.lol.")
 
+    def _build_search_areas(self, bbox: dict[str, float]) -> list[tuple[float, float, int]]:
+        pending_bboxes = [bbox]
+        search_areas: list[tuple[float, float, int]] = []
+
+        while pending_bboxes:
+            next_bbox = pending_bboxes.pop(0)
+            required_radius_nm = self._estimate_search_radius_nm(next_bbox)
+            center_latitude = (next_bbox["lamin"] + next_bbox["lamax"]) / 2
+            center_longitude = (next_bbox["lomin"] + next_bbox["lomax"]) / 2
+
+            if required_radius_nm <= self.radius_limit_nm:
+                search_areas.append(
+                    (
+                        center_latitude,
+                        center_longitude,
+                        max(1, required_radius_nm),
+                    )
+                )
+                continue
+
+            split_bboxes = self._split_bbox(next_bbox)
+            if split_bboxes is None:
+                search_areas.append(
+                    (
+                        center_latitude,
+                        center_longitude,
+                        self.radius_limit_nm,
+                    )
+                )
+                continue
+
+            pending_bboxes.extend(split_bboxes)
+
+        return search_areas
+
     def _build_search_area(self, bbox: dict[str, float]) -> tuple[float, float, int]:
+        center_latitude = (bbox["lamin"] + bbox["lamax"]) / 2
+        center_longitude = (bbox["lomin"] + bbox["lomax"]) / 2
+        radius_nm = min(self._estimate_search_radius_nm(bbox), self.radius_limit_nm)
+        return center_latitude, center_longitude, max(1, radius_nm)
+
+    def _estimate_search_radius_nm(self, bbox: dict[str, float]) -> int:
         center_latitude = (bbox["lamin"] + bbox["lamax"]) / 2
         center_longitude = (bbox["lomin"] + bbox["lomax"]) / 2
         corners = (
@@ -110,9 +157,82 @@ class ADSBLolClient:
             self._haversine_km(center_latitude, center_longitude, corner_latitude, corner_longitude)
             for corner_latitude, corner_longitude in corners
         )
-        radius_nm = math.ceil(radius_km / 1.852)
-        radius_nm = max(1, min(radius_nm, self.radius_limit_nm))
-        return center_latitude, center_longitude, radius_nm
+        return math.ceil(radius_km / 1.852)
+
+    def _split_bbox(
+        self,
+        bbox: dict[str, float],
+    ) -> tuple[dict[str, float], dict[str, float]] | None:
+        latitude_span_km = self._haversine_km(
+            bbox["lamin"],
+            (bbox["lomin"] + bbox["lomax"]) / 2,
+            bbox["lamax"],
+            (bbox["lomin"] + bbox["lomax"]) / 2,
+        )
+        longitude_span_km = self._haversine_km(
+            (bbox["lamin"] + bbox["lamax"]) / 2,
+            bbox["lomin"],
+            (bbox["lamin"] + bbox["lamax"]) / 2,
+            bbox["lomax"],
+        )
+
+        if latitude_span_km >= longitude_span_km:
+            midpoint = (bbox["lamin"] + bbox["lamax"]) / 2
+            if abs(midpoint - bbox["lamin"]) < 0.01 or abs(bbox["lamax"] - midpoint) < 0.01:
+                return None
+            return (
+                {
+                    **bbox,
+                    "lamax": midpoint,
+                },
+                {
+                    **bbox,
+                    "lamin": midpoint,
+                },
+            )
+
+        midpoint = (bbox["lomin"] + bbox["lomax"]) / 2
+        if abs(midpoint - bbox["lomin"]) < 0.01 or abs(bbox["lomax"] - midpoint) < 0.01:
+            return None
+        return (
+            {
+                **bbox,
+                "lomax": midpoint,
+            },
+            {
+                **bbox,
+                "lomin": midpoint,
+            },
+        )
+
+    @staticmethod
+    def _merge_aircraft(
+        existing: dict[str, object] | None,
+        candidate: dict[str, object],
+    ) -> dict[str, object]:
+        if existing is None:
+            return candidate
+
+        existing_last_contact = existing.get("last_contact")
+        candidate_last_contact = candidate.get("last_contact")
+        if existing_last_contact is None:
+            preferred = candidate
+            fallback = existing
+        elif candidate_last_contact is None:
+            preferred = existing
+            fallback = candidate
+        elif candidate_last_contact <= existing_last_contact:
+            preferred = candidate
+            fallback = existing
+        else:
+            preferred = existing
+            fallback = candidate
+
+        merged = dict(preferred)
+        for key, value in fallback.items():
+            if merged.get(key) in (None, "") and value not in (None, ""):
+                merged[key] = value
+        return merged
 
     def _normalize_aircraft(
         self,

@@ -3509,25 +3509,29 @@
     return sortedFlights;
   }
 
-  function getDisplayLimitForZoom(zoom) {
+  function getDisplayLimitForZoom(zoom, clusteringEnabled) {
+    if (!clusteringEnabled) {
+      return null;
+    }
+
     if (!Number.isFinite(zoom)) {
-      return 240;
+      return 1200;
     }
 
     if (zoom <= 4) {
-      return 120;
+      return 1600;
     }
 
     if (zoom <= 5) {
-      return 220;
+      return 2400;
     }
 
     if (zoom <= 6) {
-      return 360;
+      return 3600;
     }
 
     if (zoom <= 7) {
-      return 520;
+      return 5200;
     }
 
     return null;
@@ -3691,7 +3695,7 @@
   $: dimmedFlightIds = filters.dimFilteredTraffic && activeFilterCount
     ? mapFeedFlights.filter((flight) => flight.is_dimmed).map((flight) => flight.icao24)
     : [];
-  $: displayLimit = getDisplayLimitForZoom(mapViewport?.zoom);
+  $: displayLimit = getDisplayLimitForZoom(mapViewport?.zoom, aircraftClusteringEnabled);
   $: renderedFlights = prioritizeFlightsForMap(
     sortFlights(mapFeedFlights, sortBy, mapViewport),
     displayLimit,

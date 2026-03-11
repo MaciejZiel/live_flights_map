@@ -1631,11 +1631,21 @@
     }
 
     if (sharedSelectedIcao24) {
-      selectedIcao24 = sharedSelectedIcao24;
+      const normalizedSelectedIcao24 = sharedSelectedIcao24.trim().toLowerCase();
+      selectedIcao24 = normalizedSelectedIcao24;
+      selectedFlightSnapshot = {
+        ...(selectedFlightSnapshot ?? {}),
+        icao24: normalizedSelectedIcao24,
+      };
+      selectedAirportCode = null;
+      selectedAirportSnapshot = null;
+      selectedEntityContext = null;
     }
 
-    if (sharedSelectedAirport) {
+    if (sharedSelectedAirport && !sharedSelectedIcao24) {
       selectedAirportCode = sharedSelectedAirport.toUpperCase();
+      selectedFlightSnapshot = null;
+      selectedIcao24 = null;
     }
 
     if ([6, 12, 24].includes(sharedAirportHours)) {
@@ -4323,7 +4333,7 @@
   $: selectedFlightFeedLabel = activeReplaySnapshot ? "Archive replay" : feedLabel;
   $: selectedFlightFeedSummary = activeReplaySnapshot ? "Historical playback feed" : feedSummaryLabel;
   $: selectedFlightDetailsFreshness = getFreshnessLabel(selectedFlightDetails?.meta?.fetched_at);
-  $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
+  $: selectedFlightTrailKey = selectedIcao24 ?? null;
   $: replayArchiveBboxKey = buildBboxKey(state.bbox);
   $: replayArchiveRequestKey = replayArchiveBboxKey
     ? `${replayArchiveBboxKey}:${replayWindowMinutes}:${replayAnchorTimestamp ?? "live"}`
@@ -4369,7 +4379,9 @@
     !activeReplaySnapshot
   ) {
     lastSelectedFlightTrailKey = selectedFlightTrailKey;
-    loadSelectedFlightTrail(selectedFlight);
+    loadSelectedFlightTrail({
+      icao24: selectedFlightTrailKey,
+    });
   }
   $: if (!selectedFlight) {
     followAircraft = false;

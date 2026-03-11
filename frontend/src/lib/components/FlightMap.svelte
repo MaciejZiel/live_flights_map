@@ -44,9 +44,11 @@
   let aircraftLayer;
   let airportLayer;
   let trailLayer;
+  let trailRenderer;
   let motionVectorLayer;
   let routeLayer;
   let selectionLayer;
+  let overlayVectorRenderer;
   let weatherLayer;
   let weatherFrame = null;
   let weatherRefreshTimer = null;
@@ -410,6 +412,7 @@
         const progress = markers.length <= 1 ? 0.6 : index / (markers.length - 1);
         return L.circleMarker([point.latitude, point.longitude], {
           pane: TRAIL_PANE_NAME,
+          renderer: trailRenderer,
           radius: 2.2 + progress * 1.8,
           weight: 1.1,
           color: "rgba(9, 29, 44, 0.82)",
@@ -426,6 +429,7 @@
     trailLayer = L.layerGroup([
       L.polyline(latLngs, {
         pane: TRAIL_PANE_NAME,
+        renderer: trailRenderer,
         color: "rgba(8, 24, 36, 0.44)",
         weight: 12,
         opacity: 1,
@@ -435,6 +439,7 @@
       }),
       L.polyline(latLngs, {
         pane: TRAIL_PANE_NAME,
+        renderer: trailRenderer,
         color: "#62d8ff",
         weight: 5.4,
         opacity: 0.98,
@@ -444,6 +449,7 @@
       }),
       L.polyline(recentTrailLatLngs, {
         pane: TRAIL_PANE_NAME,
+        renderer: trailRenderer,
         color: "#effcff",
         weight: 3.2,
         opacity: 0.96,
@@ -454,6 +460,7 @@
       ...breadcrumbMarkers,
       L.circleMarker([startPoint.latitude, startPoint.longitude], {
         pane: TRAIL_PANE_NAME,
+        renderer: trailRenderer,
         radius: 4,
         weight: 1.6,
         color: "rgba(9, 29, 44, 0.88)",
@@ -462,6 +469,7 @@
       }),
       L.circleMarker([latestPoint.latitude, latestPoint.longitude], {
         pane: TRAIL_PANE_NAME,
+        renderer: trailRenderer,
         radius: 5.2,
         weight: 1.8,
         color: "rgba(9, 29, 44, 0.9)",
@@ -511,6 +519,7 @@
           projectedPoint,
         ],
         {
+          renderer: overlayVectorRenderer,
           color: "#79cfff",
           weight: 2.5,
           opacity: 0.92,
@@ -518,6 +527,7 @@
         }
       ),
       L.circleMarker(projectedPoint, {
+        renderer: overlayVectorRenderer,
         radius: 5,
         weight: 2,
         color: "#dff6ff",
@@ -548,6 +558,7 @@
 
     selectionLayer = L.layerGroup([
       L.circleMarker([selectedFlight.latitude, selectedFlight.longitude], {
+        renderer: overlayVectorRenderer,
         radius: 14,
         weight: 2.5,
         color: "#e6f6ff",
@@ -555,6 +566,7 @@
         opacity: 0.95,
       }),
       L.circleMarker([selectedFlight.latitude, selectedFlight.longitude], {
+        renderer: overlayVectorRenderer,
         radius: 22,
         weight: 1.4,
         color: "#86d2ff",
@@ -600,6 +612,7 @@
 
     const routePoints = [
       L.polyline(routeLatLngs, {
+        renderer: overlayVectorRenderer,
         color: "#ffd34f",
         weight: 4,
         opacity: 0.94,
@@ -608,6 +621,7 @@
       }),
       ...routeAirports.map((airport, index) => {
         const marker = L.circleMarker([airport.latitude, airport.longitude], {
+          renderer: overlayVectorRenderer,
           radius: 5,
           weight: 2,
           color: index === 0 ? "#7dd3fc" : "#f97316",
@@ -880,6 +894,10 @@
     const trailPane = map.createPane(TRAIL_PANE_NAME);
     trailPane.style.zIndex = "580";
     trailPane.style.pointerEvents = "none";
+    trailRenderer = L.svg({
+      pane: TRAIL_PANE_NAME,
+    }).addTo(map);
+    overlayVectorRenderer = L.svg().addTo(map);
 
     L.control.zoom({
       position: "bottomleft",
@@ -943,9 +961,11 @@
       activeMapStyle = null;
       activeAircraftClusteringEnabled = null;
       trailLayer = null;
+      trailRenderer = null;
       motionVectorLayer = null;
       routeLayer = null;
       selectionLayer = null;
+      overlayVectorRenderer = null;
       airportLayer = null;
       weatherLayer = null;
       if (weatherRefreshTimer) {
@@ -1007,15 +1027,31 @@
   });
 
   $: if (map && denseAircraftCanvas) {
+    flights;
+    selectedIcao24;
+    watchedIcao24s;
+    dimmedIcao24s;
+    watchModeEnabled;
+    gpuTrafficLayerEnabled;
+    aircraftRenderMode;
     scheduleDenseAircraftOverlayDraw();
   }
 
-  $: syncAirportLayer();
+  $: if (map && airportLayer) {
+    airports;
+    selectedAirportKey;
+    showAirportMarkers;
+    syncAirportLayer();
+  }
 
   $: if (map) {
     setBasemap(mapStyle);
   }
-  $: syncWeatherLayer();
+  $: if (map) {
+    weatherLayerEnabled;
+    weatherFrame;
+    syncWeatherLayer();
+  }
 
   $: if (
     map &&
@@ -1040,19 +1076,43 @@
     applyFocusRequest(focusRequest);
   }
 
-  $: syncTrailLayer();
-  $: syncMotionVectorLayer();
-  $: syncSelectionLayer();
-  $: syncRouteLayer();
-  $: focusSelectedRoute();
+  $: if (map) {
+    trailPoints;
+    syncTrailLayer();
+  }
+  $: if (map) {
+    flights;
+    selectedIcao24;
+    syncMotionVectorLayer();
+  }
+  $: if (map) {
+    flights;
+    selectedIcao24;
+    syncSelectionLayer();
+  }
+  $: if (map) {
+    selectedRouteAirports;
+    selectedIcao24;
+    syncRouteLayer();
+    focusSelectedRoute();
+  }
 
   $: if (!selectedIcao24) {
     lastRouteFocusKey = null;
   }
-  $: centerOnSelectedAircraft();
+  $: if (map) {
+    flights;
+    selectedIcao24;
+    followAircraft;
+    centerOnSelectedAircraft();
+  }
 </script>
 
-<div bind:this={shell} class:fullscreen={isFullscreen} class={`map-shell map-style-${mapStyle}`}>
+<div
+  bind:this={shell}
+  class:fullscreen={isFullscreen}
+  class={`map-shell map-style-${mapStyle}`}
+>
   <div bind:this={container} class="map-root"></div>
   <canvas
     bind:this={denseAircraftCanvas}

@@ -412,10 +412,10 @@
           pane: TRAIL_PANE_NAME,
           radius: 2.2 + progress * 1.8,
           weight: 1.1,
-          color: "rgba(63, 32, 5, 0.78)",
-          fillColor: `rgba(255, ${Math.round(184 + progress * 48)}, ${Math.round(
-            72 + progress * 74
-          )}, ${0.26 + progress * 0.38})`,
+          color: "rgba(9, 29, 44, 0.82)",
+          fillColor: `rgba(${Math.round(102 + progress * 84)}, ${Math.round(
+            208 + progress * 32
+          )}, 255, ${0.3 + progress * 0.42})`,
           fillOpacity: 1,
         });
       });
@@ -426,8 +426,8 @@
     trailLayer = L.layerGroup([
       L.polyline(latLngs, {
         pane: TRAIL_PANE_NAME,
-        color: "rgba(43, 21, 4, 0.38)",
-        weight: 10,
+        color: "rgba(8, 24, 36, 0.44)",
+        weight: 12,
         opacity: 1,
         lineCap: "round",
         lineJoin: "round",
@@ -435,18 +435,18 @@
       }),
       L.polyline(latLngs, {
         pane: TRAIL_PANE_NAME,
-        color: "#f59e0b",
-        weight: 4.2,
-        opacity: 0.9,
+        color: "#62d8ff",
+        weight: 5.4,
+        opacity: 0.98,
         lineCap: "round",
         lineJoin: "round",
         smoothFactor: 1.2,
       }),
       L.polyline(recentTrailLatLngs, {
         pane: TRAIL_PANE_NAME,
-        color: "#fff1a6",
-        weight: 2.4,
-        opacity: 0.94,
+        color: "#effcff",
+        weight: 3.2,
+        opacity: 0.96,
         lineCap: "round",
         lineJoin: "round",
         smoothFactor: 1.2,
@@ -456,16 +456,16 @@
         pane: TRAIL_PANE_NAME,
         radius: 4,
         weight: 1.6,
-        color: "rgba(68, 33, 5, 0.86)",
-        fillColor: "#f59e0b",
+        color: "rgba(9, 29, 44, 0.88)",
+        fillColor: "#62d8ff",
         fillOpacity: 0.9,
       }),
       L.circleMarker([latestPoint.latitude, latestPoint.longitude], {
         pane: TRAIL_PANE_NAME,
         radius: 5.2,
         weight: 1.8,
-        color: "rgba(94, 56, 10, 0.94)",
-        fillColor: "#fff1a6",
+        color: "rgba(9, 29, 44, 0.9)",
+        fillColor: "#effcff",
         fillOpacity: 0.96,
       }),
     ]).addTo(map);
@@ -878,7 +878,7 @@
     currentZoom = map.getZoom();
 
     const trailPane = map.createPane(TRAIL_PANE_NAME);
-    trailPane.style.zIndex = "350";
+    trailPane.style.zIndex = "580";
     trailPane.style.pointerEvents = "none";
 
     L.control.zoom({

@@ -14,7 +14,7 @@ export function getRouteQualityMeta(detailQuality, detailsStatus) {
 
   if (routeConfidence === "verified" || routeState === "resolved") {
     return {
-      label: "Verified route",
+      label: "Verified",
       note: "Resolved airport pair matches the current flight identity.",
       tone: "strong",
     };
@@ -22,7 +22,7 @@ export function getRouteQualityMeta(detailQuality, detailsStatus) {
 
   if (routeConfidence === "tentative" || routeState === "unverified") {
     return {
-      label: "Tentative route",
+      label: "Tentative",
       note: "Looks plausible, but the route still needs confirmation.",
       tone: "soft",
     };
@@ -30,14 +30,14 @@ export function getRouteQualityMeta(detailQuality, detailsStatus) {
 
   if (detailsStatus === "loading" || detailsStatus === "refreshing") {
     return {
-      label: "Resolving route",
+      label: "Resolving",
       note: "Showing live track first while route matching catches up.",
       tone: "muted",
     };
   }
 
   return {
-    label: "Live track only",
+    label: "Live only",
     note: "No confirmed route match yet.",
     tone: "muted",
   };
@@ -49,7 +49,7 @@ export function getPhotoQualityMeta(detailQuality, hasPhoto) {
 
   if (!hasPhoto || photoMatch === "missing") {
     return {
-      label: "No photo yet",
+      label: "No photo",
       note: "Free photo sources do not have a usable match yet.",
       tone: "muted",
     };
@@ -57,7 +57,7 @@ export function getPhotoQualityMeta(detailQuality, hasPhoto) {
 
   if (photoMatch === "representative") {
     return {
-      label: "Representative photo",
+      label: "Representative",
       note: photoSource
         ? `Matched from ${photoSource} for the same type or operator.`
         : "Matched for the same type or operator.",
@@ -66,7 +66,7 @@ export function getPhotoQualityMeta(detailQuality, hasPhoto) {
   }
 
   return {
-    label: "Exact aircraft photo",
+    label: "Exact",
     note: photoSource ? `Matched by registration from ${photoSource}.` : "Matched by registration.",
     tone: "strong",
   };
@@ -82,7 +82,7 @@ export function getFreshnessMeta({
 }) {
   if (isReplayActive) {
     return {
-      label: "Replay frame",
+      label: "Replay",
       note: `${snapshotFeedLabel} via ${snapshotTransport}.`,
       tone: "soft",
     };
@@ -94,7 +94,7 @@ export function getFreshnessMeta({
 
   if (snapshotAgeSeconds === null && detailsSyncing) {
     return {
-      label: "Syncing now",
+      label: "Syncing",
       note: "Waiting for the next live frame and refreshed details.",
       tone: "muted",
     };
@@ -102,14 +102,14 @@ export function getFreshnessMeta({
 
   if (snapshotAgeSeconds === null) {
     return {
-      label: "Waiting for live data",
+      label: "Waiting",
       note: "First live snapshot has not arrived yet.",
       tone: "muted",
     };
   }
 
   const label =
-    snapshotAgeSeconds <= 20 ? "Fresh now" : snapshotAgeSeconds <= 90 ? "A little older" : "Cached snapshot";
+    snapshotAgeSeconds <= 20 ? "Live" : snapshotAgeSeconds <= 90 ? "Delayed" : "Cached";
   const detailPart =
     detailAgeSeconds === null ? (detailsSyncing ? "details syncing" : "details pending") : `details ${detailAgeSeconds}s old`;
 

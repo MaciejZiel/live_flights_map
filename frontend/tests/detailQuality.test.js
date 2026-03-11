@@ -9,13 +9,13 @@ import {
 
 test("getRouteQualityMeta distinguishes verified and tentative routes", () => {
   assert.deepEqual(getRouteQualityMeta({ route_confidence: "verified" }, "success"), {
-    label: "Verified route",
+    label: "Verified",
     note: "Resolved airport pair matches the current flight identity.",
     tone: "strong",
   });
 
   assert.deepEqual(getRouteQualityMeta({ route_confidence: "tentative" }, "success"), {
-    label: "Tentative route",
+    label: "Tentative",
     note: "Looks plausible, but the route still needs confirmation.",
     tone: "soft",
   });
@@ -31,7 +31,7 @@ test("getPhotoQualityMeta distinguishes exact and representative photos", () => 
       true
     ),
     {
-      label: "Exact aircraft photo",
+      label: "Exact",
       note: "Matched by registration from Planespotting.",
       tone: "strong",
     }
@@ -46,7 +46,7 @@ test("getPhotoQualityMeta distinguishes exact and representative photos", () => 
       true
     ),
     {
-      label: "Representative photo",
+      label: "Representative",
       note: "Matched from Wikimedia Commons for the same type or operator.",
       tone: "soft",
     }
@@ -63,7 +63,7 @@ test("getFreshnessMeta softens live age states", () => {
       snapshotTransport: "Polling",
     }),
     {
-      label: "Fresh now",
+      label: "Live",
       note: "Live frame 8s old, details 3s old.",
       tone: "strong",
     }
@@ -78,7 +78,7 @@ test("getFreshnessMeta softens live age states", () => {
       snapshotTransport: "Polling",
     }),
     {
-      label: "Cached snapshot",
+      label: "Cached",
       note: "Live frame 144s old, details 23s old.",
       tone: "muted",
     }

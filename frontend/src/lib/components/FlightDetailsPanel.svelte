@@ -310,10 +310,47 @@
         ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}`
         : "direct route"
       : "route pending";
+  $: flightStateMeta = flight
+    ? {
+        label: flight.on_ground ? "Ground" : "Airborne",
+        note: flight.on_ground ? "Surface position" : "Live airborne track",
+        tone: flight.on_ground ? "soft" : "strong",
+      }
+    : {
+        label: "Waiting",
+        note: "Aircraft state pending",
+        tone: "muted",
+      };
   $: coverageLabel = isReplayActive ? "Archive replay" : snapshotConfidence;
   $: coverageNote = isReplayActive
     ? snapshotFeedSummary
     : `${snapshotFeedLabel} · ${snapshotQualitySummary}`;
+  $: heroQualityItems = [
+    {
+      title: "State",
+      value: flightStateMeta.label,
+      note: flightStateMeta.note,
+      tone: flightStateMeta.tone,
+    },
+    {
+      title: "Route",
+      value: routeQualityMeta.label,
+      note: routeQualityMeta.note,
+      tone: routeQualityMeta.tone,
+    },
+    {
+      title: "Photo",
+      value: photoQualityMeta.label,
+      note: photoQualityMeta.note,
+      tone: photoQualityMeta.tone,
+    },
+    {
+      title: "Data",
+      value: freshnessMeta.label,
+      note: freshnessMeta.note,
+      tone: freshnessMeta.tone,
+    },
+  ];
 </script>
 
 <section class="panel details-panel" data-testid="flight-details-panel">
@@ -353,12 +390,6 @@
               {#if routeFlightNumber}
                 <span class="route-badge">{routeFlightNumber}</span>
               {/if}
-              <span class={`route-badge tone-${photoQualityMeta.tone}`}>
-                {hasPhoto ? photoQualityMeta.label : "No photo yet"}
-              </span>
-              {#if route?.plausible === false}
-                <span class="route-badge tone-soft">Tentative route</span>
-              {/if}
             </div>
 
             <button class="hero-dismiss" type="button" aria-label="Close selected aircraft" on:click={onClose}>
@@ -397,6 +428,16 @@
         <div class="route-summary">
           <span>{route?.iata_codes ?? route?.airport_codes ?? "Route lookup pending"}</span>
           <strong>{routeSummaryValue}</strong>
+        </div>
+
+        <div class="hero-quality-strip">
+          {#each heroQualityItems as item}
+            <article class={`hero-quality-chip tone-${item.tone}`}>
+              <span>{item.title}</span>
+              <strong>{item.value}</strong>
+              <small>{item.note}</small>
+            </article>
+          {/each}
         </div>
 
         <div class="hero-metric-grid">
@@ -1006,6 +1047,51 @@
     background: rgba(255, 255, 255, 0.045);
   }
 
+  .hero-quality-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  .hero-quality-chip {
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.68rem 0.74rem;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.028);
+  }
+
+  .hero-quality-chip span {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(171, 186, 202, 0.56);
+  }
+
+  .hero-quality-chip strong {
+    font-size: 0.82rem;
+    color: #f4f7fb;
+    line-height: 1.15;
+  }
+
+  .hero-quality-chip small {
+    color: rgba(196, 208, 220, 0.74);
+    font-size: 0.7rem;
+    line-height: 1.3;
+  }
+
+  .hero-quality-chip.tone-strong {
+    border-color: rgba(120, 200, 255, 0.18);
+    background: rgba(120, 200, 255, 0.08);
+  }
+
+  .hero-quality-chip.tone-soft {
+    border-color: rgba(255, 211, 79, 0.18);
+    background: rgba(255, 211, 79, 0.06);
+  }
+
   .card-label {
     display: flex;
     align-items: center;
@@ -1510,6 +1596,7 @@
     }
 
     .hero-metric-grid,
+    .hero-quality-strip,
     .map-control-row,
     .route-strip,
     .airport-desk-grid,

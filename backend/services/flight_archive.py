@@ -111,6 +111,47 @@ class FlightArchiveService:
                 if "connection" in locals():
                     connection.close()
 
+    def run_maintenance(self, vacuum: bool = False) -> dict[str, object]:
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(hours=self.retention_hours)
+        ).isoformat()
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                cursor = connection.cursor()
+                snapshot_rows_before = cursor.execute(
+                    "SELECT COUNT(*) FROM snapshots"
+                ).fetchone()[0]
+                position_rows_before = cursor.execute(
+                    "SELECT COUNT(*) FROM positions"
+                ).fetchone()[0]
+                self._prune_locked(cursor, cutoff_timestamp)
+                connection.commit()
+
+                if vacuum:
+                    connection.execute("VACUUM")
+
+                snapshot_rows_after = cursor.execute(
+                    "SELECT COUNT(*) FROM snapshots"
+                ).fetchone()[0]
+                position_rows_after = cursor.execute(
+                    "SELECT COUNT(*) FROM positions"
+                ).fetchone()[0]
+            finally:
+                connection.close()
+
+        return {
+            "cutoff_timestamp": cutoff_timestamp,
+            "vacuumed": vacuum,
+            "snapshot_rows_before": snapshot_rows_before,
+            "snapshot_rows_after": snapshot_rows_after,
+            "position_rows_before": position_rows_before,
+            "position_rows_after": position_rows_after,
+            "snapshots_pruned": max(0, snapshot_rows_before - snapshot_rows_after),
+            "positions_pruned": max(0, position_rows_before - position_rows_after),
+        }
+
     def list_replay_snapshots(
         self,
         bbox: dict[str, float],

@@ -1,15 +1,5 @@
-from dotenv import load_dotenv
-
-from backend import create_app
-
-load_dotenv()
-
-app = create_app()
+from backend.entrypoints.api import app, main
 
 
 if __name__ == "__main__":
-    app.run(
-        host=app.config["HOST"],
-        port=app.config["PORT"],
-        debug=app.config["DEBUG"],
-    )
+    main()

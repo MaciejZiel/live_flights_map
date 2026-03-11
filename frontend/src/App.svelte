@@ -4337,6 +4337,7 @@
                 <input
                   bind:this={searchInput}
                   bind:value={filters.query}
+                  data-testid="global-search-input"
                   type="text"
                   placeholder="Search aircraft, flights, airports, airlines, routes, locations"
                   title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
@@ -4345,7 +4346,7 @@
               </label>
 
               {#if showSearchSuggestions}
-                <div class="search-suggestions">
+                <div class="search-suggestions" data-testid="search-suggestions">
                   <EntitySearchPanel
                     query={searchQuery}
                     status={remoteSearchStatus}
@@ -5142,7 +5143,7 @@
               </article>
               <article>
                 <span>Alerts</span>
-                <strong>{alertRules.length}</strong>
+                <strong data-testid="workspace-alert-count">{alertRules.length}</strong>
                 <small>{activeAlertEvents.length} recent events</small>
               </article>
               <article>

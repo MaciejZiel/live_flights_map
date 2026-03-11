@@ -313,7 +313,7 @@
         : snapshotConfidence;
 </script>
 
-<section class="panel details-panel">
+<section class="panel details-panel" data-testid="flight-details-panel">
   {#if flight}
     <section class="hero-card">
       <div class="photo-shell">
@@ -321,15 +321,19 @@
           {#if photoUrl}
             {#if photo?.link}
               <a class="photo-link photo-asset" href={photo.link} rel="noreferrer" target="_blank">
-                <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
+                <img data-testid="flight-photo-image" alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
               </a>
             {:else}
               <div class="photo-asset">
-                <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
+                <img data-testid="flight-photo-image" alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
               </div>
             {/if}
           {:else}
-            <div class:loading={detailsStatus === "loading" || detailsStatus === "refreshing"} class="photo-placeholder">
+            <div
+              class:loading={detailsStatus === "loading" || detailsStatus === "refreshing"}
+              class="photo-placeholder"
+              data-testid="flight-photo-placeholder"
+            >
               <div aria-hidden="true" class="photo-placeholder-glow"></div>
               <div aria-hidden="true" class="photo-placeholder-grid">
                 <span></span>
@@ -521,7 +525,7 @@
               <button class="secondary-action-button" type="button" on:click={onOpenTracking}>
                 Open tracking
               </button>
-              <button class="secondary-action-button" type="button" on:click={onAddAlert}>
+              <button class="secondary-action-button" data-testid="flight-add-alert" type="button" on:click={onAddAlert}>
                 Add alert
               </button>
               <button class="secondary-action-button" type="button" on:click={onRetryDetails}>

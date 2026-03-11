@@ -3694,7 +3694,6 @@
     .map((entry) => entry.flight)
     .slice(0, 4);
   $: visibleLeaderboardFlights = sortFlights(filteredFlights, "speed_desc", mapViewport).slice(0, 6);
-  $: leaderboardFlights = globalTrafficBoard.flights ?? [];
   $: airborneCount = filteredFlights.filter((flight) => !flight.on_ground).length;
   $: groundCount = Math.max(0, filteredFlights.length - airborneCount);
   $: averageSpeedKmh = filteredFlights.length
@@ -3747,18 +3746,8 @@
       : null,
   ].filter(Boolean);
   $: activeAlertEvents = alertEvents.slice(0, 4);
-  $: compactLeaderboardFlights = leaderboardFlights.slice(0, 3);
   $: countryActivity = buildCountryActivity(filteredFlights, 3);
   $: leadFeedFlight = visibleLeaderboardFlights[0] ?? null;
-  $: globalBoardStatusLabel =
-    globalTrafficBoard.status === "loading" || globalTrafficBoard.status === "refreshing"
-      ? "SYNC"
-      : globalTrafficBoard.source === "cache"
-        ? "CACHE"
-        : "WORLD";
-  $: globalBoardSummary = globalTrafficBoard.meta?.sectors_synced
-    ? `${globalTrafficBoard.meta.sectors_synced}/${globalTrafficBoard.meta.sectors_total} sectors synced`
-    : "Global board";
   $: showMobileStartHint =
     isMobileViewport &&
     !selectedFlight &&
@@ -4319,65 +4308,24 @@
         </button>
       </div>
 
-      <section class="widget-card persistent-tracked-widget">
-        <div class="widget-header">
-          <div class="widget-heading">
-            <strong>Most tracked flights</strong>
-            <span class="live-pill">{globalBoardStatusLabel}</span>
-          </div>
-        </div>
-
-        <p class="widget-caption">
-          {globalTrafficBoard.warning ?? globalTrafficBoard.error ?? globalBoardSummary}
-        </p>
-
-        {#if compactLeaderboardFlights.length}
-          <div class="widget-list">
-            {#each compactLeaderboardFlights as flight, index}
-              <button class="widget-row" type="button" on:click={() => selectWatchedFlight(flight)}>
-                <span class="widget-rank">{index + 1}.</span>
-                <span class="widget-main">
-                  <strong>{flight.callsign ?? flight.icao24}</strong>
-                  <span class="widget-codes">
-                    <small>{flight.icao24.toUpperCase()}</small>
-                    {#if deriveOperatorCode(flight)}
-                      <small>{deriveOperatorCode(flight)}</small>
-                    {/if}
-                  </span>
-                  <span>{flight.origin_country ?? "Unknown"} · {formatAltitude(flight.altitude)}</span>
-                </span>
-                <span class="widget-highlight">
-                  <strong>{flight.tracking_count ? `${flight.tracking_count}x` : "LIVE"}</strong>
-                  <small>{formatSpeed(flight.velocity).replace(" km/h", "")}</small>
-                </span>
-              </button>
-            {/each}
-          </div>
-        {:else}
-          <p class="widget-empty">Waiting for global sectors to sync.</p>
-        {/if}
-      </section>
-
       <div class="panel-stack">
         {#if utilityPanelMode === "radar"}
-          <section class="widget-card utility-summary-card">
+          <section class="widget-card utility-overview-card">
             <div class="widget-header">
               <div class="widget-heading">
-                <strong>Radar snapshot</strong>
+                <strong>Airspace overview</strong>
                 <span class="live-pill utility-state-pill">{transportLabel}</span>
               </div>
+              <button class="widget-mini-action" type="button" on:click={() => triggerViewPreset("europe")}>
+                Wider airspace
+              </button>
             </div>
 
-            <div class="utility-fact-grid">
+            <div class="utility-overview-grid">
               <article>
                 <span>Status</span>
                 <strong>{statusLabel}</strong>
                 <small>{freshnessLabel}</small>
-              </article>
-              <article>
-                <span>Confidence</span>
-                <strong>{confidenceLabel}</strong>
-                <small>{activeReplaySnapshot ? "Replay frame" : "Live feed"}</small>
               </article>
               <article>
                 <span>Map center</span>
@@ -4390,17 +4338,71 @@
                 <small>{airborneCount} airborne · {groundCount} ground</small>
               </article>
               <article>
-                <span>Airports</span>
-                <strong>{airportFeed.airports.length}</strong>
-                <small>{showAirportMarkers ? "Markers visible" : "Layer hidden"}</small>
+                <span>Confidence</span>
+                <strong>{confidenceLabel}</strong>
+                <small>{activeReplaySnapshot ? "Replay frame" : "Live feed"}</small>
               </article>
+            </div>
+
+            {#if leadFeedFlight}
+              <button class="featured-flight-card" type="button" on:click={() => selectWatchedFlight(leadFeedFlight)}>
+                <span class="featured-flight-copy">
+                  <small>Fastest in view</small>
+                  <strong>{leadFeedFlight.callsign ?? leadFeedFlight.icao24.toUpperCase()}</strong>
+                  <span>
+                    {leadFeedFlight.origin_country ?? "Unknown"}
+                    {#if deriveOperatorCode(leadFeedFlight)}
+                      · {deriveOperatorCode(leadFeedFlight)}
+                    {/if}
+                  </span>
+                </span>
+                <span class="featured-flight-metrics">
+                  <strong>{formatSpeed(leadFeedFlight.velocity)}</strong>
+                  <small>{formatAltitude(leadFeedFlight.altitude)}</small>
+                </span>
+              </button>
+            {/if}
+
+            {#if countryActivity.length}
+              <div class="overview-country-row">
+                {#each countryActivity as entry}
+                  <button
+                    class:active={filters.country.trim().toLowerCase() === entry.country.toLowerCase()}
+                    class="overview-country-pill"
+                    type="button"
+                    on:click={() => {
+                      const isActive = filters.country.trim().toLowerCase() === entry.country.toLowerCase();
+                      filters = {
+                        ...filters,
+                        country: isActive ? "" : entry.country,
+                      };
+                    }}
+                  >
+                    <span>{entry.country}</span>
+                    <strong>{entry.count}</strong>
+                    <small>{entry.ground} ground</small>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+
+            <div class="utility-action-row">
+              <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
+                Save area
+              </button>
+              <button class="widget-footer-button" type="button" on:click={monitorCurrentMapArea}>
+                Monitor area
+              </button>
+              <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("poland")}>
+                Poland view
+              </button>
             </div>
           </section>
 
-          <section class="widget-card filter-card">
+          <section class="widget-card filter-card filter-card-compact">
             <div class="widget-header">
               <div class="widget-heading">
-                <strong>Radar filters</strong>
+                <strong>Quick filters</strong>
                 <span class="live-pill utility-state-pill">{activeFilterCount}</span>
               </div>
               <button class="widget-mini-action" type="button" on:click={resetFilters}>Reset</button>
@@ -4427,358 +4429,6 @@
               </button>
             </div>
 
-            <div class="filter-form-grid">
-              <label class="filter-field">
-                <span>Min altitude</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="500"
-                  value={filters.minAltitude}
-                  placeholder="9000"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      minAltitude: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Min speed km/h</span>
-                <input
-                  type="number"
-                  min="0"
-                  step="50"
-                  value={filters.minSpeed}
-                  placeholder="700"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      minSpeed: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Aircraft type</span>
-                <input
-                  type="text"
-                  value={filters.aircraftType}
-                  placeholder="B38M"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      aircraftType: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Country</span>
-                <input
-                  type="text"
-                  value={filters.country}
-                  placeholder="Poland"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      country: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Operator</span>
-                <input
-                  type="text"
-                  value={filters.operator}
-                  placeholder="LOT"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      operator: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Route / airport</span>
-                <input
-                  type="text"
-                  value={filters.route}
-                  placeholder="WAW, EHAM, WAW-JFK"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      route: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Airport code</span>
-                <input
-                  type="text"
-                  value={filters.airportCode}
-                  placeholder="WAW or EPWA"
-                  on:input={(event) => {
-                    filters = {
-                      ...filters,
-                      airportCode: event.currentTarget.value,
-                    };
-                  }}
-                />
-              </label>
-
-              <label class="filter-field">
-                <span>Airport flow</span>
-                <select
-                  value={filters.airportFlow}
-                  on:change={(event) => {
-                    filters = {
-                      ...filters,
-                      airportFlow: event.currentTarget.value,
-                    };
-                  }}
-                >
-                  <option value="all">Arrivals + departures</option>
-                  <option value="arrivals">Arrivals only</option>
-                  <option value="departures">Departures only</option>
-                </select>
-              </label>
-
-              <label class="filter-field">
-                <span>Traffic state</span>
-                <select
-                  value={filters.trafficState}
-                  on:change={(event) => {
-                    filters = {
-                      ...filters,
-                      trafficState: event.currentTarget.value,
-                    };
-                  }}
-                >
-                  <option value="all">Airborne + ground</option>
-                  <option value="airborne">Airborne only</option>
-                  <option value="ground">Ground only</option>
-                </select>
-              </label>
-
-              <label class="filter-field">
-                <span>Traffic category</span>
-                <select
-                  value={filters.trafficCategory}
-                  on:change={(event) => {
-                    filters = {
-                      ...filters,
-                      trafficCategory: event.currentTarget.value,
-                    };
-                  }}
-                >
-                  {#each TRAFFIC_CATEGORY_OPTIONS as option}
-                    <option value={option.value}>{option.label}</option>
-                  {/each}
-                </select>
-              </label>
-
-              <label class="filter-field">
-                <span>Heading</span>
-                <select
-                  value={filters.headingBand}
-                  on:change={(event) => {
-                    filters = {
-                      ...filters,
-                      headingBand: event.currentTarget.value,
-                    };
-                  }}
-                >
-                  <option value="any">Any</option>
-                  <option value="north">Northbound</option>
-                  <option value="east">Eastbound</option>
-                  <option value="south">Southbound</option>
-                  <option value="west">Westbound</option>
-                </select>
-              </label>
-
-              <label class="filter-field">
-                <span>Freshness</span>
-                <select
-                  value={filters.recentActivity}
-                  on:change={(event) => {
-                    filters = {
-                      ...filters,
-                      recentActivity: event.currentTarget.value,
-                    };
-                  }}
-                >
-                  <option value="any">Any age</option>
-                  <option value="30s">30 seconds</option>
-                  <option value="2m">2 minutes</option>
-                  <option value="5m">5 minutes</option>
-                  <option value="15m">15 minutes</option>
-                </select>
-              </label>
-
-              <label class="filter-field filter-field-wide">
-                <span>Map filter mode</span>
-                <select
-                  value={filters.dimFilteredTraffic ? "dim" : "hide"}
-                  on:change={(event) => {
-                    filters = {
-                      ...filters,
-                      dimFilteredTraffic: event.currentTarget.value === "dim",
-                    };
-                  }}
-                >
-                  <option value="dim">Dim unmatched traffic</option>
-                  <option value="hide">Hide unmatched traffic</option>
-                </select>
-              </label>
-
-              <label class="filter-field filter-field-wide">
-                <span>Sort traffic board</span>
-                <select bind:value={sortBy}>
-                  <option value="altitude_desc">Altitude first</option>
-                  <option value="speed_desc">Speed first</option>
-                  <option value="distance_asc">Nearest first</option>
-                  <option value="last_contact_desc">Most recent first</option>
-                </select>
-              </label>
-            </div>
-
-            <div class="filter-suggestion-group">
-              {#if topTypeSuggestions.length}
-                <div class="suggestion-row">
-                  <span>Top types</span>
-                  <div>
-                    {#each topTypeSuggestions as suggestion}
-                      <button
-                        class="suggestion-pill"
-                        type="button"
-                        on:click={() => {
-                          filters = {
-                            ...filters,
-                            aircraftType: suggestion,
-                          };
-                        }}
-                      >
-                        {suggestion}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-
-              {#if topOperatorSuggestions.length}
-                <div class="suggestion-row">
-                  <span>Top operators</span>
-                  <div>
-                    {#each topOperatorSuggestions as suggestion}
-                      <button
-                        class="suggestion-pill"
-                        type="button"
-                        on:click={() => {
-                          filters = {
-                            ...filters,
-                            operator: suggestion,
-                          };
-                        }}
-                      >
-                        {suggestion}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-
-              {#if topCountrySuggestions.length}
-                <div class="suggestion-row">
-                  <span>Top countries</span>
-                  <div>
-                    {#each topCountrySuggestions as suggestion}
-                      <button
-                        class="suggestion-pill"
-                        type="button"
-                        on:click={() => {
-                          filters = {
-                            ...filters,
-                            country: suggestion,
-                          };
-                        }}
-                      >
-                        {suggestion}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-              {/if}
-            </div>
-
-            <div class="filter-suggestion-group">
-              <div class="suggestion-row">
-                <span>Map style</span>
-                <div>
-                  {#each MAP_STYLE_OPTIONS as option}
-                    <button
-                      class:active={mapStyle === option.value}
-                      class="filter-chip"
-                      type="button"
-                      on:click={() => {
-                        mapStyle = option.value;
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  {/each}
-                </div>
-              </div>
-
-              <div class="suggestion-row">
-                <span>Map layers</span>
-                <div>
-                  <button
-                    class:active={showAirportMarkers}
-                    class="filter-chip"
-                    type="button"
-                    on:click={() => {
-                      showAirportMarkers = !showAirportMarkers;
-                    }}
-                  >
-                    Airports
-                  </button>
-                  <button
-                    class:active={weatherLayerEnabled}
-                    class="filter-chip"
-                    type="button"
-                    on:click={() => {
-                      weatherLayerEnabled = !weatherLayerEnabled;
-                    }}
-                  >
-                    Weather radar
-                  </button>
-                </div>
-              </div>
-
-              <div class="suggestion-row">
-                <span>Area workflow</span>
-                <div>
-                  <button class="filter-chip" type="button" on:click={saveCurrentMapArea}>
-                    Save current area
-                  </button>
-                  <button class="filter-chip" type="button" on:click={monitorCurrentMapArea}>
-                    Monitor current area
-                  </button>
-                </div>
-              </div>
-            </div>
-
             {#if activeFilterTokens.length}
               <div class="filter-token-list">
                 {#each activeFilterTokens as token}
@@ -4790,69 +4440,409 @@
               </div>
             {/if}
 
-            <div class="preset-save-row">
-              <input
-                type="text"
-                placeholder="Arrival bank, Cargo sweep..."
-                value={presetName}
-                on:input={(event) => {
-                  presetName = event.currentTarget.value;
-                }}
-                on:keydown={(event) => event.key === "Enter" && saveCurrentPreset()}
-              />
-              <button class="widget-footer-button" type="button" on:click={saveCurrentPreset}>Save preset</button>
+            <div class="compact-filter-meta">
+              <span>{filters.dimFilteredTraffic ? "Unmatched traffic dimmed" : "Unmatched traffic hidden"}</span>
+              <strong>{airportFeed.airports.length} airports loaded</strong>
             </div>
+          </section>
 
-            {#if filterPresets.length}
-              <div class="preset-list">
-                {#each filterPresets as preset}
-                  <article class="preset-card">
+          <details class="utility-drawer" open={Boolean(activeFilterCount)}>
+            <summary>
+              <span>Advanced filters</span>
+              <strong>{activeFilterCount}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <div class="filter-form-grid">
+                <label class="filter-field">
+                  <span>Min altitude</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="500"
+                    value={filters.minAltitude}
+                    placeholder="9000"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        minAltitude: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Min speed km/h</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="50"
+                    value={filters.minSpeed}
+                    placeholder="700"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        minSpeed: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Aircraft type</span>
+                  <input
+                    type="text"
+                    value={filters.aircraftType}
+                    placeholder="B38M"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        aircraftType: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Country</span>
+                  <input
+                    type="text"
+                    value={filters.country}
+                    placeholder="Poland"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        country: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Operator</span>
+                  <input
+                    type="text"
+                    value={filters.operator}
+                    placeholder="LOT"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        operator: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Route / airport</span>
+                  <input
+                    type="text"
+                    value={filters.route}
+                    placeholder="WAW, EHAM, WAW-JFK"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        route: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Airport code</span>
+                  <input
+                    type="text"
+                    value={filters.airportCode}
+                    placeholder="WAW or EPWA"
+                    on:input={(event) => {
+                      filters = {
+                        ...filters,
+                        airportCode: event.currentTarget.value,
+                      };
+                    }}
+                  />
+                </label>
+
+                <label class="filter-field">
+                  <span>Airport flow</span>
+                  <select
+                    value={filters.airportFlow}
+                    on:change={(event) => {
+                      filters = {
+                        ...filters,
+                        airportFlow: event.currentTarget.value,
+                      };
+                    }}
+                  >
+                    <option value="all">Arrivals + departures</option>
+                    <option value="arrivals">Arrivals only</option>
+                    <option value="departures">Departures only</option>
+                  </select>
+                </label>
+
+                <label class="filter-field">
+                  <span>Traffic state</span>
+                  <select
+                    value={filters.trafficState}
+                    on:change={(event) => {
+                      filters = {
+                        ...filters,
+                        trafficState: event.currentTarget.value,
+                      };
+                    }}
+                  >
+                    <option value="all">Airborne + ground</option>
+                    <option value="airborne">Airborne only</option>
+                    <option value="ground">Ground only</option>
+                  </select>
+                </label>
+
+                <label class="filter-field">
+                  <span>Traffic category</span>
+                  <select
+                    value={filters.trafficCategory}
+                    on:change={(event) => {
+                      filters = {
+                        ...filters,
+                        trafficCategory: event.currentTarget.value,
+                      };
+                    }}
+                  >
+                    {#each TRAFFIC_CATEGORY_OPTIONS as option}
+                      <option value={option.value}>{option.label}</option>
+                    {/each}
+                  </select>
+                </label>
+
+                <label class="filter-field">
+                  <span>Heading</span>
+                  <select
+                    value={filters.headingBand}
+                    on:change={(event) => {
+                      filters = {
+                        ...filters,
+                        headingBand: event.currentTarget.value,
+                      };
+                    }}
+                  >
+                    <option value="any">Any</option>
+                    <option value="north">Northbound</option>
+                    <option value="east">Eastbound</option>
+                    <option value="south">Southbound</option>
+                    <option value="west">Westbound</option>
+                  </select>
+                </label>
+
+                <label class="filter-field">
+                  <span>Freshness</span>
+                  <select
+                    value={filters.recentActivity}
+                    on:change={(event) => {
+                      filters = {
+                        ...filters,
+                        recentActivity: event.currentTarget.value,
+                      };
+                    }}
+                  >
+                    <option value="any">Any age</option>
+                    <option value="30s">30 seconds</option>
+                    <option value="2m">2 minutes</option>
+                    <option value="5m">5 minutes</option>
+                    <option value="15m">15 minutes</option>
+                  </select>
+                </label>
+
+                <label class="filter-field filter-field-wide">
+                  <span>Map filter mode</span>
+                  <select
+                    value={filters.dimFilteredTraffic ? "dim" : "hide"}
+                    on:change={(event) => {
+                      filters = {
+                        ...filters,
+                        dimFilteredTraffic: event.currentTarget.value === "dim",
+                      };
+                    }}
+                  >
+                    <option value="dim">Dim unmatched traffic</option>
+                    <option value="hide">Hide unmatched traffic</option>
+                  </select>
+                </label>
+
+                <label class="filter-field filter-field-wide">
+                  <span>Sort traffic board</span>
+                  <select bind:value={sortBy}>
+                    <option value="altitude_desc">Altitude first</option>
+                    <option value="speed_desc">Speed first</option>
+                    <option value="distance_asc">Nearest first</option>
+                    <option value="last_contact_desc">Most recent first</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+          </details>
+
+          <details class="utility-drawer" open={false}>
+            <summary>
+              <span>Suggestions and map</span>
+              <strong>{topTypeSuggestions.length + topOperatorSuggestions.length + topCountrySuggestions.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <div class="filter-suggestion-group">
+                {#if topTypeSuggestions.length}
+                  <div class="suggestion-row">
+                    <span>Top types</span>
                     <div>
-                      <strong>{preset.name}</strong>
-                      <span>{countActiveFilters(preset.filters)} active rules</span>
+                      {#each topTypeSuggestions as suggestion}
+                        <button
+                          class="suggestion-pill"
+                          type="button"
+                          on:click={() => {
+                            filters = {
+                              ...filters,
+                              aircraftType: suggestion,
+                            };
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      {/each}
                     </div>
-                    <div class="preset-actions">
-                      <button class="widget-footer-button" type="button" on:click={() => applyFilterPreset(preset)}>
-                        Apply
-                      </button>
-                      <button class="preset-delete" type="button" on:click={() => deleteFilterPreset(preset.name)}>
-                        Delete
-                      </button>
-                    </div>
-                  </article>
-                {/each}
-              </div>
-            {/if}
-          </section>
+                  </div>
+                {/if}
 
-          <section class="widget-card widget-card-secondary">
-            <div class="widget-header">
-              <div class="widget-heading">
-                <strong>Airspace focus</strong>
-                <span class="live-pill">LIVE</span>
+                {#if topOperatorSuggestions.length}
+                  <div class="suggestion-row">
+                    <span>Top operators</span>
+                    <div>
+                      {#each topOperatorSuggestions as suggestion}
+                        <button
+                          class="suggestion-pill"
+                          type="button"
+                          on:click={() => {
+                            filters = {
+                              ...filters,
+                              operator: suggestion,
+                            };
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+
+                {#if topCountrySuggestions.length}
+                  <div class="suggestion-row">
+                    <span>Top countries</span>
+                    <div>
+                      {#each topCountrySuggestions as suggestion}
+                        <button
+                          class="suggestion-pill"
+                          type="button"
+                          on:click={() => {
+                            filters = {
+                              ...filters,
+                              country: suggestion,
+                            };
+                          }}
+                        >
+                          {suggestion}
+                        </button>
+                      {/each}
+                    </div>
+                  </div>
+                {/if}
+              </div>
+
+              <div class="filter-suggestion-group">
+                <div class="suggestion-row">
+                  <span>Map style</span>
+                  <div>
+                    {#each MAP_STYLE_OPTIONS as option}
+                      <button
+                        class:active={mapStyle === option.value}
+                        class="filter-chip"
+                        type="button"
+                        on:click={() => {
+                          mapStyle = option.value;
+                        }}
+                      >
+                        {option.label}
+                      </button>
+                    {/each}
+                  </div>
+                </div>
+
+                <div class="suggestion-row">
+                  <span>Map layers</span>
+                  <div>
+                    <button
+                      class:active={showAirportMarkers}
+                      class="filter-chip"
+                      type="button"
+                      on:click={() => {
+                        showAirportMarkers = !showAirportMarkers;
+                      }}
+                    >
+                      Airports
+                    </button>
+                    <button
+                      class:active={weatherLayerEnabled}
+                      class="filter-chip"
+                      type="button"
+                      on:click={() => {
+                        weatherLayerEnabled = !weatherLayerEnabled;
+                      }}
+                    >
+                      Weather radar
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
+          </details>
 
-            {#if countryActivity.length}
-              <div class="mini-stat-list">
-                {#each countryActivity as entry}
-                  <div>
-                    <span>
-                      <strong>{entry.country}</strong>
-                      <small>{entry.ground} ground</small>
-                    </span>
-                    <strong>{entry.count}</strong>
-                  </div>
-                {/each}
+          <details class="utility-drawer" open={filterPresets.length > 0}>
+            <summary>
+              <span>Saved presets</span>
+              <strong>{filterPresets.length}</strong>
+            </summary>
+            <div class="utility-drawer-body">
+              <div class="preset-save-row">
+                <input
+                  type="text"
+                  placeholder="Arrival bank, Cargo sweep..."
+                  value={presetName}
+                  on:input={(event) => {
+                    presetName = event.currentTarget.value;
+                  }}
+                  on:keydown={(event) => event.key === "Enter" && saveCurrentPreset()}
+                />
+                <button class="widget-footer-button" type="button" on:click={saveCurrentPreset}>Save preset</button>
               </div>
-            {:else}
-              <p class="widget-empty">Waiting for traffic clusters in view.</p>
-            {/if}
 
-            <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("europe")}>
-              Wider airspace
-            </button>
-          </section>
+              {#if filterPresets.length}
+                <div class="preset-list">
+                  {#each filterPresets as preset}
+                    <article class="preset-card">
+                      <div>
+                        <strong>{preset.name}</strong>
+                        <span>{countActiveFilters(preset.filters)} active rules</span>
+                      </div>
+                      <div class="preset-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => applyFilterPreset(preset)}>
+                          Apply
+                        </button>
+                        <button class="preset-delete" type="button" on:click={() => deleteFilterPreset(preset.name)}>
+                          Delete
+                        </button>
+                      </div>
+                    </article>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </details>
         {:else if utilityPanelMode === "replay"}
           <section class="widget-card utility-summary-card">
             <div class="widget-header">
@@ -6410,10 +6400,6 @@
     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.16);
   }
 
-  .widget-card-secondary {
-    gap: 0.62rem;
-  }
-
   .utility-summary-card {
     background: rgba(255, 255, 255, 0.028);
   }
@@ -6422,13 +6408,17 @@
     background: rgba(255, 255, 255, 0.022);
   }
 
-  .utility-fact-grid {
+  .utility-overview-card {
+    gap: 0.72rem;
+  }
+
+  .utility-overview-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.5rem;
   }
 
-  .utility-fact-grid article {
+  .utility-overview-grid article {
     display: grid;
     gap: 0.18rem;
     padding: 0.72rem 0.76rem;
@@ -6437,25 +6427,128 @@
     background: rgba(0, 0, 0, 0.18);
   }
 
-  .utility-fact-grid span {
+  .utility-overview-grid span {
     font-size: 0.68rem;
     text-transform: uppercase;
     letter-spacing: 0.14em;
     color: rgba(171, 186, 202, 0.62);
   }
 
-  .utility-fact-grid strong {
+  .utility-overview-grid strong {
     color: #f2f6fb;
     font-size: 0.9rem;
   }
 
-  .utility-fact-grid small {
+  .utility-overview-grid small {
     color: rgba(190, 203, 217, 0.74);
     font-size: 0.74rem;
   }
 
+  .featured-flight-card {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.85rem;
+    align-items: center;
+    width: 100%;
+    padding: 0.86rem 0.88rem;
+    border: 1px solid rgba(255, 211, 79, 0.18);
+    border-radius: 16px;
+    color: inherit;
+    background:
+      radial-gradient(circle at top right, rgba(245, 185, 8, 0.16), transparent 42%),
+      linear-gradient(180deg, rgba(27, 31, 37, 0.98) 0%, rgba(16, 18, 22, 0.98) 100%);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .featured-flight-copy,
+  .featured-flight-metrics {
+    display: grid;
+    gap: 0.16rem;
+  }
+
+  .featured-flight-copy {
+    min-width: 0;
+  }
+
+  .featured-flight-copy small,
+  .featured-flight-copy span,
+  .compact-filter-meta span {
+    color: rgba(190, 203, 217, 0.76);
+    font-size: 0.74rem;
+  }
+
+  .featured-flight-copy strong,
+  .featured-flight-metrics strong,
+  .compact-filter-meta strong {
+    color: #f4f7fb;
+  }
+
+  .featured-flight-metrics {
+    justify-items: end;
+  }
+
+  .featured-flight-metrics strong {
+    font-size: 0.94rem;
+  }
+
+  .featured-flight-metrics small {
+    color: #b3bcc8;
+    font-size: 0.72rem;
+  }
+
+  .overview-country-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
+  .overview-country-pill {
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.7rem 0.72rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 14px;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.035);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .overview-country-pill.active {
+    border-color: rgba(245, 185, 8, 0.28);
+    background: rgba(245, 185, 8, 0.09);
+  }
+
+  .overview-country-pill span {
+    color: rgba(190, 203, 217, 0.8);
+    font-size: 0.74rem;
+  }
+
+  .overview-country-pill strong {
+    color: #f5f7fb;
+    font-size: 0.92rem;
+  }
+
+  .overview-country-pill small {
+    color: rgba(171, 186, 202, 0.64);
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .utility-action-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
   .filter-card {
     gap: 0.78rem;
+  }
+
+  .filter-card-compact {
+    gap: 0.62rem;
   }
 
   .widget-header {
@@ -6472,8 +6565,7 @@
     min-width: 0;
   }
 
-  .widget-header strong,
-  .widget-main strong {
+  .widget-header strong {
     color: #f6f8fb;
     font-size: 0.96rem;
   }
@@ -6496,74 +6588,9 @@
     min-width: 3.5rem;
   }
 
-  .widget-list {
-    display: grid;
-    gap: 0.42rem;
-  }
-
-  .widget-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 0.55rem;
-    align-items: center;
-    width: 100%;
-    padding: 0.64rem 0.58rem;
-    border: 1px solid rgba(255, 255, 255, 0.05);
-    border-radius: 12px;
-    color: inherit;
-    background: rgba(0, 0, 0, 0.2);
-    text-align: left;
-    cursor: pointer;
-    transition:
-      transform 160ms ease,
-      border-color 160ms ease,
-      background 160ms ease;
-  }
-
-  .widget-row:hover {
-    transform: translateY(-1px);
-    border-color: rgba(255, 211, 79, 0.2);
-    background: rgba(0, 0, 0, 0.26);
-  }
-
-  .widget-rank {
-    color: #d9dde4;
-    font-weight: 800;
-    font-size: 0.86rem;
-  }
-
-  .widget-main {
-    display: grid;
-    gap: 0.14rem;
-  }
-
-  .widget-codes {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.28rem;
-  }
-
-  .widget-codes small {
-    padding: 0.08rem 0.34rem;
-    border-radius: 6px;
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    color: #d8e0ea;
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .widget-main span,
   .widget-empty {
     font-size: 0.72rem;
     color: #b3bcc8;
-  }
-
-  .widget-caption {
-    margin: 0;
-    font-size: 0.7rem;
-    color: rgba(193, 202, 214, 0.78);
   }
 
   .utility-drawer {
@@ -6743,24 +6770,6 @@
     cursor: pointer;
   }
 
-  .widget-highlight {
-    display: grid;
-    justify-items: end;
-    gap: 0.12rem;
-    min-width: 3.1rem;
-  }
-
-  .widget-highlight strong {
-    font-size: 0.88rem;
-    font-weight: 900;
-    color: #f5b908;
-  }
-
-  .widget-highlight small {
-    font-size: 0.64rem;
-    color: #aeb8c6;
-  }
-
   .mini-stat-list {
     display: grid;
     gap: 0.46rem;
@@ -6784,8 +6793,7 @@
     color: #b3bcc8;
   }
 
-  .mini-stat-list span strong,
-  .mini-stat-list div > strong {
+  .mini-stat-list span strong {
     color: #f3f6fa;
   }
 
@@ -6801,6 +6809,14 @@
     gap: 0.4rem;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+
+  .compact-filter-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    align-items: center;
+    flex-wrap: wrap;
   }
 
   .widget-footer-button {
@@ -7390,7 +7406,9 @@
     .filter-form-grid,
     .preset-save-row,
     .preset-card,
-    .utility-fact-grid,
+    .utility-overview-grid,
+    .utility-action-row,
+    .overview-country-row,
     .workflow-metrics,
     .inspector-tab-row,
     .workflow-header,

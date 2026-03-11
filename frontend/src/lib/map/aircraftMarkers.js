@@ -7,6 +7,7 @@ import {
   formatSpeed,
   formatVerticalRate,
 } from "../utils/flightFormatters.js";
+import { shouldUseDetailedAircraftMarker } from "../utils/mapPerformance.js";
 
 const POSITION_ANIMATION_MS = 1400;
 
@@ -72,7 +73,7 @@ function buildSelectedTooltipContent(flight) {
 }
 
 function bindMarkerTooltip(entry, selected) {
-  if (!entry?.marker) {
+  if (!entry?.marker || entry.renderMode !== "detailed") {
     return;
   }
 
@@ -97,23 +98,27 @@ function bindMarkerTooltip(entry, selected) {
           }
     );
     entry.tooltipMode = nextTooltipMode;
-  } else {
-    entry.marker.setTooltipContent(
-      selected ? buildSelectedTooltipContent(entry.flight) : buildTooltipContent(entry.flight)
-    );
+    return;
   }
+
+  entry.marker.setTooltipContent(
+    selected ? buildSelectedTooltipContent(entry.flight) : buildTooltipContent(entry.flight)
+  );
 }
 
 function syncMarkerOverlayState(entry, selected) {
-  if (!entry?.marker) {
+  if (!entry?.marker || entry.renderMode !== "detailed") {
     return;
   }
 
-  bindMarkerTooltip(entry, selected);
-
   if (selected) {
+    bindMarkerTooltip(entry, true);
     entry.marker.openTooltip();
     return;
+  }
+
+  if (entry.tooltipMode === "selected") {
+    bindMarkerTooltip(entry, false);
   }
 
   entry.marker.closeTooltip();
@@ -150,13 +155,7 @@ function animateMarkerPosition(entry, nextLatLng) {
   entry.animationFrame = requestAnimationFrame(step);
 }
 
-export function createAircraftIcon(
-  track = 0,
-  selected = false,
-  watched = false,
-  watchModeEnabled = false,
-  dimmed = false
-) {
+function getVisualPalette(selected, watched, watchModeEnabled, dimmed) {
   const fillColor = selected
     ? "#86d2ff"
     : watched
@@ -168,6 +167,73 @@ export function createAircraftIcon(
           : "#f7c716";
   const strokeColor = selected ? "#eff9ff" : watched ? "#ecfff4" : dimmed ? "#3d4650" : "#46370a";
   const opacity = dimmed ? 0.32 : watchModeEnabled && !watched && !selected ? 0.45 : 1;
+
+  return {
+    fillColor,
+    strokeColor,
+    opacity,
+  };
+}
+
+function setMarkerDataset(marker, icao24) {
+  const markerElement = marker.getElement?.();
+  if (markerElement) {
+    markerElement.dataset.icao24 = icao24;
+  }
+}
+
+function getDetailedVisualKey(track, selected, watched, watchModeEnabled, dimmed) {
+  return [
+    Math.round(track ?? 0),
+    selected ? 1 : 0,
+    watched ? 1 : 0,
+    watchModeEnabled ? 1 : 0,
+    dimmed ? 1 : 0,
+  ].join(":");
+}
+
+function getLiteStyle(flight, selected, watched, watchModeEnabled, dimmed) {
+  const { fillColor, strokeColor, opacity } = getVisualPalette(
+    selected,
+    watched,
+    watchModeEnabled,
+    dimmed
+  );
+  const airborne = !flight.on_ground;
+
+  return {
+    radius: selected ? 6 : watched ? 5 : airborne ? 3.6 : 3,
+    weight: airborne ? 1 : 0.8,
+    color: strokeColor,
+    opacity: Math.min(0.9, opacity),
+    fillColor,
+    fillOpacity: airborne ? Math.max(0.58, opacity * 0.86) : Math.max(0.42, opacity * 0.74),
+  };
+}
+
+function getLiteVisualKey(flight, selected, watched, watchModeEnabled, dimmed) {
+  return [
+    selected ? 1 : 0,
+    watched ? 1 : 0,
+    watchModeEnabled ? 1 : 0,
+    dimmed ? 1 : 0,
+    flight.on_ground ? 1 : 0,
+  ].join(":");
+}
+
+export function createAircraftIcon(
+  track = 0,
+  selected = false,
+  watched = false,
+  watchModeEnabled = false,
+  dimmed = false
+) {
+  const { fillColor, strokeColor, opacity } = getVisualPalette(
+    selected,
+    watched,
+    watchModeEnabled,
+    dimmed
+  );
   const shellClassNames = [
     "aircraft-icon-shell",
     selected ? "is-selected" : "",
@@ -200,39 +266,13 @@ export function createAircraftIcon(
   });
 }
 
-function updateMarkerEntry(entry, flight, selected, watched, watchModeEnabled, dimmed) {
-  const nextLatLng = [flight.latitude, flight.longitude];
-
-  entry.flight = flight;
-  entry.selected = selected;
-  animateMarkerPosition(entry, nextLatLng);
-  entry.marker.setIcon(
-    createAircraftIcon(
-      flight.true_track ?? 0,
-      selected,
-      watched,
-      watchModeEnabled,
-      dimmed
-    )
-  );
-  entry.marker.setTooltipContent(buildTooltipContent(flight));
-  entry.marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
-
-  const markerElement = entry.marker.getElement();
-  if (markerElement) {
-    markerElement.dataset.icao24 = flight.icao24;
-  }
-
-  syncMarkerOverlayState(entry, selected);
-}
-
-function createMarkerEntry(
+function createDetailedMarkerEntry(
   layer,
   flight,
-  selectedIcao24,
-  watchedIcao24s,
+  selected,
+  watched,
   watchModeEnabled,
-  dimmedIcao24s,
+  dimmed,
   onSelect
 ) {
   const marker = L.marker([flight.latitude, flight.longitude], {
@@ -241,10 +281,10 @@ function createMarkerEntry(
     riseOnHover: true,
     icon: createAircraftIcon(
       flight.true_track ?? 0,
-      selectedIcao24 === flight.icao24,
-      watchedIcao24s.has(flight.icao24),
+      selected,
+      watched,
       watchModeEnabled,
-      dimmedIcao24s.has(flight.icao24)
+      dimmed
     ),
     keyboard: false,
   });
@@ -252,15 +292,25 @@ function createMarkerEntry(
   const entry = {
     marker,
     flight,
-    selected: selectedIcao24 === flight.icao24,
+    selected,
     tooltipMode: null,
     animationFrame: null,
+    renderMode: "detailed",
+    visualKey: getDetailedVisualKey(
+      flight.true_track ?? 0,
+      selected,
+      watched,
+      watchModeEnabled,
+      dimmed
+    ),
   };
 
   marker.on("mouseover", () => {
     if (entry.selected) {
       return;
     }
+
+    bindMarkerTooltip(entry, false);
     marker.openTooltip();
   });
 
@@ -268,6 +318,7 @@ function createMarkerEntry(
     if (entry.selected) {
       return;
     }
+
     marker.closeTooltip();
   });
 
@@ -278,16 +329,189 @@ function createMarkerEntry(
     }
   });
 
-  marker.setZIndexOffset(
-    selectedIcao24 === flight.icao24 ? 1200 : watchedIcao24s.has(flight.icao24) ? 480 : 0
+  marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
+  marker.addTo(layer);
+  setMarkerDataset(marker, flight.icao24);
+  syncMarkerOverlayState(entry, selected);
+  return entry;
+}
+
+function createLiteMarkerEntry(layer, flight, selected, watched, watchModeEnabled, dimmed) {
+  const marker = L.circleMarker([flight.latitude, flight.longitude], {
+    ...getLiteStyle(flight, selected, watched, watchModeEnabled, dimmed),
+    bubblingMouseEvents: false,
+    interactive: false,
+    keyboard: false,
+  }).addTo(layer);
+
+  return {
+    marker,
+    flight,
+    selected,
+    tooltipMode: null,
+    animationFrame: null,
+    renderMode: "lite",
+    visualKey: getLiteVisualKey(flight, selected, watched, watchModeEnabled, dimmed),
+  };
+}
+
+function createMarkerEntry(
+  layer,
+  flight,
+  selectedIcao24,
+  watchedIcao24s,
+  watchModeEnabled,
+  dimmedIcao24s,
+  onSelect,
+  renderMode
+) {
+  const selected = selectedIcao24 === flight.icao24;
+  const watched = watchedIcao24s.has(flight.icao24);
+  const dimmed = dimmedIcao24s.has(flight.icao24);
+  const detailedMarker = shouldUseDetailedAircraftMarker(renderMode, selected, watched);
+
+  if (detailedMarker) {
+    return createDetailedMarkerEntry(
+      layer,
+      flight,
+      selected,
+      watched,
+      watchModeEnabled,
+      dimmed,
+      onSelect
+    );
+  }
+
+  return createLiteMarkerEntry(layer, flight, selected, watched, watchModeEnabled, dimmed);
+}
+
+function removeMarkerEntry(layer, entry) {
+  if (entry.animationFrame) {
+    cancelAnimationFrame(entry.animationFrame);
+  }
+
+  layer.removeLayer(entry.marker);
+}
+
+function replaceMarkerEntry(
+  layer,
+  entry,
+  flight,
+  selected,
+  watched,
+  watchModeEnabled,
+  dimmed,
+  onSelect,
+  renderMode
+) {
+  removeMarkerEntry(layer, entry);
+
+  return createMarkerEntry(
+    layer,
+    flight,
+    selected ? flight.icao24 : null,
+    watched ? new Set([flight.icao24]) : new Set(),
+    watchModeEnabled,
+    dimmed ? new Set([flight.icao24]) : new Set(),
+    onSelect,
+    renderMode
+  );
+}
+
+function updateDetailedMarkerEntry(entry, flight, selected, watched, watchModeEnabled, dimmed) {
+  const nextLatLng = [flight.latitude, flight.longitude];
+  const previousSelected = entry.selected;
+  const visualKey = getDetailedVisualKey(
+    flight.true_track ?? 0,
+    selected,
+    watched,
+    watchModeEnabled,
+    dimmed
   );
 
-  marker.addTo(layer);
-  const markerElement = marker.getElement();
-  if (markerElement) {
-    markerElement.dataset.icao24 = flight.icao24;
+  entry.flight = flight;
+  entry.selected = selected;
+
+  if (entry.visualKey !== visualKey) {
+    entry.marker.setIcon(
+      createAircraftIcon(
+        flight.true_track ?? 0,
+        selected,
+        watched,
+        watchModeEnabled,
+        dimmed
+      )
+    );
+    entry.visualKey = visualKey;
   }
-  syncMarkerOverlayState(entry, entry.selected);
+
+  animateMarkerPosition(entry, nextLatLng);
+  entry.marker.setZIndexOffset(selected ? 1200 : watched ? 480 : 0);
+  setMarkerDataset(entry.marker, flight.icao24);
+
+  if (selected || previousSelected !== selected) {
+    syncMarkerOverlayState(entry, selected);
+    return;
+  }
+
+  if (entry.tooltipMode === "hover" && entry.marker.isTooltipOpen()) {
+    bindMarkerTooltip(entry, false);
+  }
+}
+
+function updateLiteMarkerEntry(entry, flight, selected, watched, watchModeEnabled, dimmed) {
+  const nextLatLng = [flight.latitude, flight.longitude];
+  const visualKey = getLiteVisualKey(flight, selected, watched, watchModeEnabled, dimmed);
+
+  entry.flight = flight;
+  entry.selected = selected;
+
+  if (entry.animationFrame) {
+    cancelAnimationFrame(entry.animationFrame);
+    entry.animationFrame = null;
+  }
+
+  entry.marker.setLatLng(nextLatLng);
+
+  if (entry.visualKey !== visualKey) {
+    entry.marker.setStyle(getLiteStyle(flight, selected, watched, watchModeEnabled, dimmed));
+    entry.visualKey = visualKey;
+  }
+}
+
+function updateMarkerEntry(
+  layer,
+  entry,
+  flight,
+  selected,
+  watched,
+  watchModeEnabled,
+  dimmed,
+  onSelect,
+  renderMode
+) {
+  const nextDetailedState = shouldUseDetailedAircraftMarker(renderMode, selected, watched);
+
+  if (entry.renderMode !== (nextDetailedState ? "detailed" : "lite")) {
+    return replaceMarkerEntry(
+      layer,
+      entry,
+      flight,
+      selected,
+      watched,
+      watchModeEnabled,
+      dimmed,
+      onSelect,
+      renderMode
+    );
+  }
+
+  if (nextDetailedState) {
+    updateDetailedMarkerEntry(entry, flight, selected, watched, watchModeEnabled, dimmed);
+    return entry;
+  }
+
+  updateLiteMarkerEntry(entry, flight, selected, watched, watchModeEnabled, dimmed);
   return entry;
 }
 
@@ -299,23 +523,32 @@ export function syncAircraftMarkers(
   watchedIcao24s = new Set(),
   watchModeEnabled = false,
   dimmedIcao24s = new Set(),
-  onSelect
+  onSelect,
+  renderMode = "detailed"
 ) {
   const nextIds = new Set();
 
   for (const flight of flights) {
     nextIds.add(flight.icao24);
 
+    const selected = selectedIcao24 === flight.icao24;
+    const watched = watchedIcao24s.has(flight.icao24);
+    const dimmed = dimmedIcao24s.has(flight.icao24);
     const existingEntry = registry.get(flight.icao24);
+
     if (existingEntry) {
-      updateMarkerEntry(
+      const nextEntry = updateMarkerEntry(
+        layer,
         existingEntry,
         flight,
-        selectedIcao24 === flight.icao24,
-        watchedIcao24s.has(flight.icao24),
+        selected,
+        watched,
         watchModeEnabled,
-        dimmedIcao24s.has(flight.icao24)
+        dimmed,
+        onSelect,
+        renderMode
       );
+      registry.set(flight.icao24, nextEntry);
       continue;
     }
 
@@ -326,7 +559,8 @@ export function syncAircraftMarkers(
       watchedIcao24s,
       watchModeEnabled,
       dimmedIcao24s,
-      onSelect
+      onSelect,
+      renderMode
     );
     registry.set(flight.icao24, entry);
   }
@@ -336,11 +570,7 @@ export function syncAircraftMarkers(
       continue;
     }
 
-    if (entry.animationFrame) {
-      cancelAnimationFrame(entry.animationFrame);
-    }
-
-    layer.removeLayer(entry.marker);
+    removeMarkerEntry(layer, entry);
     registry.delete(icao24);
   }
 }

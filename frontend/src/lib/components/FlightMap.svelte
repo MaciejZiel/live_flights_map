@@ -5,6 +5,7 @@
   import "leaflet.markercluster";
 
   import { syncAircraftMarkers } from "../map/aircraftMarkers.js";
+  import { getAircraftRenderMode } from "../utils/mapPerformance.js";
 
   export let flights = [];
   export let airports = [];
@@ -43,11 +44,13 @@
   const markerRegistry = new Map();
   const airportRegistry = new Map();
   let activeAircraftClusteringEnabled = null;
+  let aircraftRenderMode = "detailed";
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
   let lastFocusRequestId = null;
   let lastRouteFocusKey = null;
+  let currentZoom = initialViewport?.zoom ?? 7.1;
   const viewPresets = {
     poland: [
       [49.0, 14.0],
@@ -194,10 +197,11 @@
     });
 
     const center = map.getCenter();
+    currentZoom = map.getZoom();
     dispatch("viewportchange", {
       viewport: {
         center: [center.lat, center.lng],
-        zoom: map.getZoom(),
+        zoom: currentZoom,
       },
     });
   }
@@ -756,6 +760,7 @@
       minZoom: 4,
       preferCanvas: true,
     }).setView(initialCenter, initialZoom);
+    currentZoom = map.getZoom();
 
     L.control.zoom({
       position: "bottomleft",
@@ -765,7 +770,7 @@
 
     createAircraftLayer();
     airportLayer = L.layerGroup().addTo(map);
-    syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
+    syncAircraftMarkers(aircraftLayer, markerRegistry, flights, null, new Set(), false, new Set(), null, aircraftRenderMode);
     syncAirportLayer();
     loadWeatherFrame();
     weatherRefreshTimer = window.setInterval(() => {
@@ -833,9 +838,16 @@
       new Set(dimmedIcao24s),
       (flight) => {
         dispatch("select", { flight });
-      }
+      },
+      aircraftRenderMode
     );
   }
+
+  $: aircraftRenderMode = getAircraftRenderMode({
+    aircraftCount: flights?.length ?? 0,
+    zoom: currentZoom,
+    clusteringEnabled: aircraftClusteringEnabled,
+  });
 
   $: syncAirportLayer();
 

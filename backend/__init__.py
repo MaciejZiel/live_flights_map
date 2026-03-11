@@ -4,6 +4,7 @@ from .config import Config
 from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
+from .services.aircraft_photos import AircraftPhotoService
 from .services.airport_catalog import AirportCatalogService
 from .services.airport_weather import AirportWeatherService
 from .services.airport_workflow import AirportWorkflowService
@@ -16,6 +17,7 @@ from .services.flight_snapshot import FlightSnapshotService
 from .services.opensky import OpenSkyClient
 from .services.planespotting import PlanespottingClient
 from .services.traffic_intelligence import TrafficIntelligenceService
+from .services.wikimedia_commons import WikimediaCommonsClient
 from .services.workspace import WorkspaceService
 
 
@@ -85,10 +87,19 @@ def create_app() -> Flask:
             timeout=app.config["ADSB_LOL_ROUTE_TIMEOUT"],
             max_retries=app.config["ADSB_LOL_ROUTE_RETRY_COUNT"],
         ),
-        photo_client=PlanespottingClient(
-            base_url=app.config["PLANESPOTTING_BASE_URL"],
-            timeout=app.config["PLANESPOTTING_TIMEOUT"],
-            max_retries=app.config["PLANESPOTTING_RETRY_COUNT"],
+        photo_client=AircraftPhotoService(
+            providers=[
+                PlanespottingClient(
+                    base_url=app.config["PLANESPOTTING_BASE_URL"],
+                    timeout=app.config["PLANESPOTTING_TIMEOUT"],
+                    max_retries=app.config["PLANESPOTTING_RETRY_COUNT"],
+                ),
+                WikimediaCommonsClient(
+                    base_url=app.config["WIKIMEDIA_COMMONS_BASE_URL"],
+                    timeout=app.config["WIKIMEDIA_COMMONS_TIMEOUT"],
+                    max_retries=app.config["WIKIMEDIA_COMMONS_RETRY_COUNT"],
+                ),
+            ]
         ),
         cache_ttl=app.config["FLIGHT_DETAILS_CACHE_TTL"],
     )

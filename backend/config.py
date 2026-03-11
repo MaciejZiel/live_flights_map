@@ -74,6 +74,12 @@ class Config:
     )
     PLANESPOTTING_TIMEOUT = float(os.getenv("PLANESPOTTING_TIMEOUT", "10"))
     PLANESPOTTING_RETRY_COUNT = int(os.getenv("PLANESPOTTING_RETRY_COUNT", "1"))
+    WIKIMEDIA_COMMONS_BASE_URL = os.getenv(
+        "WIKIMEDIA_COMMONS_BASE_URL",
+        "https://commons.wikimedia.org/w/api.php",
+    )
+    WIKIMEDIA_COMMONS_TIMEOUT = float(os.getenv("WIKIMEDIA_COMMONS_TIMEOUT", "10"))
+    WIKIMEDIA_COMMONS_RETRY_COUNT = int(os.getenv("WIKIMEDIA_COMMONS_RETRY_COUNT", "1"))
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(

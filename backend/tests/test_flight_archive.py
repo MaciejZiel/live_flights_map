@@ -110,6 +110,85 @@ class FlightArchiveServiceTests(unittest.TestCase):
             self.assertEqual(maintenance["snapshot_rows_after"], 1)
             self.assertEqual(maintenance["snapshots_pruned"], 1)
 
+    def test_latest_positions_cache_can_be_queried_by_bbox(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = FlightArchiveService(
+                archive_path=str(Path(temp_dir) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+            )
+            bbox = {
+                "lamin": 50.0,
+                "lamax": 54.0,
+                "lomin": 18.0,
+                "lomax": 22.0,
+            }
+            service.store_latest_snapshot(
+                {
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "count": 2,
+                    "flights": [
+                        {
+                            "icao24": "abc123",
+                            "callsign": "LOT123",
+                            "registration": "SP-LVG",
+                            "type_code": "B38M",
+                            "latitude": 52.2,
+                            "longitude": 21.0,
+                            "on_ground": False,
+                            "route_label": "WAW-LHR",
+                        },
+                        {
+                            "icao24": "def456",
+                            "callsign": "DLH9AB",
+                            "registration": "D-AIJP",
+                            "type_code": "A320",
+                            "latitude": 41.9,
+                            "longitude": 12.5,
+                            "on_ground": False,
+                        },
+                    ],
+                },
+                sector_key="europe",
+            )
+
+            payload = service.list_latest_flights(bbox=bbox, max_age_seconds=300)
+
+            self.assertEqual(payload["count"], 1)
+            self.assertEqual(payload["flights"][0]["icao24"], "abc123")
+            self.assertEqual(payload["flights"][0]["route_label"], "WAW-LHR")
+            self.assertEqual(payload["cache_meta"]["sector_keys"], ["europe"])
+
+    def test_run_maintenance_prunes_stale_latest_positions(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = FlightArchiveService(
+                archive_path=str(Path(temp_dir) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+            )
+            service.store_latest_snapshot(
+                {
+                    "fetched_at": (datetime.now(timezone.utc) - timedelta(hours=5)).isoformat(),
+                    "count": 1,
+                    "flights": [
+                        {
+                            "icao24": "old001",
+                            "latitude": 52.2,
+                            "longitude": 21.0,
+                            "on_ground": False,
+                        }
+                    ],
+                },
+                sector_key="legacy",
+            )
+            service.retention_hours = 1
+
+            maintenance = service.run_maintenance(vacuum=False)
+
+            self.assertEqual(maintenance["latest_position_rows_before"], 1)
+            self.assertEqual(maintenance["latest_position_rows_after"], 0)
+            self.assertEqual(maintenance["latest_positions_pruned"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

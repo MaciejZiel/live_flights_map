@@ -126,6 +126,9 @@ class FlightArchiveService:
                 position_rows_before = cursor.execute(
                     "SELECT COUNT(*) FROM positions"
                 ).fetchone()[0]
+                latest_position_rows_before = cursor.execute(
+                    "SELECT COUNT(*) FROM latest_positions"
+                ).fetchone()[0]
                 self._prune_locked(cursor, cutoff_timestamp)
                 connection.commit()
 
@@ -138,6 +141,9 @@ class FlightArchiveService:
                 position_rows_after = cursor.execute(
                     "SELECT COUNT(*) FROM positions"
                 ).fetchone()[0]
+                latest_position_rows_after = cursor.execute(
+                    "SELECT COUNT(*) FROM latest_positions"
+                ).fetchone()[0]
             finally:
                 connection.close()
 
@@ -148,8 +154,14 @@ class FlightArchiveService:
             "snapshot_rows_after": snapshot_rows_after,
             "position_rows_before": position_rows_before,
             "position_rows_after": position_rows_after,
+            "latest_position_rows_before": latest_position_rows_before,
+            "latest_position_rows_after": latest_position_rows_after,
             "snapshots_pruned": max(0, snapshot_rows_before - snapshot_rows_after),
             "positions_pruned": max(0, position_rows_before - position_rows_after),
+            "latest_positions_pruned": max(
+                0,
+                latest_position_rows_before - latest_position_rows_after,
+            ),
         }
 
     def list_replay_snapshots(
@@ -460,6 +472,176 @@ class FlightArchiveService:
             "flights": flights,
         }
 
+    def store_latest_snapshot(
+        self,
+        payload: dict[str, object],
+        sector_key: str | None = None,
+    ) -> dict[str, object]:
+        fetched_at = self._normalize_timestamp(payload.get("fetched_at"))
+        flights = payload.get("flights")
+
+        if fetched_at is None or not isinstance(flights, list):
+            return {"stored": 0}
+
+        stored = 0
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(hours=self.retention_hours)
+        ).isoformat()
+
+        with self._lock:
+            try:
+                connection = self._connect()
+                cursor = connection.cursor()
+                for flight in flights:
+                    if not isinstance(flight, dict):
+                        continue
+                    try:
+                        row = self._build_latest_position_row(
+                            fetched_at=fetched_at,
+                            flight=flight,
+                            sector_key=sector_key,
+                        )
+                    except ValueError:
+                        continue
+
+                    cursor.execute(
+                        """
+                        INSERT INTO latest_positions (
+                            icao24,
+                            fetched_at,
+                            sector_key,
+                            callsign,
+                            registration,
+                            type_code,
+                            origin_country,
+                            latitude,
+                            longitude,
+                            altitude,
+                            velocity,
+                            vertical_rate,
+                            true_track,
+                            last_contact,
+                            on_ground,
+                            payload_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(icao24) DO UPDATE SET
+                            fetched_at = excluded.fetched_at,
+                            sector_key = excluded.sector_key,
+                            callsign = excluded.callsign,
+                            registration = excluded.registration,
+                            type_code = excluded.type_code,
+                            origin_country = excluded.origin_country,
+                            latitude = excluded.latitude,
+                            longitude = excluded.longitude,
+                            altitude = excluded.altitude,
+                            velocity = excluded.velocity,
+                            vertical_rate = excluded.vertical_rate,
+                            true_track = excluded.true_track,
+                            last_contact = excluded.last_contact,
+                            on_ground = excluded.on_ground,
+                            payload_json = excluded.payload_json
+                        WHERE latest_positions.fetched_at IS NULL
+                           OR excluded.fetched_at >= latest_positions.fetched_at
+                        """,
+                        row,
+                    )
+                    if cursor.rowcount > 0:
+                        stored += 1
+
+                cursor.execute(
+                    "DELETE FROM latest_positions WHERE fetched_at < ?",
+                    (cutoff_timestamp,),
+                )
+                connection.commit()
+            except sqlite3.Error:
+                return {"stored": 0}
+            finally:
+                if "connection" in locals():
+                    connection.close()
+
+        return {
+            "stored": stored,
+            "fetched_at": fetched_at.isoformat(),
+            "sector_key": sector_key,
+        }
+
+    def list_latest_flights(
+        self,
+        bbox: dict[str, float],
+        max_age_seconds: float,
+        limit: int | None = None,
+    ) -> dict[str, object]:
+        normalized_bbox = self._normalize_bbox(bbox)
+        if normalized_bbox is None:
+            return {"bbox": bbox, "count": 0, "flights": [], "cache_meta": {"fresh": False}}
+
+        normalized_limit = None if limit is None else min(max(int(limit), 1), 10000)
+        normalized_max_age_seconds = max(float(max_age_seconds or 0), 1.0)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(seconds=normalized_max_age_seconds)
+        ).isoformat()
+
+        query = """
+            SELECT
+                fetched_at,
+                sector_key,
+                payload_json
+            FROM latest_positions
+            WHERE fetched_at >= ?
+              AND latitude BETWEEN ? AND ?
+              AND longitude BETWEEN ? AND ?
+            ORDER BY fetched_at DESC
+        """
+        parameters: list[object] = [
+            cutoff_timestamp,
+            normalized_bbox["lamin"],
+            normalized_bbox["lamax"],
+            normalized_bbox["lomin"],
+            normalized_bbox["lomax"],
+        ]
+        if normalized_limit is not None:
+            query += " LIMIT ?"
+            parameters.append(normalized_limit)
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                rows = connection.execute(query, tuple(parameters)).fetchall()
+            finally:
+                connection.close()
+
+        flights: list[dict[str, object]] = []
+        sector_keys: set[str] = set()
+        freshest_at = None
+
+        for row in rows:
+            try:
+                flight = json.loads(row["payload_json"])
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if not isinstance(flight, dict):
+                continue
+
+            if freshest_at is None:
+                freshest_at = row["fetched_at"]
+            sector_key = self._normalize_text(row["sector_key"])
+            if sector_key:
+                sector_keys.add(sector_key)
+            flights.append(flight)
+
+        return {
+            "bbox": normalized_bbox,
+            "count": len(flights),
+            "fetched_at": freshest_at or datetime.now(timezone.utc).isoformat(),
+            "flights": flights,
+            "cache_meta": {
+                "fresh": bool(flights),
+                "max_age_seconds": normalized_max_age_seconds,
+                "sector_keys": sorted(sector_keys),
+                "freshest_position_at": freshest_at,
+            },
+        }
+
     def _initialize_database(self) -> None:
         self.archive_path.parent.mkdir(parents=True, exist_ok=True)
         connection = self._connect()
@@ -497,6 +679,25 @@ class FlightArchiveService:
                     on_ground INTEGER NOT NULL DEFAULT 0
                 );
 
+                CREATE TABLE IF NOT EXISTS latest_positions (
+                    icao24 TEXT PRIMARY KEY,
+                    fetched_at TEXT NOT NULL,
+                    sector_key TEXT,
+                    callsign TEXT,
+                    registration TEXT,
+                    type_code TEXT,
+                    origin_country TEXT,
+                    latitude REAL NOT NULL,
+                    longitude REAL NOT NULL,
+                    altitude REAL,
+                    velocity REAL,
+                    vertical_rate REAL,
+                    true_track REAL,
+                    last_contact INTEGER,
+                    on_ground INTEGER NOT NULL DEFAULT 0,
+                    payload_json TEXT NOT NULL
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_snapshots_bbox_time
                     ON snapshots (bbox_key, fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_positions_icao24_time
@@ -507,6 +708,10 @@ class FlightArchiveService:
                     ON positions (callsign, fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_positions_registration_time
                     ON positions (registration, fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_latest_positions_fetched_time
+                    ON latest_positions (fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_latest_positions_bbox_time
+                    ON latest_positions (latitude, longitude, fetched_at DESC);
                 """
             )
             connection.commit()
@@ -529,6 +734,10 @@ class FlightArchiveService:
             )
             """,
             (self.max_snapshots,),
+        )
+        cursor.execute(
+            "DELETE FROM latest_positions WHERE fetched_at < ?",
+            (cutoff_timestamp,),
         )
 
     def _connect(self) -> sqlite3.Connection:
@@ -606,6 +815,72 @@ class FlightArchiveService:
             FlightArchiveService._normalize_optional_float(flight.get("true_track")),
             FlightArchiveService._normalize_optional_int(flight.get("last_contact")),
             1 if bool(flight.get("on_ground")) else 0,
+        )
+
+    @staticmethod
+    def _build_latest_position_row(
+        fetched_at: datetime,
+        flight: dict[str, object],
+        sector_key: str | None,
+    ) -> tuple[object, ...]:
+        icao24 = str(flight.get("icao24") or "").strip().lower()
+        latitude = flight.get("latitude")
+        longitude = flight.get("longitude")
+        if not icao24 or latitude is None or longitude is None:
+            raise ValueError("Cannot cache a live flight without identifier and coordinates.")
+
+        normalized_flight = {
+            **flight,
+            "icao24": icao24,
+            "callsign": FlightArchiveService._normalize_text(
+                flight.get("callsign"), uppercase=True
+            ),
+            "registration": FlightArchiveService._normalize_text(
+                flight.get("registration"), uppercase=True
+            ),
+            "type_code": FlightArchiveService._normalize_text(
+                flight.get("type_code"), uppercase=True
+            ),
+            "origin_country": FlightArchiveService._normalize_text(
+                flight.get("origin_country")
+            ),
+            "latitude": float(latitude),
+            "longitude": float(longitude),
+            "altitude": FlightArchiveService._normalize_optional_float(
+                flight.get("altitude")
+            ),
+            "velocity": FlightArchiveService._normalize_optional_float(
+                flight.get("velocity")
+            ),
+            "vertical_rate": FlightArchiveService._normalize_optional_float(
+                flight.get("vertical_rate")
+            ),
+            "true_track": FlightArchiveService._normalize_optional_float(
+                flight.get("true_track")
+            ),
+            "last_contact": FlightArchiveService._normalize_optional_int(
+                flight.get("last_contact")
+            ),
+            "on_ground": bool(flight.get("on_ground")),
+        }
+
+        return (
+            icao24,
+            fetched_at.isoformat(),
+            FlightArchiveService._normalize_text(sector_key),
+            normalized_flight["callsign"],
+            normalized_flight["registration"],
+            normalized_flight["type_code"],
+            normalized_flight["origin_country"],
+            normalized_flight["latitude"],
+            normalized_flight["longitude"],
+            normalized_flight["altitude"],
+            normalized_flight["velocity"],
+            normalized_flight["vertical_rate"],
+            normalized_flight["true_track"],
+            normalized_flight["last_contact"],
+            1 if normalized_flight["on_ground"] else 0,
+            json.dumps(normalized_flight),
         )
 
     @staticmethod

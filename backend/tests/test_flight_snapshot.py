@@ -17,6 +17,38 @@ class _ProviderStub:
         return self.payload
 
 
+class _ArchiveStub:
+    def __init__(self, latest_payload: dict[str, object] | None = None) -> None:
+        self.latest_payload = latest_payload
+        self.snapshot_calls = 0
+        self.latest_store_calls = 0
+
+    def store_snapshot(self, payload: dict[str, object]) -> None:
+        self.snapshot_calls += 1
+
+    def store_latest_snapshot(
+        self,
+        payload: dict[str, object],
+        sector_key: str | None = None,
+    ) -> dict[str, object]:
+        self.latest_store_calls += 1
+        return {"stored": int(payload.get("count") or 0), "sector_key": sector_key}
+
+    def list_latest_flights(
+        self,
+        bbox: dict[str, float],
+        max_age_seconds: float,
+        limit: int | None = None,
+    ) -> dict[str, object]:
+        return self.latest_payload or {
+            "bbox": bbox,
+            "count": 0,
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "flights": [],
+            "cache_meta": {"fresh": False, "max_age_seconds": max_age_seconds},
+        }
+
+
 class FlightSnapshotServiceTests(unittest.TestCase):
     def test_adds_provider_and_quality_meta_to_live_snapshot(self) -> None:
         fetched_at = datetime.fromtimestamp(1000, timezone.utc).isoformat()
@@ -113,6 +145,66 @@ class FlightSnapshotServiceTests(unittest.TestCase):
         self.assertEqual(live_payload["meta"]["source"], "live")
         self.assertEqual(cached_payload["meta"]["source"], "cache")
         self.assertEqual(cached_payload["meta"]["provider_used"], "opensky")
+
+    def test_prefers_latest_collector_cache_before_calling_provider(self) -> None:
+        bbox = {"lamin": 50.0, "lamax": 54.0, "lomin": 18.0, "lomax": 22.0}
+        provider = _ProviderStub(
+            "adsb_lol",
+            {
+                "count": 1,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "bbox": bbox,
+                "flights": [
+                    {
+                        "icao24": "abc001",
+                        "callsign": "LOT123",
+                        "registration": "SP-LVG",
+                        "latitude": 52.2,
+                        "longitude": 21.0,
+                        "on_ground": False,
+                    }
+                ],
+            },
+        )
+        archive_service = _ArchiveStub(
+            latest_payload={
+                "count": 1,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "bbox": bbox,
+                "flights": [
+                    {
+                        "icao24": "abc001",
+                        "callsign": "LOT123",
+                        "registration": "SP-LVG",
+                        "type_code": "B38M",
+                        "latitude": 52.2,
+                        "longitude": 21.0,
+                        "on_ground": False,
+                        "route_label": "WAW-LHR",
+                    }
+                ],
+                "cache_meta": {
+                    "fresh": True,
+                    "max_age_seconds": 180,
+                    "sector_keys": ["europe"],
+                    "freshest_position_at": datetime.now(timezone.utc).isoformat(),
+                },
+            }
+        )
+        service = FlightSnapshotService(
+            providers=[provider],
+            cache_ttl=3600,
+            cooldown_seconds=60,
+            archive_service=archive_service,
+            latest_cache_max_age_seconds=180,
+        )
+
+        payload = service.get_flights(bbox)
+
+        self.assertEqual(provider.calls, 0)
+        self.assertEqual(payload["meta"]["source"], "collector_cache")
+        self.assertEqual(payload["meta"]["reason"], "collector_cache_hit")
+        self.assertEqual(payload["flights"][0]["route_label"], "WAW-LHR")
 
 
 if __name__ == "__main__":

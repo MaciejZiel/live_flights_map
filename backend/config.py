@@ -114,6 +114,9 @@ class Config:
         "OPENSKY_CACHE_PATH",
         os.path.join(gettempdir(), "live-flights-map-opensky-cache.json"),
     )
+    LIVE_LATEST_CACHE_MAX_AGE_SECONDS = float(
+        os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "150")
+    )
     FLIGHT_DETAILS_CACHE_TTL = float(os.getenv("FLIGHT_DETAILS_CACHE_TTL", "21600"))
     FLIGHT_STREAM_INTERVAL_SECONDS = float(
         os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "30")

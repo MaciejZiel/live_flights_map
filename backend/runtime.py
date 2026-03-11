@@ -96,6 +96,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         cooldown_seconds=config.OPENSKY_COOLDOWN_SECONDS,
         cache_path=config.OPENSKY_CACHE_PATH,
         archive_service=archive_service,
+        latest_cache_max_age_seconds=config.LIVE_LATEST_CACHE_MAX_AGE_SECONDS,
     )
     global_traffic_board_service = GlobalTrafficBoardService(
         snapshot_service=flight_snapshot_service,
@@ -158,6 +159,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
     snapshot_collector_service = SnapshotCollectorService(
         snapshot_service=flight_snapshot_service,
         traffic_intelligence_service=traffic_intelligence_service,
+        archive_service=archive_service,
     )
     alert_sweep_service = AlertSweepService(
         snapshot_service=flight_snapshot_service,

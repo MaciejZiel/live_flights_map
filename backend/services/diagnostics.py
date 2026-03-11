@@ -63,9 +63,11 @@ class DiagnosticsService:
             count_queries={
                 "snapshot_rows": "SELECT COUNT(*) FROM snapshots",
                 "position_rows": "SELECT COUNT(*) FROM positions",
+                "latest_position_rows": "SELECT COUNT(*) FROM latest_positions",
             },
             extra_queries={
                 "latest_snapshot_at": "SELECT MAX(fetched_at) FROM snapshots",
+                "latest_live_position_at": "SELECT MAX(fetched_at) FROM latest_positions",
             },
             extra_payload={
                 "retention_hours": self.archive_service.retention_hours,

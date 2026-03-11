@@ -26,6 +26,7 @@ class FlightSnapshotService:
         cooldown_seconds: float,
         cache_path: str | None = None,
         archive_service=None,
+        latest_cache_max_age_seconds: float = 150.0,
     ) -> None:
         self.providers = providers
         self.cache_ttl = cache_ttl
@@ -35,11 +36,23 @@ class FlightSnapshotService:
         self._lock = Lock()
         self._cache_path = Path(cache_path).expanduser() if cache_path else None
         self._archive_service = archive_service
+        self.latest_cache_max_age_seconds = max(float(latest_cache_max_age_seconds or 0), 1.0)
         self._load_cache_from_disk()
 
-    def get_flights(self, bbox: dict[str, float]) -> dict[str, object]:
+    def get_flights(
+        self,
+        bbox: dict[str, float],
+        *,
+        prefer_latest_cache: bool = True,
+        update_latest_cache: bool = True,
+    ) -> dict[str, object]:
         cache_key = self._cache_key(bbox)
         now = monotonic()
+
+        if prefer_latest_cache:
+            latest_payload = self._get_latest_cached_flights(bbox)
+            if latest_payload is not None:
+                return latest_payload
 
         with self._lock:
             cache_entry = self._cache.get(cache_key)
@@ -84,6 +97,11 @@ class FlightSnapshotService:
             except Exception:
                 # Archiving is best-effort and must not break the live feed.
                 pass
+            if update_latest_cache:
+                try:
+                    self._archive_service.store_latest_snapshot(payload)
+                except Exception:
+                    pass
 
         return self._with_meta(
             payload,
@@ -254,6 +272,33 @@ class FlightSnapshotService:
         if isinstance(extra_meta, dict):
             response_payload["meta"].update(extra_meta)
         return response_payload
+
+    def _get_latest_cached_flights(self, bbox: dict[str, float]) -> dict[str, object] | None:
+        if self._archive_service is None or not hasattr(self._archive_service, "list_latest_flights"):
+            return None
+
+        try:
+            latest_payload = self._archive_service.list_latest_flights(
+                bbox=bbox,
+                max_age_seconds=self.latest_cache_max_age_seconds,
+            )
+        except Exception:
+            return None
+
+        if not latest_payload or int(latest_payload.get("count") or 0) <= 0:
+            return None
+
+        cache_meta = latest_payload.get("cache_meta") if isinstance(latest_payload, dict) else None
+        return self._with_meta(
+            latest_payload,
+            source="collector_cache",
+            stale=False,
+            reason="collector_cache_hit",
+            extra_meta={
+                **self._build_runtime_meta(monotonic()),
+                **(cache_meta if isinstance(cache_meta, dict) else {}),
+            },
+        )
 
     def _build_runtime_meta(
         self,

@@ -5,7 +5,6 @@
 
   import {
     formatAltitude,
-    formatCoordinates,
     formatFlightStatus,
     formatHeading,
     formatSpeed,
@@ -241,21 +240,14 @@
     route?.airline_name ??
     route?.airline_code ??
     (identity.operatorCode !== "N/A" ? identity.operatorCode : identity.originCountry ?? "Unknown");
-  $: identityMetaLine = [operatorLabel, `ICAO24 ${identity.icao24}`].filter(Boolean).join(" · ");
-  $: heroSummaryItems = [
-    {
-      label: "Flight",
-      value: routeFlightNumber || identity.callsign,
-      hint: route?.iata_codes ?? route?.airport_codes ?? "Callsign focus",
-      icon: "flight",
-    },
-    {
-      label: "Aircraft",
-      value: identity.typeCode ?? "Type n/a",
-      hint: identity.registration ?? identity.icao24,
-      icon: "aircraft",
-    },
-  ];
+  $: identityMetaLine = [
+    operatorLabel,
+    identity.registration,
+    identity.typeCode,
+    !identity.registration && !identity.typeCode ? `ICAO24 ${identity.icao24}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   $: heroMetricItems = flight
     ? [
         {
@@ -275,12 +267,6 @@
           value: formatHeading(flight.true_track),
           hint: getTrackLabel(flight.true_track),
           icon: "heading",
-        },
-        {
-          label: "Vertical rate",
-          value: formatVerticalRate(flight.vertical_rate),
-          hint: getVerticalTrendLabel(flight.vertical_rate),
-          icon: "vertical",
         },
       ]
     : [];
@@ -384,19 +370,6 @@
       </div>
 
       <div class="hero-copy">
-        <div class="hero-summary-grid">
-          {#each heroSummaryItems as item}
-            <article class="hero-summary-card">
-              <div class="card-label">
-                <span class="card-glyph"><InfoGlyph kind={item.icon} /></span>
-                <span class="card-label-text">{item.label}</span>
-              </div>
-              <strong>{item.value}</strong>
-              <small>{item.hint}</small>
-            </article>
-          {/each}
-        </div>
-
         <p class="identity-meta-line">{identityMetaLine}</p>
 
         <div class="route-strip">
@@ -417,26 +390,6 @@
           <span>{route?.iata_codes ?? route?.airport_codes ?? "Route lookup pending"}</span>
           <strong>{routeSummaryValue}</strong>
         </div>
-
-        {#if routeProgress}
-          <div class="route-progress">
-            <div class="route-progress-header">
-              <span>{formatAirportCode(route?.origin)}</span>
-              <strong>{routeProgress.percentage}%</strong>
-              <span>{formatAirportCode(route?.destination)}</span>
-            </div>
-
-            <div aria-hidden="true" class="route-progress-bar">
-              <span class="route-progress-fill" style={`width: ${routeProgress.percentage}%`}></span>
-              <span class="route-progress-marker" style={`left: calc(${routeProgress.percentage}% - 0.5rem)`}></span>
-            </div>
-
-            <div class="route-progress-meta">
-              <span>{routeProgress.coveredKm} km covered</span>
-              <span>{routeProgress.remainingKm} km left</span>
-            </div>
-          </div>
-        {/if}
 
         <div class="hero-metric-grid">
           {#each heroMetricItems as item}
@@ -527,14 +480,42 @@
                 <strong>{operatorLabel}</strong>
               </div>
               <div class="fact-row">
-                <span>Current position</span>
-                <strong>{formatCoordinates(flight.latitude, flight.longitude)}</strong>
+                <span>Registration</span>
+                <strong>{identity.registration ?? "Unknown"}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Aircraft type</span>
+                <strong>{identity.typeCode ?? "Unknown"}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Vertical rate</span>
+                <strong>{formatVerticalRate(flight.vertical_rate)}</strong>
               </div>
               <div class="fact-row">
                 <span>Last contact</span>
                 <strong>{formatRelativeContact(flight.last_contact)}</strong>
               </div>
             </div>
+
+            {#if routeProgress}
+              <div class="route-progress">
+                <div class="route-progress-header">
+                  <span>{formatAirportCode(route?.origin)}</span>
+                  <strong>{routeProgress.percentage}%</strong>
+                  <span>{formatAirportCode(route?.destination)}</span>
+                </div>
+
+                <div aria-hidden="true" class="route-progress-bar">
+                  <span class="route-progress-fill" style={`width: ${routeProgress.percentage}%`}></span>
+                  <span class="route-progress-marker" style={`left: calc(${routeProgress.percentage}% - 0.5rem)`}></span>
+                </div>
+
+                <div class="route-progress-meta">
+                  <span>{routeProgress.coveredKm} km covered</span>
+                  <span>{routeProgress.remainingKm} km left</span>
+                </div>
+              </div>
+            {/if}
 
             <div class="secondary-actions">
               <button class="secondary-action-button" type="button" on:click={onOpenTracking}>
@@ -944,23 +925,11 @@
     gap: 0.72rem;
   }
 
-  .hero-summary-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.48rem;
-  }
-
-  .hero-summary-card,
   .route-summary {
     padding: 0.7rem 0.74rem;
     border-radius: 12px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.045);
-  }
-
-  .hero-summary-card {
-    display: grid;
-    gap: 0.18rem;
   }
 
   .card-label {
@@ -983,17 +952,6 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: rgba(171, 186, 202, 0.56);
-  }
-
-  .hero-summary-card strong {
-    color: var(--color-text);
-    font-size: 1rem;
-    line-height: 1.2;
-  }
-
-  .hero-summary-card small {
-    color: rgba(190, 203, 217, 0.72);
-    font-size: 0.76rem;
   }
 
   .identity-meta-line {
@@ -1401,7 +1359,6 @@
       display: grid;
     }
 
-    .hero-summary-grid,
     .hero-metric-grid,
     .route-strip,
     .airport-desk-grid,

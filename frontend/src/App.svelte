@@ -69,6 +69,11 @@
     buildTrafficReportCsv,
   } from "./lib/utils/reporting.js";
   import {
+    buildReplayCompareSummary,
+    findClosestReplaySnapshotIndex,
+    getReplayHistoryRequestLimit,
+  } from "./lib/utils/replayTimeline.js";
+  import {
     findTransitionAlertMatches,
     getAlertRuleLabel,
     matchesAlertRule,
@@ -228,6 +233,7 @@
   let replayHydrationTimer = null;
   let replayAnchorTimestamp = null;
   let replayWindowMinutes = 90;
+  let replayCompareSnapshotCursor = null;
   let flattenedSearchResults = [];
   let activeSearchResult = null;
   let activeSearchResultKey = "";
@@ -2323,7 +2329,7 @@
     try {
       const replayPayload = await fetchReplayHistory(bbox, {
         minutes: replayWindowMinutes,
-        limit: 120,
+        limit: getReplayHistoryRequestLimit(replayWindowMinutes),
         endAt: replayAnchorTimestamp,
       });
       if (requestId !== archivedReplayRequestId || buildBboxKey(state.bbox) !== bboxKey) {
@@ -2892,7 +2898,7 @@
 
     return [...merged.values()]
       .sort((left, right) => new Date(left.fetchedAt) - new Date(right.fetchedAt))
-      .slice(-180);
+      .slice(-720);
   }
 
   function pushReplaySnapshot(history, snapshotState) {
@@ -3041,6 +3047,7 @@
     replayPlaybackActive = false;
     activeMonitoringSessionId = null;
     replaySnapshotCursor = null;
+    replayCompareSnapshotCursor = null;
   }
 
   function setReplaySnapshotIndex(index) {
@@ -3074,12 +3081,16 @@
 
   function setReplayWindowMinutes(minutes) {
     const numericMinutes = Number(minutes);
-    replayWindowMinutes = [30, 90, 180].includes(numericMinutes) ? numericMinutes : 90;
+    replayWindowMinutes = [30, 90, 180, 360, 720, 1440].includes(numericMinutes)
+      ? numericMinutes
+      : 90;
+    replayCompareSnapshotCursor = null;
   }
 
   function setReplayAnchorTimestamp(value) {
     if (!value) {
       replayAnchorTimestamp = null;
+      replayCompareSnapshotCursor = null;
       return;
     }
 
@@ -3087,12 +3098,68 @@
     replayAnchorTimestamp = Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString();
     replayPlaybackActive = false;
     replaySnapshotCursor = null;
+    replayCompareSnapshotCursor = null;
   }
 
   function clearReplayAnchorTimestamp() {
     replayAnchorTimestamp = null;
     replayPlaybackActive = false;
     replaySnapshotCursor = null;
+    replayCompareSnapshotCursor = null;
+  }
+
+  function jumpReplayRelative(minutesDelta) {
+    if (!replaySourceSnapshots.length) {
+      return;
+    }
+
+    const referenceSnapshot =
+      activeReplaySnapshot ??
+      replayCompareSnapshot ??
+      replaySourceSnapshots[replaySourceSnapshots.length - 1] ??
+      null;
+    const referenceTimestamp = new Date(referenceSnapshot?.fetchedAt ?? Date.now()).getTime();
+    if (!Number.isFinite(referenceTimestamp)) {
+      return;
+    }
+
+    const targetTimestamp = referenceTimestamp + minutesDelta * 60 * 1000;
+    const nextIndex = findClosestReplaySnapshotIndex(replaySourceSnapshots, targetTimestamp);
+    if (nextIndex >= 0) {
+      replayPlaybackActive = false;
+      setReplaySnapshotIndex(nextIndex);
+    }
+  }
+
+  function jumpReplayToTimestamp(value) {
+    if (!value) {
+      return;
+    }
+
+    const timestamp = new Date(value).getTime();
+    if (!Number.isFinite(timestamp)) {
+      return;
+    }
+
+    const nextIndex = findClosestReplaySnapshotIndex(replaySourceSnapshots, timestamp);
+    if (nextIndex >= 0) {
+      replayPlaybackActive = false;
+      setReplaySnapshotIndex(nextIndex);
+      return;
+    }
+
+    setReplayAnchorTimestamp(value);
+  }
+
+  function markReplayCompareSnapshot() {
+    const fallbackIndex =
+      replaySnapshotIndex >= 0 ? replaySnapshotIndex : Math.max(0, replaySourceSnapshots.length - 1);
+    const snapshot = replaySourceSnapshots[fallbackIndex] ?? null;
+    replayCompareSnapshotCursor = snapshot?.fetchedAt ?? null;
+  }
+
+  function clearReplayCompareSnapshot() {
+    replayCompareSnapshotCursor = null;
   }
 
   function setSelectedAirportHistoryWindow(hours) {
@@ -3255,6 +3322,7 @@
     replayPlaybackActive = false;
     activeMonitoringSessionId = sessionId;
     replaySnapshotCursor = session.snapshots[0]?.fetchedAt ?? null;
+    replayCompareSnapshotCursor = null;
     filters = {
       ...filters,
       ...(session.filters ?? {}),
@@ -3281,6 +3349,7 @@
     if (activeMonitoringSessionId === sessionId) {
       activeMonitoringSessionId = null;
       replaySnapshotCursor = null;
+      replayCompareSnapshotCursor = null;
     }
   }
 
@@ -3633,6 +3702,14 @@
     : -1;
   $: activeReplaySnapshot =
     replaySnapshotIndex >= 0 ? replaySourceSnapshots[replaySnapshotIndex] ?? null : null;
+  $: replayCompareSnapshotIndex = replayCompareSnapshotCursor
+    ? replaySourceSnapshots.findIndex((snapshot) => snapshot.fetchedAt === replayCompareSnapshotCursor)
+    : -1;
+  $: replayCompareSnapshot =
+    replayCompareSnapshotIndex >= 0 ? replaySourceSnapshots[replayCompareSnapshotIndex] ?? null : null;
+  $: replayReferenceSnapshot =
+    activeReplaySnapshot ?? replaySourceSnapshots[replaySourceSnapshots.length - 1] ?? null;
+  $: replayCompareSummary = buildReplayCompareSummary(replayCompareSnapshot, replayReferenceSnapshot);
   $: replayFlights = activeReplaySnapshot?.flights ?? state.flights;
   $: activeFilterCount = countActiveFilters(filters);
   $: filteredFlights = replayFlights.filter((flight) => {
@@ -4921,10 +4998,14 @@
             playbackSpeed={replayPlaybackSpeed}
             canStepBackward={canStepReplayBackward}
             canStepForward={canStepReplayForward}
+            compareSnapshot={replayCompareSnapshot}
+            compareSummary={replayCompareSummary}
             onSelectIndex={selectReplaySnapshot}
             onReturnToLive={returnToLiveReplay}
             onJumpStart={jumpReplayToStart}
             onJumpLatest={jumpReplayToLatest}
+            onJumpRelative={jumpReplayRelative}
+            onJumpToTimestamp={jumpReplayToTimestamp}
             onSetAnchorTimestamp={setReplayAnchorTimestamp}
             onClearAnchorTimestamp={clearReplayAnchorTimestamp}
             onSetWindowMinutes={setReplayWindowMinutes}
@@ -4932,6 +5013,8 @@
             onStepBackward={() => stepReplay(-1)}
             onStepForward={() => stepReplay(1)}
             onTogglePlayback={toggleReplayPlayback}
+            onMarkCompare={markReplayCompareSnapshot}
+            onClearCompare={clearReplayCompareSnapshot}
           />
 
           <details class="utility-drawer" open={false}>

@@ -19,6 +19,12 @@
   export let onStepBackward = () => {};
   export let onStepForward = () => {};
   export let onTogglePlayback = () => {};
+  export let compareSnapshot = null;
+  export let compareSummary = null;
+  export let onMarkCompare = () => {};
+  export let onClearCompare = () => {};
+  export let onJumpRelative = () => {};
+  export let onJumpToTimestamp = () => {};
 
   function handleInput(event) {
     onSelectIndex(Number(event.currentTarget.value));
@@ -58,6 +64,10 @@
     onSetAnchorTimestamp(event.currentTarget.value);
   }
 
+  function handleJumpChange(event) {
+    onJumpToTimestamp(event.currentTarget.value);
+  }
+
   $: sliderValue = activeIndex >= 0 ? activeIndex : Math.max(0, snapshots.length - 1);
   $: activeSnapshotLabel = snapshots[sliderValue] ? formatSnapshotTime(snapshots[sliderValue].fetchedAt) : "--:--";
   $: firstSnapshotLabel = snapshots[0] ? formatSnapshotTime(snapshots[0].fetchedAt) : "--:--";
@@ -65,6 +75,9 @@
     ? formatSnapshotTime(snapshots[snapshots.length - 1].fetchedAt)
     : "--:--";
   $: anchorInputValue = formatDateTimeInputValue(anchorTimestamp);
+  $: jumpInputValue = formatDateTimeInputValue(
+    activeSnapshot?.fetchedAt ?? snapshots[sliderValue]?.fetchedAt ?? snapshots[snapshots.length - 1]?.fetchedAt
+  );
 </script>
 
 <section class="panel replay-panel">
@@ -134,6 +147,18 @@
       <span>{lastSnapshotLabel}</span>
     </div>
 
+    <div class="timeline-jump-row">
+      <span>Jump in time</span>
+      <div class="timeline-anchor-controls">
+        <button class="range-chip" type="button" on:click={() => onJumpRelative(-60)}>-60m</button>
+        <button class="range-chip" type="button" on:click={() => onJumpRelative(-30)}>-30m</button>
+        <button class="range-chip" type="button" on:click={() => onJumpRelative(-15)}>-15m</button>
+        <input type="datetime-local" value={jumpInputValue} on:change={handleJumpChange} />
+        <button class="range-chip" type="button" on:click={() => onJumpRelative(15)}>+15m</button>
+        <button class="range-chip" type="button" on:click={() => onJumpRelative(30)}>+30m</button>
+      </div>
+    </div>
+
     <div class="timeline-speed-row">
       <span>Playback speed</span>
       <select value={playbackSpeed} on:change={handleSpeedChange}>
@@ -178,6 +203,53 @@
       </button>
       <button class="control-button" type="button" on:click={onJumpLatest}>Latest</button>
     </div>
+
+    <div class="timeline-compare-row">
+      <span>{compareSnapshot ? "Compare baseline set" : "Compare snapshots"}</span>
+      <div class="range-chip-row">
+        <button class="range-chip" type="button" on:click={onMarkCompare}>
+          {compareSnapshot ? "Replace baseline" : "Mark baseline"}
+        </button>
+        {#if compareSnapshot}
+          <button class="range-chip" type="button" on:click={onClearCompare}>Clear</button>
+        {/if}
+      </div>
+    </div>
+
+    {#if compareSummary}
+      <div class="timeline-compare-summary-grid">
+        <article>
+          <span>Baseline</span>
+          <strong>{formatSnapshotTime(compareSummary.baseLabel)}</strong>
+          <small>{compareSummary.baseCount} aircraft</small>
+        </article>
+        <article>
+          <span>Current</span>
+          <strong>{formatSnapshotTime(compareSummary.activeLabel)}</strong>
+          <small>{compareSummary.activeCount} aircraft</small>
+        </article>
+        <article>
+          <span>Stayed</span>
+          <strong>{compareSummary.persisted}</strong>
+          <small>visible in both</small>
+        </article>
+        <article>
+          <span>New</span>
+          <strong>{compareSummary.arrivals}</strong>
+          <small>appeared later</small>
+        </article>
+        <article>
+          <span>Gone</span>
+          <strong>{compareSummary.departures}</strong>
+          <small>left the view</small>
+        </article>
+        <article>
+          <span>Net change</span>
+          <strong>{compareSummary.trafficDelta > 0 ? `+${compareSummary.trafficDelta}` : compareSummary.trafficDelta}</strong>
+          <small>traffic delta</small>
+        </article>
+      </div>
+    {/if}
   {/if}
 </section>
 
@@ -277,7 +349,9 @@
   .timeline-range-row,
   .timeline-range-summary,
   .timeline-anchor-row,
-  .timeline-speed-row {
+  .timeline-speed-row,
+  .timeline-jump-row,
+  .timeline-compare-row {
     display: flex;
     justify-content: space-between;
     gap: 0.75rem;
@@ -287,7 +361,9 @@
   .timeline-range-row span,
   .timeline-range-summary span,
   .timeline-anchor-row span,
-  .timeline-speed-row span {
+  .timeline-speed-row span,
+  .timeline-jump-row span,
+  .timeline-compare-row span {
     font-size: 0.8rem;
     color: var(--color-muted);
   }
@@ -369,17 +445,49 @@
     cursor: not-allowed;
   }
 
+  .timeline-compare-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.55rem;
+  }
+
+  .timeline-compare-summary-grid article {
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.72rem 0.78rem;
+    border-radius: 14px;
+    border: 1px solid var(--surface-border);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .timeline-compare-summary-grid span,
+  .timeline-compare-summary-grid small {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+  }
+
+  .timeline-compare-summary-grid strong {
+    color: var(--color-text);
+    font-size: 0.94rem;
+  }
+
   @media (max-width: 720px) {
     .replay-header,
     .timeline-meta,
     .timeline-range-row,
     .timeline-range-summary,
     .timeline-anchor-row,
-    .timeline-speed-row {
+    .timeline-speed-row,
+    .timeline-jump-row,
+    .timeline-compare-row {
       display: grid;
     }
 
     .timeline-controls {
+      grid-template-columns: 1fr;
+    }
+
+    .timeline-compare-summary-grid {
       grid-template-columns: 1fr;
     }
   }

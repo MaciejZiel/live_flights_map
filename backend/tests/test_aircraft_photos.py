@@ -3,6 +3,7 @@ from __future__ import annotations
 import unittest
 
 from backend.services.aircraft_photos import AircraftPhotoService
+from backend.services.openverse import OpenverseClient
 from backend.services.provider_base import FlightProviderError
 from backend.services.wikimedia_commons import WikimediaCommonsClient
 
@@ -16,6 +17,19 @@ class _ResponseStub:
 
 
 class _WikimediaCommonsClientStub(WikimediaCommonsClient):
+    def __init__(self, payload: dict[str, object]) -> None:
+        super().__init__(
+            base_url="https://example.invalid",
+            timeout=1,
+            max_retries=0,
+        )
+        self._payload = payload
+
+    def _request_photo_lookup(self, registration: str) -> _ResponseStub:
+        return _ResponseStub(self._payload)
+
+
+class _OpenverseClientStub(OpenverseClient):
     def __init__(self, payload: dict[str, object]) -> None:
         super().__init__(
             base_url="https://example.invalid",
@@ -164,6 +178,73 @@ class AircraftPhotoServiceTests(unittest.TestCase):
 
         self.assertIn("Primary unavailable.", str(context.exception))
         self.assertIn("Fallback unavailable.", str(context.exception))
+
+
+class OpenverseClientTests(unittest.TestCase):
+    def test_fetch_photo_parses_openverse_result(self) -> None:
+        client = _OpenverseClientStub(
+            {
+                "results": [
+                    {
+                        "title": "N29984",
+                        "url": "https://images.example.com/full.jpg",
+                        "thumbnail": "https://images.example.com/thumb.jpg",
+                        "foreign_landing_url": "https://flickr.example.com/photo",
+                        "creator": "gankp",
+                        "license": "by-nc-sa",
+                        "license_version": "2.0",
+                        "provider": "flickr",
+                        "attribution": "N29984 by gankp",
+                        "fields_matched": ["title", "tags.name"],
+                        "tags": [
+                            {"name": "n29984"},
+                            {"name": "boeing787"},
+                        ],
+                        "mature": False,
+                    }
+                ]
+            }
+        )
+
+        photo = client.fetch_photo("N29984")
+
+        self.assertIsNotNone(photo)
+        self.assertEqual(photo["thumbnail_url"], "https://images.example.com/thumb.jpg")
+        self.assertEqual(photo["link"], "https://flickr.example.com/photo")
+        self.assertEqual(photo["photographer"], "gankp")
+        self.assertEqual(photo["source"], "Openverse · flickr")
+        self.assertEqual(photo["license"], "BY-NC-SA 2.0")
+
+    def test_fetch_photo_prefers_result_matching_registration_tag(self) -> None:
+        client = _OpenverseClientStub(
+            {
+                "results": [
+                    {
+                        "title": "United Boeing 787",
+                        "url": "https://images.example.com/generic.jpg",
+                        "thumbnail": "https://images.example.com/generic-thumb.jpg",
+                        "provider": "flickr",
+                        "fields_matched": ["title"],
+                        "tags": [{"name": "boeing787"}],
+                        "mature": False,
+                    },
+                    {
+                        "title": "Dreamliner departure",
+                        "url": "https://images.example.com/matched.jpg",
+                        "thumbnail": "https://images.example.com/matched-thumb.jpg",
+                        "provider": "flickr",
+                        "fields_matched": ["tags.name"],
+                        "tags": [{"name": "n29984"}],
+                        "mature": False,
+                    },
+                ]
+            }
+        )
+
+        photo = client.fetch_photo("N29984")
+
+        self.assertIsNotNone(photo)
+        self.assertEqual(photo["thumbnail_url"], "https://images.example.com/matched-thumb.jpg")
 
 
 if __name__ == "__main__":

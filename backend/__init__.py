@@ -14,6 +14,7 @@ from .services.flight_archive import FlightArchiveService
 from .services.flight_details import FlightDetailsService
 from .services.global_traffic_board import GlobalTrafficBoardService
 from .services.flight_snapshot import FlightSnapshotService
+from .services.openverse import OpenverseClient
 from .services.opensky import OpenSkyClient
 from .services.planespotting import PlanespottingClient
 from .services.traffic_intelligence import TrafficIntelligenceService
@@ -98,6 +99,11 @@ def create_app() -> Flask:
                     base_url=app.config["WIKIMEDIA_COMMONS_BASE_URL"],
                     timeout=app.config["WIKIMEDIA_COMMONS_TIMEOUT"],
                     max_retries=app.config["WIKIMEDIA_COMMONS_RETRY_COUNT"],
+                ),
+                OpenverseClient(
+                    base_url=app.config["OPENVERSE_BASE_URL"],
+                    timeout=app.config["OPENVERSE_TIMEOUT"],
+                    max_retries=app.config["OPENVERSE_RETRY_COUNT"],
                 ),
             ]
         ),

@@ -80,6 +80,12 @@ class Config:
     )
     WIKIMEDIA_COMMONS_TIMEOUT = float(os.getenv("WIKIMEDIA_COMMONS_TIMEOUT", "10"))
     WIKIMEDIA_COMMONS_RETRY_COUNT = int(os.getenv("WIKIMEDIA_COMMONS_RETRY_COUNT", "1"))
+    OPENVERSE_BASE_URL = os.getenv(
+        "OPENVERSE_BASE_URL",
+        "https://api.openverse.org/v1/images/",
+    )
+    OPENVERSE_TIMEOUT = float(os.getenv("OPENVERSE_TIMEOUT", "10"))
+    OPENVERSE_RETRY_COUNT = int(os.getenv("OPENVERSE_RETRY_COUNT", "1"))
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(

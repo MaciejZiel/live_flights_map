@@ -5035,6 +5035,50 @@
 
       <div class="panel-stack">
         {#if utilityPanelMode === "radar"}
+          <section class="widget-card utility-summary-card utility-compact-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Radar essentials</strong>
+                <span class="live-pill utility-state-pill">{statusLabel}</span>
+              </div>
+            </div>
+
+            <div class="utility-overview-grid">
+              <article>
+                <span>Traffic</span>
+                <strong>{visibleTrackedCount}</strong>
+                <small>{airborneCount} airborne now</small>
+              </article>
+              <article>
+                <span>Freshness</span>
+                <strong>{activeReplaySnapshot ? "Replay" : freshnessLabel}</strong>
+                <small>{activeReplaySnapshot ? "Archive frame" : feedLabel}</small>
+              </article>
+              <article>
+                <span>Search</span>
+                <strong>{filters.query.trim() ? "Scoped" : "Open"}</strong>
+                <small>{filters.query.trim() ? filters.query.trim() : "Global aircraft lookup"}</small>
+              </article>
+              <article>
+                <span>Reset</span>
+                <strong>{activeStateChips.length}</strong>
+                <small>{activeStateChips.length ? "Temporary radar states active" : "Clean live view"}</small>
+              </article>
+            </div>
+
+            <div class="utility-action-row compact-utility-actions">
+              <button class="widget-footer-button" type="button" on:click={() => focusSearchField()}>
+                Search
+              </button>
+              <button class="widget-footer-button" type="button" on:click={focusShortcutsWorkspace}>
+                Shortcuts
+              </button>
+              <button class="widget-footer-button" type="button" on:click={resetRadarState}>
+                Reset radar
+              </button>
+            </div>
+          </section>
+
           <section class="widget-card filter-card filter-card-compact">
             <div class="widget-header">
               <div class="widget-heading">
@@ -5094,10 +5138,97 @@
             </div>
           </section>
 
-          <details class="utility-drawer" open={Boolean(activeFilterCount)}>
+          <section class="widget-card utility-summary-card utility-compact-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Map view</strong>
+                <span class="live-pill utility-state-pill">{mapStyleLabel}</span>
+              </div>
+            </div>
+
+            <div class="filter-suggestion-group">
+              <div class="suggestion-row">
+                <span>Map style</span>
+                <div>
+                  {#each MAP_STYLE_OPTIONS as option}
+                    <button
+                      class:active={mapStyle === option.value}
+                      class="filter-chip"
+                      type="button"
+                      on:click={() => {
+                        mapStyle = option.value;
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+
+              <div class="suggestion-row">
+                <span>Layers</span>
+                <div>
+                  <button
+                    class:active={showAirportMarkers}
+                    class="filter-chip"
+                    type="button"
+                    on:click={() => {
+                      showAirportMarkers = !showAirportMarkers;
+                    }}
+                  >
+                    Airports
+                  </button>
+                  <button
+                    class:active={!aircraftClusteringEnabled}
+                    class="filter-chip"
+                    type="button"
+                    on:click={() => {
+                      aircraftClusteringEnabled = false;
+                    }}
+                  >
+                    All aircraft
+                  </button>
+                  <button
+                    class:active={aircraftClusteringEnabled}
+                    class="filter-chip"
+                    type="button"
+                    on:click={() => {
+                      aircraftClusteringEnabled = true;
+                    }}
+                  >
+                    Cluster nearby
+                  </button>
+                  <button
+                    class:active={weatherLayerEnabled}
+                    class="filter-chip"
+                    type="button"
+                    on:click={() => {
+                      weatherLayerEnabled = !weatherLayerEnabled;
+                    }}
+                  >
+                    Weather radar
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="utility-action-row compact-utility-actions">
+              <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("poland")}>
+                Poland
+              </button>
+              <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("europe")}>
+                Europe
+              </button>
+              <button class="widget-footer-button" type="button" on:click={toggleTrafficBoard}>
+                Traffic
+              </button>
+            </div>
+          </section>
+
+          <details class="utility-drawer" open={Boolean(activeFilterCount || filterPresets.length)}>
             <summary>
-              <span>Advanced filters</span>
-              <strong>{activeFilterCount}</strong>
+              <span>Advanced radar tools</span>
+              <strong>{activeFilterCount + filterPresets.length}</strong>
             </summary>
             <div class="utility-drawer-body">
               <div class="filter-form-grid">
@@ -5325,15 +5456,7 @@
                   </select>
                 </label>
               </div>
-            </div>
-          </details>
 
-          <details bind:open={workspaceSetupDrawerOpen} class="utility-drawer">
-            <summary>
-              <span>Suggestions and map</span>
-              <strong>{topTypeSuggestions.length + topOperatorSuggestions.length + topCountrySuggestions.length}</strong>
-            </summary>
-            <div class="utility-drawer-body">
               <div class="filter-suggestion-group">
                 {#if topTypeSuggestions.length}
                   <div class="suggestion-row">
@@ -5402,80 +5525,6 @@
                 {/if}
               </div>
 
-              <div class="filter-suggestion-group">
-                <div class="suggestion-row">
-                  <span>Map style</span>
-                  <div>
-                    {#each MAP_STYLE_OPTIONS as option}
-                      <button
-                        class:active={mapStyle === option.value}
-                        class="filter-chip"
-                        type="button"
-                        on:click={() => {
-                          mapStyle = option.value;
-                        }}
-                      >
-                        {option.label}
-                      </button>
-                    {/each}
-                  </div>
-                </div>
-
-                <div class="suggestion-row">
-                  <span>Map layers</span>
-                  <div>
-                    <button
-                      class:active={showAirportMarkers}
-                      class="filter-chip"
-                      type="button"
-                      on:click={() => {
-                        showAirportMarkers = !showAirportMarkers;
-                      }}
-                    >
-                      Airports
-                    </button>
-                    <button
-                      class:active={!aircraftClusteringEnabled}
-                      class="filter-chip"
-                      type="button"
-                      on:click={() => {
-                        aircraftClusteringEnabled = false;
-                      }}
-                    >
-                      All aircraft
-                    </button>
-                    <button
-                      class:active={aircraftClusteringEnabled}
-                      class="filter-chip"
-                      type="button"
-                      on:click={() => {
-                        aircraftClusteringEnabled = true;
-                      }}
-                    >
-                      Cluster nearby
-                    </button>
-                    <button
-                      class:active={weatherLayerEnabled}
-                      class="filter-chip"
-                      type="button"
-                      on:click={() => {
-                        weatherLayerEnabled = !weatherLayerEnabled;
-                      }}
-                    >
-                      Weather radar
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </details>
-
-          <details class="utility-drawer" open={filterPresets.length > 0}>
-            <summary>
-              <span>Saved presets</span>
-              <strong>{filterPresets.length}</strong>
-            </summary>
-            <div class="utility-drawer-body">
               <div class="preset-save-row">
                 <input
                   type="text"

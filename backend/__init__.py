@@ -5,6 +5,7 @@ from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
 from .services.aircraft_photos import AircraftPhotoService
+from .services.aircraft_photo_proxy import AircraftPhotoProxyService
 from .services.airport_catalog import AirportCatalogService
 from .services.airport_weather import AirportWeatherService
 from .services.airport_workflow import AirportWorkflowService
@@ -108,6 +109,10 @@ def create_app() -> Flask:
             ]
         ),
         cache_ttl=app.config["FLIGHT_DETAILS_CACHE_TTL"],
+    )
+    app.extensions["aircraft_photo_proxy_service"] = AircraftPhotoProxyService(
+        timeout=app.config["AIRCRAFT_PHOTO_PROXY_TIMEOUT"],
+        allowed_hosts=app.config["AIRCRAFT_PHOTO_PROXY_ALLOWED_HOSTS"],
     )
     app.extensions["entity_search_service"] = EntitySearchService(
         archive_service=archive_service,

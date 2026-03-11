@@ -86,6 +86,28 @@ class Config:
     )
     OPENVERSE_TIMEOUT = float(os.getenv("OPENVERSE_TIMEOUT", "10"))
     OPENVERSE_RETRY_COUNT = int(os.getenv("OPENVERSE_RETRY_COUNT", "1"))
+    AIRCRAFT_PHOTO_PROXY_TIMEOUT = float(
+        os.getenv("AIRCRAFT_PHOTO_PROXY_TIMEOUT", "12")
+    )
+    AIRCRAFT_PHOTO_PROXY_ALLOWED_HOSTS = tuple(
+        host.strip().lower()
+        for host in os.getenv(
+            "AIRCRAFT_PHOTO_PROXY_ALLOWED_HOSTS",
+            ",".join(
+                (
+                    "planespotting.be",
+                    "www.planespotting.be",
+                    "upload.wikimedia.org",
+                    "commons.wikimedia.org",
+                    "staticflickr.com",
+                    "live.staticflickr.com",
+                    "flickr.com",
+                    "farm.staticflickr.com",
+                )
+            ),
+        ).split(",")
+        if host.strip()
+    )
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(

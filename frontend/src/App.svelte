@@ -200,6 +200,7 @@
   let selectedFlightDetailsStatus = "idle";
   let selectedFlightDetailsError = null;
   let selectedFlightDetailsRequestId = 0;
+  let selectedFlightMissingPhotoRefreshKey = null;
   let lastSelectedFlightDetailsKey = null;
   let selectedFlightTrailRemote = [];
   let selectedFlightTrailStatus = "idle";
@@ -3951,6 +3952,7 @@
   }[mapStyle] ?? "Map";
   $: if (!selectedFlightDetailsKey) {
     lastSelectedFlightDetailsKey = null;
+    selectedFlightMissingPhotoRefreshKey = null;
     selectedFlightDetails = null;
     selectedFlightDetailsStatus = "idle";
     selectedFlightDetailsError = null;
@@ -3958,6 +3960,16 @@
   $: if (selectedFlightDetailsKey && selectedFlightDetailsKey !== lastSelectedFlightDetailsKey) {
     lastSelectedFlightDetailsKey = selectedFlightDetailsKey;
     loadSelectedFlightDetails(selectedFlight);
+  }
+  $: if (
+    selectedFlightDetailsKey &&
+    selectedFlight &&
+    selectedFlightDetailsStatus === "success" &&
+    !selectedFlightDetails?.photo?.thumbnail_url &&
+    selectedFlightMissingPhotoRefreshKey !== selectedFlightDetailsKey
+  ) {
+    selectedFlightMissingPhotoRefreshKey = selectedFlightDetailsKey;
+    loadSelectedFlightDetails(selectedFlight, { force: true });
   }
   $: if (!selectedFlightTrailKey) {
     lastSelectedFlightTrailKey = null;

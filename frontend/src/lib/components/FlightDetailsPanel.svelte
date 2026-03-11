@@ -1,6 +1,8 @@
 <script>
   import InfoGlyph from "./InfoGlyph.svelte";
 
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
+
   import {
     formatAltitude,
     formatCoordinates,
@@ -152,7 +154,19 @@
   }
 
   function resolvePhotoUrl(photo) {
-    return photo?.thumbnail_url ?? null;
+    const rawUrl = photo?.thumbnail_url?.trim();
+    if (!rawUrl) {
+      return null;
+    }
+
+    const url = new URL(`${API_BASE_URL}/api/aircraft-photo`, window.location.origin);
+    url.searchParams.set("url", rawUrl);
+
+    if (!API_BASE_URL) {
+      return `${url.pathname}${url.search}`;
+    }
+
+    return url.toString();
   }
 
   function calculateRouteProgress(routeData, flightData) {

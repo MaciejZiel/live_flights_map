@@ -201,6 +201,26 @@ def flight_details(icao24: str):
     return jsonify(details_payload)
 
 
+@api.get("/aircraft-photo")
+def aircraft_photo():
+    photo_url = _normalize_text(request.args.get("url"))
+    if not photo_url:
+        return jsonify({"error": "Missing 'url' query parameter."}), 400
+
+    service = current_app.extensions["aircraft_photo_proxy_service"]
+
+    try:
+        asset = service.fetch_asset(photo_url)
+    except FlightProviderError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    response = Response(asset.body, mimetype=asset.content_type)
+    response.headers["Cache-Control"] = "public, max-age=86400"
+    if asset.etag:
+        response.headers["ETag"] = asset.etag
+    return response
+
+
 @api.get("/flights/<icao24>/trail")
 def flight_trail(icao24: str):
     normalized_icao24 = _normalize_text(icao24, uppercase=False)

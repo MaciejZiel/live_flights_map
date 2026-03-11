@@ -1106,7 +1106,9 @@
     selectedAirportError = null;
     selectedEntityContext = null;
     desktopUtilityExpanded = false;
-    desktopTrafficBoardOpen = false;
+    if (!options.keepTrafficBoardOpen) {
+      desktopTrafficBoardOpen = false;
+    }
     inspectorTab = options.inspectorTab ?? "details";
     suppressSelectionClearUntil = Date.now() + (options.selectionHoldMs ?? 220);
 
@@ -2524,6 +2526,21 @@
       mobileSidebarOpen = true;
       mobileUtilityOpen = false;
     }
+  }
+
+  function jumpTrafficBoardFlight(target) {
+    const flight =
+      typeof target === "string" ? getKnownFlightByIcao24(target) : buildSelectedFlightSnapshot(target);
+    if (!flight) {
+      return;
+    }
+
+    openFlightInspector(flight, {
+      focusMap: true,
+      zoom: 8.2,
+      exitReplay: false,
+      keepTrafficBoardOpen: true,
+    });
   }
 
   function openInspectorTab(tab) {
@@ -6907,7 +6924,12 @@
             subtitle={`${visibleTrackedCount} aircraft in view`}
             maxRows={10}
             featuredFlight={leadFeedFlight}
+            sortBy={sortBy}
+            onSortByChange={(value) => {
+              sortBy = value;
+            }}
             onSelectFlight={selectWatchedFlight}
+            onJumpFlight={jumpTrafficBoardFlight}
           />
         {/if}
       </div>

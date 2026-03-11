@@ -3047,6 +3047,50 @@
     }
   }
 
+  function clearWatchMode() {
+    watchModeEnabled = false;
+  }
+
+  function clearReplayState() {
+    returnToLiveReplay();
+  }
+
+  function clearWeatherState() {
+    weatherLayerEnabled = false;
+  }
+
+  function clearClusteringState() {
+    aircraftClusteringEnabled = false;
+  }
+
+  function clearSelectedAirportFilterState() {
+    selectedAirportCode = null;
+    selectedAirportSnapshot = null;
+    selectedAirportDashboard = null;
+    selectedAirportStatus = "idle";
+    selectedAirportError = null;
+    selectedAirportWeather = null;
+    selectedAirportWeatherStatus = "idle";
+    selectedAirportWeatherError = null;
+  }
+
+  function toggleFilterMode() {
+    filters = {
+      ...filters,
+      dimFilteredTraffic: !filters.dimFilteredTraffic,
+    };
+  }
+
+  function resetRadarState() {
+    resetFilters();
+    clearWatchMode();
+    clearReplayState();
+    clearWeatherState();
+    clearClusteringState();
+    clearSelectedAirportFilterState();
+    followAircraft = false;
+  }
+
   function saveCurrentPreset() {
     const normalizedName = presetName.trim();
     if (!normalizedName) {
@@ -4162,6 +4206,71 @@
       ? { key: "recentActivity", label: `Recent: ${filters.recentActivity}` }
       : null,
   ].filter(Boolean);
+  $: activeStateChips = [
+    activeFilterCount
+      ? {
+          key: "filters",
+          label: `${activeFilterCount} filter${activeFilterCount === 1 ? "" : "s"}`,
+          hint: activeFilterTokens.slice(0, 2).map((token) => token.label).join(" · "),
+          action: resetFilters,
+        }
+      : null,
+    watchModeEnabled
+      ? {
+          key: "watch",
+          label: "Watch mode",
+          hint: `${watchlist.length} tracked aircraft pinned`,
+          action: clearWatchMode,
+        }
+      : null,
+    activeReplaySnapshot || activeMonitoringSession
+      ? {
+          key: "replay",
+          label: activeMonitoringSession ? "Monitoring session" : "Replay",
+          hint: activeMonitoringSession
+            ? activeMonitoringSession.label ?? "Pinned monitoring archive"
+            : "Archive playback active",
+          action: clearReplayState,
+        }
+      : null,
+    activeFilterCount
+      ? {
+          key: "filter-mode",
+          label: filters.dimFilteredTraffic ? "Dim unmatched" : "Hide unmatched",
+          hint: filters.dimFilteredTraffic
+            ? "Non-matching traffic stays visible but subdued"
+            : "Only matching traffic stays visible",
+          action: toggleFilterMode,
+        }
+      : null,
+    weatherLayerEnabled
+      ? {
+          key: "weather",
+          label: "Weather layer",
+          hint: "Airport and map weather overlays enabled",
+          action: clearWeatherState,
+        }
+      : null,
+    aircraftClusteringEnabled
+      ? {
+          key: "clustering",
+          label: "Cluster nearby",
+          hint: "Nearby aircraft merge into groups at low zoom",
+          action: clearClusteringState,
+        }
+      : null,
+    selectedAirportCode
+      ? {
+          key: "airport",
+          label: `Airport desk ${selectedAirportCode}`,
+          hint: "Airport-focused workflow is open",
+          action: clearSelectedAirportFilterState,
+        }
+      : null,
+  ].filter(Boolean);
+  $: activeStateSummary = activeStateChips.length
+    ? `${activeStateChips.length} active radar state${activeStateChips.length === 1 ? "" : "s"}`
+    : "Radar is in a clean live state";
   $: activeAlertEvents = alertEvents.slice(0, 4);
   $: leadFeedFlight = visibleLeaderboardFlights[0] ?? null;
   $: replayPanelBadge = activeReplaySnapshot
@@ -4697,6 +4806,34 @@
         </div>
       {/if}
     </header>
+
+    {#if !embedMode && activeStateChips.length}
+      <section class="overlay-card active-state-bar" aria-label="Active radar state">
+        <div class="active-state-copy">
+          <span>Active state</span>
+          <strong>{activeStateSummary}</strong>
+        </div>
+
+        <div class="active-state-chip-list">
+          {#each activeStateChips as chip}
+            <button
+              class="active-state-chip"
+              type="button"
+              title={chip.hint}
+              aria-label={`${chip.label}. ${chip.hint}. Click to clear or toggle.`}
+              on:click={chip.action}
+            >
+              <span>{chip.label}</span>
+              <small>{chip.hint}</small>
+            </button>
+          {/each}
+        </div>
+
+        <button class="active-state-reset" type="button" on:click={resetRadarState}>
+          Reset radar state
+        </button>
+      </section>
+    {/if}
 
     <div class="floating-messages">
       {#if state.error}
@@ -6396,6 +6533,7 @@
   .radar-right-panel,
   .bottom-dock,
   .floating-messages,
+  .active-state-bar,
   .embed-actions {
     position: absolute;
     z-index: 1100;
@@ -6738,12 +6876,102 @@
   }
 
   .floating-messages {
-    top: 5.1rem;
+    top: 8.55rem;
     left: 50%;
     transform: translateX(-50%);
     display: grid;
     gap: 0.45rem;
     width: min(40rem, calc(100vw - 2rem));
+  }
+
+  .active-state-bar {
+    top: 5.1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.7rem;
+    align-items: center;
+    width: min(58rem, calc(100vw - 2rem));
+    padding: 0.58rem 0.72rem;
+    border-radius: 16px;
+    background: rgba(14, 16, 19, 0.95);
+  }
+
+  .active-state-copy {
+    display: grid;
+    gap: 0.12rem;
+    min-width: 9.5rem;
+  }
+
+  .active-state-copy span {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(183, 196, 209, 0.58);
+  }
+
+  .active-state-copy strong {
+    font-size: 0.84rem;
+    line-height: 1.15;
+    color: #f2f6fb;
+  }
+
+  .active-state-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+    min-width: 0;
+  }
+
+  .active-state-chip {
+    display: grid;
+    gap: 0.06rem;
+    min-width: 0;
+    padding: 0.46rem 0.62rem;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    font: inherit;
+    color: inherit;
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+    text-align: left;
+    transition:
+      border-color 160ms ease,
+      background 160ms ease;
+  }
+
+  .active-state-chip:hover {
+    border-color: rgba(255, 211, 79, 0.24);
+    background: rgba(255, 255, 255, 0.07);
+  }
+
+  .active-state-chip span {
+    color: #f5f8fb;
+    font-size: 0.72rem;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .active-state-chip small {
+    color: rgba(188, 201, 214, 0.74);
+    font-size: 0.66rem;
+    line-height: 1.15;
+  }
+
+  .active-state-reset {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.55rem 0.88rem;
+    font: inherit;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    cursor: pointer;
+    white-space: nowrap;
   }
 
   .embed-actions {
@@ -6785,7 +7013,7 @@
   }
 
   .radar-left-panel {
-    top: 5.2rem;
+    top: 8.45rem;
     left: 0.95rem;
     bottom: 5.9rem;
     width: min(18rem, calc(100vw - 23rem));
@@ -7831,11 +8059,28 @@
       width: min(32rem, calc(100vw - 24rem));
       min-width: 0;
     }
+
+    .active-state-bar {
+      width: min(42rem, calc(100vw - 2rem));
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .active-state-reset {
+      justify-self: start;
+    }
   }
 
   @media (max-width: 960px) {
+    .active-state-bar,
+    .floating-messages {
+      left: 0.75rem;
+      right: 0.75rem;
+      width: auto;
+      transform: none;
+    }
+
     .radar-left-panel {
-      top: 4.65rem;
+      top: 8.2rem;
       right: 0.75rem;
       bottom: 0.75rem;
       left: 0.75rem;
@@ -7865,7 +8110,7 @@
     }
 
     .radar-right-panel {
-      top: 4.65rem;
+      top: 8.2rem;
       right: 0.75rem;
       bottom: 0.75rem;
       left: 0.75rem;
@@ -7873,6 +8118,22 @@
       transform: translateY(110%);
       transition: transform 180ms ease;
       z-index: 1300;
+    }
+
+    .active-state-bar {
+      top: 4.9rem;
+      padding: 0.56rem 0.62rem;
+      gap: 0.55rem;
+      border-radius: 14px;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .active-state-copy {
+      min-width: 0;
+    }
+
+    .floating-messages {
+      top: 8.55rem;
     }
 
     .radar-right-panel.open {
@@ -7934,6 +8195,17 @@
     .bottom-dock {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .active-state-chip-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 560px) {
+    .active-state-chip-list {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 </style>

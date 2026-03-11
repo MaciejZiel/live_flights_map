@@ -1,69 +1,69 @@
 # Live Flights Map
 
-Minimalne MVP aplikacji do śledzenia samolotów w czasie rzeczywistym:
+Minimal MVP for real-time aircraft tracking:
 
-- `backend/`: Flask proxy do OpenSky Network z fallbackiem do ADSB.lol
-- `frontend/`: Svelte + Leaflet do wizualizacji samolotów na mapie
+- `backend/`: Flask proxy for OpenSky Network with ADSB.lol fallback
+- `frontend/`: Svelte + Leaflet for aircraft visualization on the map
 
-## Architektura
+## Architecture
 
 ### Backend
 
 - `GET /api/flights`
 - `GET /api/flights/stream` (SSE transport)
-- `GET /api/history/replay` (ostatnie snapshoty dla aktualnego bboxa)
-- `GET /api/flights/<icao24>/trail` (ślad lotu z archiwum)
-- `GET /api/search?q=...` (wyszukiwanie po ostatnio widzianych lotach)
-- pobiera świeży snapshot z łańcucha providerów `opensky -> adsb_lol`
-- ma cache per `bbox`, cooldown przy rate-limitach i fallback do ostatniego snapshotu przy błędach upstreamu
-- archiwizuje snapshoty i pozycje do lokalnej bazy SQLite pod replay, trail i search
-- dla frontendu wspiera SSE z fallbackiem do zwykłego pollingu
-- filtruje odpowiedź do pól:
+- `GET /api/history/replay` (recent snapshots for the current bbox)
+- `GET /api/flights/<icao24>/trail` (flight trail from the archive)
+- `GET /api/search?q=...` (search across recently seen traffic)
+- fetches fresh snapshots from the provider chain `opensky -> adsb_lol`
+- keeps a per-`bbox` cache, applies cooldown during rate limits, and falls back to the latest cached snapshot on upstream errors
+- archives snapshots and positions into a local SQLite database for replay, trail, and search
+- supports SSE for the frontend with fallback to standard polling
+- filters the response down to:
   - `icao24`
   - `callsign`
   - `longitude`
   - `latitude`
   - `true_track`
   - `altitude`
-- wspiera domyślny bounding box z `.env`
+- supports a default bounding box from `.env`
 
 ### Frontend
 
-- odpytuje backend co 30 sekund
-- domyślnie używa zwykłego pollingu; SSE można włączyć jawnie zmienną środowiskową
-- wysyła aktualny bounding box mapy po przesunięciu lub zoomie
-- renderuje samoloty jako markery Leaflet
-- animuje pozycje markerów pomiędzy kolejnymi snapshotami
-- pozwala filtrować loty po callsign, ICAO24, kraju i minimalnej wysokości
-- pokazuje panel szczegółów zaznaczonego samolotu
-- obraca ikonę na podstawie `true_track`
-- usuwa markery nieobecne w nowej odpowiedzi i aktualizuje istniejące
+- polls the backend every 30 seconds
+- uses standard polling by default; SSE can be enabled explicitly with an environment variable
+- sends the current map bounding box after pan or zoom
+- renders aircraft as Leaflet markers
+- animates marker positions between snapshots
+- allows filtering by callsign, ICAO24, country, and minimum altitude
+- shows a details panel for the selected aircraft
+- rotates the aircraft icon based on `true_track`
+- removes markers that are missing from the next response and updates the existing ones
 
-## Uruchomienie
+## Running The Project
 
 ### 1. Backend
 
-Edytuj plik `.env`. Jeżeli go usuniesz, możesz odtworzyć go z `.env.example`.
+Edit the `.env` file. If you remove it, you can restore it from `.env.example`.
 
-Zainstaluj zależności:
+Install dependencies:
 
 ```bash
 .venv/bin/python -m pip install -r requirements.txt
 ```
 
-Uruchom backend:
+Start the backend:
 
 ```bash
 .venv/bin/python app.py
 ```
 
-Backend host i port możesz nadpisać:
+You can override the backend host and port:
 
 ```bash
 HOST=127.0.0.1 PORT=5002 .venv/bin/python app.py
 ```
 
-Backend będzie dostępny pod:
+The backend will be available at:
 
 ```text
 http://127.0.0.1:5000
@@ -81,13 +81,13 @@ API:
 http://127.0.0.1:5000/api/flights
 ```
 
-Stream SSE:
+SSE stream:
 
 ```text
 http://127.0.0.1:5000/api/flights/stream
 ```
 
-Przykład z własnym bounding boxem:
+Example with a custom bounding box:
 
 ```text
 http://127.0.0.1:5000/api/flights?lamin=49&lamax=55.1&lomin=14&lomax=24.5
@@ -95,39 +95,39 @@ http://127.0.0.1:5000/api/flights?lamin=49&lamax=55.1&lomin=14&lomax=24.5
 
 ### 2. Frontend
 
-Zainstaluj zależności:
+Install dependencies:
 
 ```bash
 npm --prefix frontend install
 ```
 
-Uruchom dev server:
+Start the dev server:
 
 ```bash
 npm --prefix frontend run dev
 ```
 
-Frontend możesz skierować na inny backend bez edycji kodu:
+You can point the frontend to a different backend without editing code:
 
 ```bash
 VITE_API_BASE_URL=http://127.0.0.1:5002 npm --prefix frontend run dev
 ```
 
-Albo zachować ścieżki względne `/api` i tylko przestawić dev proxy:
+Or keep relative `/api` paths and only switch the dev proxy:
 
 ```bash
 VITE_DEV_PROXY_TARGET=http://127.0.0.1:5002 npm --prefix frontend run dev
 ```
 
-Frontend będzie dostępny pod:
+The frontend will be available at:
 
 ```text
 http://127.0.0.1:5173
 ```
 
-## Konfiguracja providerów lotów
+## Flight Provider Configuration
 
-Wpisz dane do istniejącego `.env`:
+Add values to the existing `.env` file:
 
 ```env
 FLIGHT_ARCHIVE_PATH=/tmp/live-flights-map-history.sqlite3
@@ -147,8 +147,8 @@ OPENSKY_COOLDOWN_SECONDS=75
 FLIGHT_STREAM_INTERVAL_SECONDS=30
 ```
 
-`FLIGHT_DATA_PROVIDERS` określa kolejność upstreamów. Domyślnie backend próbuje najpierw OpenSky, a przy błędzie lub rate-limicie przechodzi do ADSB.lol.
+`FLIGHT_DATA_PROVIDERS` defines the upstream order. By default the backend tries OpenSky first and switches to ADSB.lol on errors or rate limits.
 
-Obecna integracja OpenSky zakłada standardowe dane logowania (`username` + `password`), nie osobny token API.
+The current OpenSky integration expects standard credentials (`username` + `password`), not a separate API token.
 
-Jeżeli pola OpenSky zostaną puste, backend spróbuje połączenia anonimowego, ale limity będą ostrzejsze. ADSB.lol działa jako publiczny fallback i dla większych widoków typu Europa/World może zwracać tylko część ruchu, bo endpoint punktowy ma limit promienia `250nm`.
+If the OpenSky fields are left empty, the backend will try an anonymous connection, but the limits will be stricter. ADSB.lol works as a public fallback and, for wider views such as Europe or World, may return only part of the traffic because the point endpoint has a `250nm` radius cap.

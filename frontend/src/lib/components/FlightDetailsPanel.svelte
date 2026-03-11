@@ -308,7 +308,6 @@
       <div class="photo-shell">
         <div class:no-photo={!hasPhoto} class="photo-visual">
           {#if photoUrl}
-            <div aria-hidden="true" class="photo-backdrop" style={`background-image: url("${photoUrl}")`}></div>
             {#if photo?.link}
               <a class="photo-link photo-asset" href={photo.link} rel="noreferrer" target="_blank">
                 <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
@@ -708,8 +707,8 @@
 
   .hero-card {
     display: grid;
-    gap: 0.8rem;
-    padding: 0.72rem;
+    gap: 0.68rem;
+    padding: 0.62rem;
     overflow: hidden;
   }
 
@@ -723,7 +722,7 @@
     overflow: hidden;
     border-radius: 13px;
     border: 1px solid rgba(255, 255, 255, 0.07);
-    background: rgba(255, 255, 255, 0.04);
+    background: #07090c;
   }
 
   .photo-visual.no-photo {
@@ -733,50 +732,26 @@
       linear-gradient(180deg, rgba(31, 37, 47, 0.96) 0%, rgba(10, 13, 18, 0.98) 100%);
   }
 
-  .photo-placeholder,
-  .photo-asset {
+  .photo-placeholder {
     width: 100%;
     aspect-ratio: 16 / 10;
-  }
-
-  .photo-backdrop {
-    position: absolute;
-    inset: -8%;
-    background-position: center center;
-    background-repeat: no-repeat;
-    background-size: cover;
-    filter: blur(26px) saturate(1.08);
-    opacity: 0.62;
-    transform: scale(1.06);
-  }
-
-  .photo-backdrop::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      linear-gradient(180deg, rgba(6, 7, 10, 0.18) 0%, rgba(6, 7, 10, 0.42) 100%);
   }
 
   .photo-asset {
     position: relative;
     z-index: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0.48rem;
-    box-sizing: border-box;
+    display: block;
+    max-height: 12.8rem;
+    overflow: hidden;
+    background: #07090c;
   }
 
   .photo-shell img {
     display: block;
     width: 100%;
-    height: 100%;
-    object-fit: contain;
+    height: auto;
     object-position: center center;
-    border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
-    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.28));
   }
 
   .photo-link {
@@ -791,9 +766,9 @@
     z-index: 2;
     display: grid;
     gap: 0.52rem;
-    padding: 1rem 0.9rem 0.82rem;
+    padding: 0.88rem 0.82rem 0.74rem;
     background:
-      linear-gradient(180deg, rgba(6, 7, 10, 0) 0%, rgba(7, 8, 11, 0.7) 46%, rgba(7, 8, 11, 0.9) 100%);
+      linear-gradient(180deg, rgba(6, 7, 10, 0) 38%, rgba(7, 8, 11, 0.52) 72%, rgba(7, 8, 11, 0.84) 100%);
   }
 
   .photo-overlay.no-photo {
@@ -833,7 +808,7 @@
 
   .photo-copy {
     display: grid;
-    gap: 0.32rem;
+    gap: 0.24rem;
   }
 
   .hero-status-row {
@@ -869,7 +844,7 @@
   }
 
   .photo-copy h3 {
-    font-size: 1.32rem;
+    font-size: 1.28rem;
     line-height: 1.1;
   }
 

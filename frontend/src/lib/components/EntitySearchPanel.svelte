@@ -1,12 +1,16 @@
 <script>
+  import { tick } from "svelte";
+
   export let query = "";
   export let status = "idle";
   export let error = null;
   export let groups = {};
   export let totalCount = 0;
   export let activeResultKey = "";
+  export let panelId = "global-search-results";
   export let onSelectResult = () => {};
   export let onHoverResult = () => {};
+  export let onRequestSearchFocus = () => {};
 
   const GROUP_META = {
     aircraft: { label: "Aircraft", glyph: "ACFT" },
@@ -106,7 +110,78 @@
     return `${result?.entity_type ?? "entity"}:${result?.entity_key ?? result?.icao24 ?? result?.label ?? "unknown"}`;
   }
 
+  function buildResultOptionId(resultOrKey) {
+    const rawKey =
+      typeof resultOrKey === "string" && resultOrKey
+        ? resultOrKey
+        : buildResultKey(resultOrKey);
+    return `search-option-${rawKey.replace(/[^a-z0-9_-]+/gi, "-").toLowerCase()}`;
+  }
+
+  function focusResult(result) {
+    if (typeof document === "undefined" || !result) {
+      return;
+    }
+
+    document.getElementById(buildResultOptionId(result))?.focus();
+  }
+
+  function handleResultKeydown(event, result) {
+    const currentIndex = allResults.findIndex((entry) => buildResultKey(entry) === buildResultKey(result));
+    if (currentIndex < 0) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      const nextResult = allResults[(currentIndex + 1) % allResults.length];
+      onHoverResult(nextResult);
+      focusResult(nextResult);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      const nextResult = allResults[(currentIndex - 1 + allResults.length) % allResults.length];
+      onHoverResult(nextResult);
+      focusResult(nextResult);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      onHoverResult(allResults[0]);
+      focusResult(allResults[0]);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      const lastResult = allResults[allResults.length - 1];
+      onHoverResult(lastResult);
+      focusResult(lastResult);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      onRequestSearchFocus();
+    }
+  }
+
   $: groupEntries = getEntries(groups);
+  $: allResults = groupEntries.flatMap(([, items]) => items);
+  $: if (activeResultKey) {
+    void tick().then(() => {
+      if (typeof document === "undefined") {
+        return;
+      }
+
+      document
+        .getElementById(buildResultOptionId(activeResultKey))
+        ?.scrollIntoView({ block: "nearest" });
+    });
+  }
 </script>
 
 <section class="search-panel" aria-label="Entity search results">
@@ -120,11 +195,12 @@
         <strong>{totalCount}</strong>
         <span>{query.trim() ? `results for "${query.trim()}"` : "results"}</span>
       </div>
-      <small>Use ↑ ↓ to navigate, Enter to open</small>
+      <small>Use ↑ ↓ to navigate, Enter to open, Esc to return</small>
     </div>
 
-    {#each groupEntries as [groupName, items]}
-      <section class="search-group">
+    <div class="search-groups" id={panelId} role="listbox" aria-label={`Search results for ${query.trim() || "current query"}`}>
+      {#each groupEntries as [groupName, items]}
+      <section class="search-group" role="group" aria-label={GROUP_META[groupName]?.label ?? groupName}>
         <div class="search-group-header">
           <span>{GROUP_META[groupName]?.label ?? groupName}</span>
           <strong>{items.length}</strong>
@@ -136,9 +212,13 @@
               class:active={activeResultKey === buildResultKey(result)}
               class="search-row"
               type="button"
+              id={buildResultOptionId(result)}
+              role="option"
               aria-current={activeResultKey === buildResultKey(result) ? "true" : undefined}
+              aria-selected={activeResultKey === buildResultKey(result)}
               on:mouseenter={() => onHoverResult(result)}
               on:focus={() => onHoverResult(result)}
+              on:keydown={(event) => handleResultKeydown(event, result)}
               on:click={() => onSelectResult(result)}
             >
               <span class="search-row-glyph">{GROUP_META[groupName]?.glyph ?? "..."}</span>
@@ -151,7 +231,8 @@
           {/each}
         </div>
       </section>
-    {/each}
+      {/each}
+    </div>
   {:else if query.trim().length >= 2}
     <p class="search-copy">No live aircraft, flights or airport entities matched this search yet.</p>
   {:else}
@@ -204,6 +285,11 @@
   .search-group {
     display: grid;
     gap: 0.45rem;
+  }
+
+  .search-groups {
+    display: grid;
+    gap: 0.7rem;
   }
 
   .search-group-header {
@@ -264,6 +350,15 @@
     transform: translateY(-1px);
     border-color: rgba(255, 211, 79, 0.24);
     background: linear-gradient(180deg, rgba(44, 37, 18, 0.98) 0%, rgba(23, 22, 17, 0.98) 100%);
+  }
+
+  .search-row:focus-visible {
+    outline: none;
+    border-color: rgba(120, 200, 255, 0.4);
+    background: linear-gradient(180deg, rgba(18, 43, 63, 0.98) 0%, rgba(13, 26, 39, 0.98) 100%);
+    box-shadow:
+      0 0 0 1px rgba(120, 200, 255, 0.18),
+      0 0 0 4px rgba(120, 200, 255, 0.16);
   }
 
   .search-row.active {

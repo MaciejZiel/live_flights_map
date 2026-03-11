@@ -381,7 +381,8 @@ test("search result opens flight details with photo and alert action", async ({ 
 
   const searchSuggestions = page.getByTestId("search-suggestions");
   await expect(searchSuggestions).toContainText("LOT123");
-  await searchSuggestions.getByRole("button", { name: /LOT123/i }).click();
+  await searchInput.press("ArrowDown");
+  await searchInput.press("Enter");
 
   const detailsPanel = page.getByTestId("flight-details-panel");
   await expect(detailsPanel).toContainText("WAW -> LHR");
@@ -416,17 +417,44 @@ test("changing selected flight refreshes inspector content and photo source", as
   await expect(searchInput).toBeVisible();
 
   await searchInput.fill("LOT");
-  await page.getByTestId("search-suggestions").getByRole("button", { name: /LOT123/i }).click();
+  await expect(page.getByTestId("search-suggestions")).toContainText("LOT123");
+  await searchInput.press("ArrowDown");
+  await searchInput.press("Enter");
   await expect(page.getByTestId("flight-details-panel")).toContainText("SP-LVG");
   await expect(page.getByTestId("flight-photo-image")).toHaveAttribute("src", /sp-lvg/i);
 
   await searchInput.fill("RYR");
   await expect(page.getByTestId("search-suggestions")).toContainText("RYR456");
-  await page.getByTestId("search-suggestions").getByRole("button", { name: /RYR456/i }).click();
+  await searchInput.press("ArrowDown");
+  await searchInput.press("Enter");
 
   const detailsPanel = page.getByTestId("flight-details-panel");
   await expect(detailsPanel).toContainText("DUB -> STN");
   await expect(detailsPanel).toContainText("EI-DCL");
   await expect(detailsPanel).toContainText("Ryanair");
   await expect(page.getByTestId("flight-photo-image")).toHaveAttribute("src", /ei-dcl/i);
+});
+
+test("keyboard shortcuts keep search and inspector accessible without the mouse", async ({ page }) => {
+  await page.goto("/");
+
+  await page.keyboard.press("Shift+Slash");
+  await expect(page.locator(".radar-left-panel")).not.toHaveClass(/compact/);
+
+  await page.keyboard.press("Control+K");
+  await expect(page.getByTestId("global-search-input")).toBeFocused();
+
+  await page.keyboard.type("RYR");
+  await expect(page.getByTestId("search-suggestions")).toContainText("RYR456");
+
+  await page.keyboard.press("ArrowDown");
+  await expect(page.getByRole("option", { name: /RYR456/i })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("option", { name: /RYR456/i })).toBeFocused();
+
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("flight-details-panel")).toContainText("EI-DCL");
+
+  await page.keyboard.press("i");
+  await expect(page.locator(".radar-right-panel")).toBeFocused();
 });

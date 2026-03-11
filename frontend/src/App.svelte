@@ -83,6 +83,9 @@
     normalizeAlertRuleDraft,
   } from "./lib/utils/alertRules.js";
 
+  const SEARCH_RESULTS_PANEL_ID = "global-search-results";
+  const SEARCH_SHORTCUT_HINT_ID = "global-search-shortcuts";
+
   let state = {
     status: "idle",
     flights: [],
@@ -152,6 +155,8 @@
   };
   let preferencesReady = false;
   let searchInput;
+  let inspectorPanel;
+  let shortcutsPanelAnchor;
   let fullscreenRequestId = 0;
   let viewPresetRequest = null;
   let flightFocusRequest = null;
@@ -184,6 +189,7 @@
   let desktopTrafficBoardOpen = false;
   let inspectorScroll;
   let utilityPanelMode = "radar";
+  let workspaceSetupDrawerOpen = false;
   let inspectorTab = "details";
   let snapshotHistory = [];
   let replaySnapshotCursor = null;
@@ -1259,6 +1265,15 @@
     return `${result?.entity_type ?? "entity"}:${result?.entity_key ?? result?.icao24 ?? result?.label ?? "unknown"}`;
   }
 
+  function buildSearchResultOptionId(resultKey) {
+    const normalizedKey = String(resultKey ?? "").trim().toLowerCase();
+    if (!normalizedKey) {
+      return "";
+    }
+
+    return `search-option-${normalizedKey.replace(/[^a-z0-9_-]+/g, "-")}`;
+  }
+
   function flattenSearchGroups(groups) {
     const orderedGroupNames = [
       "aircraft",
@@ -1315,6 +1330,52 @@
     setSearchNavigationByResult(result);
   }
 
+  function focusSearchField(options = {}) {
+    searchInput?.focus();
+    if (options.select !== false) {
+      searchInput?.select();
+    }
+  }
+
+  function focusSearchResultOption(result = null) {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const targetResult = result ?? activeSearchResult ?? flattenedSearchResults[0] ?? null;
+    if (!targetResult) {
+      return;
+    }
+
+    const optionId = buildSearchResultOptionId(buildSearchResultKey(targetResult));
+    document.getElementById(optionId)?.focus();
+  }
+
+  function focusInspectorWorkspace() {
+    if (!(selectedFlight || selectedAirport || selectedEntityContext || desktopTrafficBoardOpen)) {
+      return;
+    }
+
+    if (isMobileViewport) {
+      mobileSidebarOpen = true;
+      mobileUtilityOpen = false;
+    }
+
+    window.requestAnimationFrame(() => {
+      inspectorPanel?.focus();
+    });
+  }
+
+  function focusShortcutsWorkspace() {
+    openUtilityWorkspace("tools");
+    workspaceSetupDrawerOpen = true;
+
+    window.requestAnimationFrame(() => {
+      shortcutsPanelAnchor?.scrollIntoView({ block: "nearest" });
+      shortcutsPanelAnchor?.focus();
+    });
+  }
+
   function handleSearchInputKeydown(event) {
     if (!showSearchSuggestions || !flattenedSearchResults.length) {
       if (event.key === "Escape") {
@@ -1351,6 +1412,30 @@
 
       event.preventDefault();
       selectSearchResult(activeResult);
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      searchNavigationIndex = 0;
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      searchNavigationIndex = flattenedSearchResults.length - 1;
+      return;
+    }
+
+    if (event.key === "Tab" && !event.shiftKey) {
+      const activeResult =
+        flattenedSearchResults[searchNavigationIndex] ?? flattenedSearchResults[0] ?? null;
+      if (!activeResult) {
+        return;
+      }
+
+      event.preventDefault();
+      focusSearchResultOption(activeResult);
       return;
     }
 
@@ -3546,10 +3631,15 @@
       target instanceof HTMLTextAreaElement ||
       target?.isContentEditable;
 
+    if ((event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      focusSearchField();
+      return;
+    }
+
     if (event.key === "/") {
       event.preventDefault();
-      searchInput?.focus();
-      searchInput?.select();
+      focusSearchField();
       return;
     }
 
@@ -3564,6 +3654,12 @@
     }
 
     if (isTypingField) {
+      return;
+    }
+
+    if (event.key === "?" || (event.key === "/" && event.shiftKey)) {
+      event.preventDefault();
+      focusShortcutsWorkspace();
       return;
     }
 
@@ -3583,6 +3679,8 @@
       resetFilters();
     } else if (event.key.toLowerCase() === "f") {
       toggleFollowAircraft();
+    } else if (event.key.toLowerCase() === "i") {
+      focusInspectorWorkspace();
     } else if (event.key.toLowerCase() === "m") {
       triggerFullscreenToggle();
     } else if (event.key.toLowerCase() === "p") {
@@ -4115,6 +4213,9 @@
   $: activeSearchResult =
     searchNavigationIndex >= 0 ? flattenedSearchResults[searchNavigationIndex] ?? null : null;
   $: activeSearchResultKey = activeSearchResult ? buildSearchResultKey(activeSearchResult) : "";
+  $: activeSearchResultOptionId = activeSearchResultKey
+    ? buildSearchResultOptionId(activeSearchResultKey)
+    : undefined;
   $: showSearchSuggestions =
     searchQuery.length >= 2 &&
     !searchSuggestionsDismissed &&
@@ -4508,9 +4609,18 @@
                   type="text"
                   placeholder="Search aircraft, flights, airports, airlines, routes, locations"
                   title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls={SEARCH_RESULTS_PANEL_ID}
+                  aria-expanded={showSearchSuggestions}
+                  aria-activedescendant={showSearchSuggestions ? activeSearchResultOptionId : undefined}
+                  aria-describedby={SEARCH_SHORTCUT_HINT_ID}
                   on:keydown={handleSearchInputKeydown}
                 />
               </label>
+              <span class="visually-hidden" id={SEARCH_SHORTCUT_HINT_ID}>
+                Press slash or Control K to focus search, arrow keys to browse results, Enter to open, Escape to close suggestions, and question mark to open keyboard shortcuts.
+              </span>
 
               {#if showSearchSuggestions}
                 <div class="search-suggestions" data-testid="search-suggestions">
@@ -4521,7 +4631,9 @@
                     groups={remoteSearchGroups}
                     totalCount={remoteSearchCount}
                     activeResultKey={activeSearchResultKey}
+                    panelId={SEARCH_RESULTS_PANEL_ID}
                     onHoverResult={handleSearchResultHover}
+                    onRequestSearchFocus={() => focusSearchField({ select: false })}
                     onSelectResult={selectSearchResult}
                   />
                 </div>
@@ -4950,7 +5062,7 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={false}>
+          <details bind:open={workspaceSetupDrawerOpen} class="utility-drawer">
             <summary>
               <span>Suggestions and map</span>
               <strong>{topTypeSuggestions.length + topOperatorSuggestions.length + topCountrySuggestions.length}</strong>
@@ -5319,7 +5431,9 @@
                 {/if}
 
                 <LegendPanel />
-                <ShortcutsPanel />
+                <div bind:this={shortcutsPanelAnchor} class="shortcuts-focus-anchor" tabindex="-1">
+                  <ShortcutsPanel />
+                </div>
               </section>
 
               <section class="utility-stack-panel">
@@ -5587,7 +5701,14 @@
     {/if}
 
     {#if !embedMode && (isMobileViewport || selectedFlight || selectedAirport || selectedEntityContext || desktopTrafficBoardOpen)}
-    <aside class:open={mobileSidebarOpen} class:selected-flight-inspector={Boolean(selectedFlight)} class="overlay-card radar-right-panel">
+    <aside
+      bind:this={inspectorPanel}
+      class:open={mobileSidebarOpen}
+      class:selected-flight-inspector={Boolean(selectedFlight)}
+      class="overlay-card radar-right-panel"
+      tabindex="-1"
+      aria-label={selectedFlight ? "Selected aircraft inspector" : selectedAirport ? "Airport inspector" : selectedEntityContext ? "Search focus inspector" : "Traffic sidebar"}
+    >
       {#if isMobileViewport}
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
       {/if}
@@ -6350,6 +6471,38 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.5),
       0 0 0 3px rgba(245, 185, 8, 0.18);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .shortcuts-focus-anchor {
+    border-radius: 18px;
+  }
+
+  .shortcuts-focus-anchor:focus-visible,
+  .radar-right-panel:focus-visible {
+    outline: 2px solid rgba(120, 200, 255, 0.92);
+    outline-offset: 3px;
+  }
+
+  :global(button:focus-visible),
+  :global(a:focus-visible),
+  :global(input:focus-visible),
+  :global(textarea:focus-visible),
+  :global(select:focus-visible),
+  :global(summary:focus-visible) {
+    outline: 2px solid rgba(120, 200, 255, 0.92);
+    outline-offset: 2px;
   }
 
   .search-shell {

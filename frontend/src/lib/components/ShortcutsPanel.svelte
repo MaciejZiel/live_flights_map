@@ -1,14 +1,17 @@
-<section class="panel shortcuts-panel">
+<section class="panel shortcuts-panel" data-testid="keyboard-shortcuts-panel">
   <h2>Keyboard shortcuts</h2>
 
   <div class="shortcut-list">
     <div><kbd>/</kbd><span>Focus search</span></div>
+    <div><kbd>Ctrl/⌘ K</kbd><span>Focus search</span></div>
+    <div><kbd>?</kbd><span>Open shortcuts</span></div>
     <div><kbd>1</kbd><span>Standard map</span></div>
     <div><kbd>2</kbd><span>Satellite map</span></div>
     <div><kbd>3</kbd><span>Dark map</span></div>
     <div><kbd>4</kbd><span>Aviation map</span></div>
     <div><kbd>5</kbd><span>Light map</span></div>
     <div><kbd>6</kbd><span>Terrain map</span></div>
+    <div><kbd>I</kbd><span>Focus inspector</span></div>
     <div><kbd>P</kbd><span>Poland preset</span></div>
     <div><kbd>E</kbd><span>Europe preset</span></div>
     <div><kbd>W</kbd><span>World preset</span></div>

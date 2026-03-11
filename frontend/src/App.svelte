@@ -165,6 +165,7 @@
   let isMobileViewport = false;
   let mobileSidebarOpen = true;
   let mobileUtilityOpen = false;
+  let desktopUtilityExpanded = false;
   let inspectorScroll;
   let utilityPanelMode = "radar";
   let inspectorTab = "details";
@@ -320,6 +321,9 @@
       isMobileViewport = event.matches;
       mobileSidebarOpen = !event.matches;
       mobileUtilityOpen = false;
+      if (event.matches) {
+        desktopUtilityExpanded = false;
+      }
     };
     syncViewportMode(mobileViewportQuery);
     mobileViewportQuery.addEventListener("change", syncViewportMode);
@@ -2925,7 +2929,7 @@
 
   function showOnboardingTips() {
     onboardingDismissed = false;
-    utilityPanelMode = "tools";
+    openUtilityWorkspace("tools");
   }
 
   function buildBboxKey(bbox) {
@@ -3054,6 +3058,34 @@
 
   function closeMobileUtility() {
     mobileUtilityOpen = false;
+  }
+
+  function openUtilityWorkspace(mode = "radar") {
+    utilityPanelMode = mode;
+
+    if (isMobileViewport) {
+      mobileUtilityOpen = true;
+      mobileSidebarOpen = false;
+      return;
+    }
+
+    desktopUtilityExpanded = true;
+  }
+
+  function toggleUtilityWorkspace(mode = utilityPanelMode) {
+    if (isMobileViewport) {
+      utilityPanelMode = mode;
+      toggleMobileUtility();
+      return;
+    }
+
+    if (utilityPanelMode !== mode) {
+      utilityPanelMode = mode;
+      desktopUtilityExpanded = true;
+      return;
+    }
+
+    desktopUtilityExpanded = !desktopUtilityExpanded;
   }
 
   function selectReplaySnapshot(index) {
@@ -3434,12 +3466,7 @@
       airportCode,
       airportFlow: flow,
     };
-    utilityPanelMode = "radar";
-
-    if (isMobileViewport) {
-      mobileUtilityOpen = true;
-      mobileSidebarOpen = false;
-    }
+    openUtilityWorkspace("radar");
   }
 
   function matchesHeadingBand(track, band) {
@@ -3811,6 +3838,13 @@
       : utilityPanelMode === "replay"
         ? "Archive controls"
         : "Secondary tools";
+  $: topbarStatusBadges = [
+    activeReplaySnapshot ? "Replay" : null,
+    activeFilterCount ? `${activeFilterCount} filters` : null,
+    mapStyle !== "standard" ? mapStyleLabel : null,
+    weatherLayerEnabled ? "Weather" : null,
+    !showAirportMarkers ? "Airports hidden" : null,
+  ].filter(Boolean);
   $: statusLabel = getStatusLabel(state);
   $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
   $: confidenceLabel = getConfidenceLabel(state);
@@ -4254,23 +4288,27 @@
                 <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
                   {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
                 </button>
+              {:else}
+                <button
+                  class:active={desktopUtilityExpanded}
+                  class="overlay-card topbar-icon topbar-action-chip"
+                  type="button"
+                  on:click={() => toggleUtilityWorkspace()}
+                >
+                  {desktopUtilityExpanded ? "Hide panels" : "Workspace"}
+                </button>
               {/if}
             </div>
           </div>
 
-          <div class="topbar-status-strip" aria-label="Radar status strip">
-            <span class="topbar-status-chip">{activeReplaySnapshot ? "Replay" : statusLabel}</span>
-            <span>{mapStyleLabel}</span>
-            {#if aircraftClusteringEnabled}
-              <span>Clusters on</span>
-            {/if}
-            {#if weatherLayerEnabled}
-              <span>Weather</span>
-            {/if}
-            {#if !showAirportMarkers}
-              <span>Airports hidden</span>
-            {/if}
-          </div>
+          {#if topbarStatusBadges.length}
+            <div class="topbar-status-strip" aria-label="Radar status strip">
+              <span class="topbar-status-chip">{statusLabel}</span>
+              {#each topbarStatusBadges as badge}
+                <span>{badge}</span>
+              {/each}
+            </div>
+          {/if}
         </div>
       {/if}
     </header>
@@ -4313,10 +4351,11 @@
     {/if}
 
     {#if !embedMode}
-    <aside class:open={mobileUtilityOpen} class="overlay-card radar-left-panel">
+    <aside class:open={mobileUtilityOpen} class:compact={!isMobileViewport && !desktopUtilityExpanded} class="overlay-card radar-left-panel">
       {#if isMobileViewport}
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
       {/if}
+      {#if isMobileViewport || desktopUtilityExpanded}
       <div class="utility-header">
         <div class="utility-heading">
           <span>{utilityPanelEyebrow}</span>
@@ -5285,6 +5324,119 @@
           </details>
         {/if}
       </div>
+      {:else}
+        <div class="panel-stack compact-utility-stack">
+          <section class="widget-card utility-shell-compact-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Radar shell</strong>
+                <span class="live-pill utility-state-pill">{statusLabel}</span>
+              </div>
+              <button class="widget-mini-action" type="button" on:click={() => openUtilityWorkspace("radar")}>
+                Open
+              </button>
+            </div>
+
+            <div class="compact-shell-stats">
+              <article>
+                <span>Traffic</span>
+                <strong>{visibleTrackedCount}</strong>
+                <small>{airborneCount} airborne</small>
+              </article>
+              <article>
+                <span>Freshness</span>
+                <strong>{freshnessLabel}</strong>
+                <small>{transportLabel}</small>
+              </article>
+              <article>
+                <span>Map</span>
+                <strong>{mapStyleLabel}</strong>
+                <small>Zoom {zoomLabel}</small>
+              </article>
+              <article>
+                <span>Filters</span>
+                <strong>{activeFilterCount}</strong>
+                <small>{filters.dimFilteredTraffic ? "Dim unmatched" : "Hide unmatched"}</small>
+              </article>
+            </div>
+
+            {#if topbarStatusBadges.length}
+              <div class="filter-token-list compact-shell-badges">
+                {#each topbarStatusBadges as badge}
+                  <span class="filter-token compact-shell-token">
+                    <span>{badge}</span>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+          </section>
+
+          <section class="widget-card utility-shell-compact-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Quick filters</strong>
+                <span class="live-pill utility-state-pill">{activeFilterCount}</span>
+              </div>
+              <button class="widget-mini-action" type="button" on:click={resetFilters}>Reset</button>
+            </div>
+
+            <div class="filter-chip-row">
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast jets</button>
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
+              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("cargo")}>Cargo</button>
+              <button
+                class:active={weatherLayerEnabled}
+                class="filter-chip"
+                type="button"
+                on:click={() => {
+                  weatherLayerEnabled = !weatherLayerEnabled;
+                }}
+              >
+                Weather
+              </button>
+            </div>
+
+            {#if activeFilterTokens.length}
+              <div class="filter-token-list">
+                {#each activeFilterTokens.slice(0, 4) as token}
+                  <button class="filter-token" type="button" on:click={() => clearFilterToken(token.key)}>
+                    <span>{token.label}</span>
+                    <strong>×</strong>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </section>
+
+          <section class="widget-card utility-shell-compact-card">
+            <div class="widget-header">
+              <div class="widget-heading">
+                <strong>Workspace</strong>
+                <span class="live-pill utility-state-pill">{watchlist.length + savedEntities.length + alertRules.length}</span>
+              </div>
+            </div>
+
+            <p class="compact-shell-copy">
+              Saved items, replay, reports and profiles stay one click away instead of living on the map all the time.
+            </p>
+
+            <div class="workspace-launch-grid">
+              <button class="widget-footer-button primary" type="button" on:click={() => openUtilityWorkspace("radar")}>
+                Radar tools
+              </button>
+              <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("replay")}>
+                Replay
+              </button>
+              <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("tools")}>
+                Saved & alerts
+              </button>
+              <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
+                Save area
+              </button>
+            </div>
+          </section>
+        </div>
+      {/if}
     </aside>
     {/if}
 
@@ -5778,7 +5930,7 @@
                       ...filters,
                       operator: selectedEntityContext.entity_key ?? selectedEntityContext.label ?? "",
                     };
-                    utilityPanelMode = "radar";
+                    openUtilityWorkspace("radar");
                   }}
                 >
                   Filter by airline
@@ -6256,6 +6408,12 @@
     letter-spacing: 0.04em;
   }
 
+  .topbar-action-chip.active {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
+  }
+
   .floating-messages {
     top: 5.1rem;
     left: 50%;
@@ -6347,6 +6505,12 @@
     background: rgba(12, 14, 17, 0.96);
   }
 
+  .radar-left-panel.compact {
+    width: min(14.2rem, calc(100vw - 26rem));
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+  }
+
   .radar-right-panel {
     top: 0.85rem;
     right: 0.95rem;
@@ -6375,6 +6539,11 @@
 
   .panel-stack {
     padding-right: 0.08rem;
+  }
+
+  .compact-utility-stack {
+    gap: 0.72rem;
+    padding-right: 0;
   }
 
   .utility-header {
@@ -6479,6 +6648,63 @@
 
   .utility-summary-card {
     background: rgba(255, 255, 255, 0.028);
+  }
+
+  .utility-shell-compact-card {
+    gap: 0.72rem;
+    padding: 0.8rem 0.8rem 0.76rem;
+  }
+
+  .compact-shell-stats {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.46rem;
+  }
+
+  .compact-shell-stats article {
+    display: grid;
+    gap: 0.16rem;
+    padding: 0.68rem 0.72rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(0, 0, 0, 0.18);
+  }
+
+  .compact-shell-stats span {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: rgba(171, 186, 202, 0.62);
+  }
+
+  .compact-shell-stats strong {
+    color: #f4f7fb;
+    font-size: 0.9rem;
+  }
+
+  .compact-shell-stats small,
+  .compact-shell-copy {
+    color: rgba(190, 203, 217, 0.74);
+    font-size: 0.74rem;
+    line-height: 1.45;
+  }
+
+  .compact-shell-copy {
+    margin: 0;
+  }
+
+  .compact-shell-badges {
+    gap: 0.34rem;
+  }
+
+  .compact-shell-token {
+    padding-right: 0.62rem;
+  }
+
+  .workspace-launch-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
   }
 
   .utility-compact-card {
@@ -6905,6 +7131,12 @@
     color: #edf2f7;
     background: rgba(255, 255, 255, 0.05);
     cursor: pointer;
+  }
+
+  .widget-footer-button.primary {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
   }
 
   .widget-mini-action {

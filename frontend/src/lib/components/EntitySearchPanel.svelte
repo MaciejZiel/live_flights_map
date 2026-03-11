@@ -6,8 +6,17 @@
   export let error = null;
   export let groups = {};
   export let totalCount = 0;
+  export let queryScope = null;
   export let activeResultKey = "";
   export let panelId = "global-search-results";
+  export let recentSearches = [];
+  export let savedSearches = [];
+  export let scopeOptions = [];
+  export let onUseSearchQuery = () => {};
+  export let onUseSearchScope = () => {};
+  export let onSaveSearchQuery = () => {};
+  export let onRemoveSavedSearch = () => {};
+  export let onQuickAction = () => {};
   export let onSelectResult = () => {};
   export let onHoverResult = () => {};
   export let onRequestSearchFocus = () => {};
@@ -126,6 +135,40 @@
     document.getElementById(buildResultOptionId(result))?.focus();
   }
 
+  function getQuickActions(result) {
+    if (result?.entity_type === "flight" || result?.entity_type === "aircraft" || result?.entity_type === "registration") {
+      return [
+        { id: "open", label: "Open" },
+        { id: "track", label: "Track" },
+      ];
+    }
+
+    if (result?.entity_type === "airport") {
+      return [
+        { id: "open", label: "Open" },
+        { id: "alert", label: "Alert" },
+      ];
+    }
+
+    if (result?.entity_type === "airline" || result?.entity_type === "route") {
+      return [
+        { id: "filter", label: "Filter" },
+        { id: "alert", label: "Alert" },
+      ];
+    }
+
+    return [
+      { id: "open", label: "Open" },
+      { id: "alert", label: "Alert" },
+    ];
+  }
+
+  function handleQuickAction(event, action, result) {
+    event.preventDefault();
+    event.stopPropagation();
+    onQuickAction(action, result);
+  }
+
   function handleResultKeydown(event, result) {
     const currentIndex = allResults.findIndex((entry) => buildResultKey(entry) === buildResultKey(result));
     if (currentIndex < 0) {
@@ -195,7 +238,15 @@
         <strong>{totalCount}</strong>
         <span>{query.trim() ? `results for "${query.trim()}"` : "results"}</span>
       </div>
-      <small>Use ↑ ↓ to navigate, Enter to open, Esc to return</small>
+      <div class="search-summary-actions">
+        {#if queryScope}
+          <span class="search-scope-pill">{queryScope}</span>
+        {/if}
+        <button class="search-summary-button" type="button" on:click={onSaveSearchQuery}>
+          Save search
+        </button>
+        <small>Use ↑ ↓ to navigate, Enter to open, Esc to return</small>
+      </div>
     </div>
 
     <div class="search-groups" id={panelId} role="listbox" aria-label={`Search results for ${query.trim() || "current query"}`}>
@@ -208,35 +259,131 @@
 
         <div class="search-result-list">
           {#each items as result}
-            <button
+            <article
               class:active={activeResultKey === buildResultKey(result)}
               class="search-row"
-              type="button"
-              id={buildResultOptionId(result)}
-              role="option"
-              aria-current={activeResultKey === buildResultKey(result) ? "true" : undefined}
-              aria-selected={activeResultKey === buildResultKey(result)}
-              on:mouseenter={() => onHoverResult(result)}
-              on:focus={() => onHoverResult(result)}
-              on:keydown={(event) => handleResultKeydown(event, result)}
-              on:click={() => onSelectResult(result)}
             >
-              <span class="search-row-glyph">{GROUP_META[groupName]?.glyph ?? "..."}</span>
-              <span class="search-row-main">
-                <strong>{getResultLabel(result)}</strong>
-                <small>{getResultSubtitle(result) || "No metadata yet"}</small>
+              <button
+                class="search-row-hitbox"
+                type="button"
+                id={buildResultOptionId(result)}
+                role="option"
+                aria-current={activeResultKey === buildResultKey(result) ? "true" : undefined}
+                aria-selected={activeResultKey === buildResultKey(result)}
+                on:mouseenter={() => onHoverResult(result)}
+                on:focus={() => onHoverResult(result)}
+                on:keydown={(event) => handleResultKeydown(event, result)}
+                on:click={() => onSelectResult(result)}
+              >
+                <span class="search-row-glyph">{GROUP_META[groupName]?.glyph ?? "..."}</span>
+                <span class="search-row-main">
+                  <strong>{getResultLabel(result)}</strong>
+                  <small>{getResultSubtitle(result) || "No metadata yet"}</small>
+                </span>
+                <span class="search-row-meta">
+                  <strong>{getMetric(result)}</strong>
+                </span>
+              </button>
+              <span class="search-row-actions">
+                {#each getQuickActions(result) as action}
+                  <button
+                    class="search-action"
+                    type="button"
+                    on:click={(event) => handleQuickAction(event, action.id, result)}
+                  >
+                    {action.label}
+                  </button>
+                {/each}
               </span>
-              <span class="search-row-meta">{getMetric(result)}</span>
-            </button>
+            </article>
           {/each}
         </div>
       </section>
       {/each}
     </div>
   {:else if query.trim().length >= 2}
-    <p class="search-copy">No live aircraft, flights or airport entities matched this search yet.</p>
+    <div class="search-empty-state">
+      <p class="search-copy">No live aircraft, flights or airport entities matched this search yet.</p>
+      <div class="search-scope-list">
+        {#each scopeOptions as scope}
+          <button class="search-scope-button" type="button" on:click={() => onUseSearchScope(scope.prefix)}>
+            {scope.label}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {:else if queryScope}
+    <div class="search-start-panel">
+      <p class="search-copy">Finish the scoped search by adding a value after <strong>{queryScope}:</strong>.</p>
+      <div class="search-scope-list">
+        {#each scopeOptions as scope}
+          <button class="search-scope-button" type="button" on:click={() => onUseSearchScope(scope.prefix)}>
+            {scope.example}
+          </button>
+        {/each}
+      </div>
+    </div>
   {:else}
-    <p class="search-copy">Type at least two characters to search aircraft, flights, airports, airlines, routes and saved locations.</p>
+    <div class="search-start-panel">
+      <p class="search-copy">Type at least two characters to search aircraft, flights, airports, airlines, routes and saved locations.</p>
+
+      <section class="search-helper-block">
+        <div class="search-helper-header">
+          <strong>Scope search</strong>
+          <small>Use prefixes to jump faster</small>
+        </div>
+        <div class="search-scope-list">
+          {#each scopeOptions as scope}
+            <button class="search-scope-button" type="button" on:click={() => onUseSearchScope(scope.prefix)}>
+              {scope.prefix}
+              <span>{scope.label}</span>
+            </button>
+          {/each}
+        </div>
+      </section>
+
+      {#if savedSearches.length}
+        <section class="search-helper-block">
+          <div class="search-helper-header">
+            <strong>Saved searches</strong>
+            <small>One click to reopen</small>
+          </div>
+          <div class="search-chip-list">
+            {#each savedSearches as savedQuery}
+              <div class="search-chip-shell">
+                <button class="search-chip" type="button" on:click={() => onUseSearchQuery(savedQuery)}>
+                  {savedQuery}
+                </button>
+                <button
+                  class="search-chip-remove"
+                  type="button"
+                  aria-label={`Remove saved search ${savedQuery}`}
+                  on:click={() => onRemoveSavedSearch(savedQuery)}
+                >
+                  ×
+                </button>
+              </div>
+            {/each}
+          </div>
+        </section>
+      {/if}
+
+      {#if recentSearches.length}
+        <section class="search-helper-block">
+          <div class="search-helper-header">
+            <strong>Recent searches</strong>
+            <small>Recent lookup memory</small>
+          </div>
+          <div class="search-chip-list">
+            {#each recentSearches as recentQuery}
+              <button class="search-chip" type="button" on:click={() => onUseSearchQuery(recentQuery)}>
+                {recentQuery}
+              </button>
+            {/each}
+          </div>
+        </section>
+      {/if}
+    </div>
   {/if}
 </section>
 
@@ -252,6 +399,14 @@
     gap: 0.9rem;
     align-items: end;
     padding: 0 0.25rem;
+  }
+
+  .search-summary-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 
   .search-summary div {
@@ -270,6 +425,47 @@
   .search-copy {
     font-size: 0.76rem;
     color: rgba(199, 209, 220, 0.78);
+  }
+
+  .search-summary-button,
+  .search-scope-button,
+  .search-action,
+  .search-chip,
+  .search-chip-remove {
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .search-summary-button,
+  .search-scope-pill,
+  .search-chip,
+  .search-chip-remove,
+  .search-action {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .search-summary-button {
+    padding: 0.38rem 0.62rem;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #eef3f8;
+  }
+
+  .search-scope-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 1.8rem;
+    padding: 0 0.58rem;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
   }
 
   .search-copy {
@@ -328,6 +524,11 @@
 
   .search-row {
     display: grid;
+    gap: 0.38rem;
+  }
+
+  .search-row-hitbox {
+    display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 0.6rem;
     align-items: center;
@@ -346,13 +547,13 @@
       background 160ms ease;
   }
 
-  .search-row:hover {
+  .search-row-hitbox:hover {
     transform: translateY(-1px);
     border-color: rgba(255, 211, 79, 0.24);
     background: linear-gradient(180deg, rgba(44, 37, 18, 0.98) 0%, rgba(23, 22, 17, 0.98) 100%);
   }
 
-  .search-row:focus-visible {
+  .search-row-hitbox:focus-visible {
     outline: none;
     border-color: rgba(120, 200, 255, 0.4);
     background: linear-gradient(180deg, rgba(18, 43, 63, 0.98) 0%, rgba(13, 26, 39, 0.98) 100%);
@@ -361,7 +562,7 @@
       0 0 0 4px rgba(120, 200, 255, 0.16);
   }
 
-  .search-row.active {
+  .search-row.active .search-row-hitbox {
     border-color: rgba(120, 200, 255, 0.34);
     background: linear-gradient(180deg, rgba(14, 36, 54, 0.98) 0%, rgba(12, 22, 33, 0.98) 100%);
     box-shadow: 0 0 0 1px rgba(120, 200, 255, 0.16);
@@ -402,6 +603,9 @@
 
   .search-row-meta {
     justify-self: end;
+  }
+
+  .search-row-meta strong {
     padding: 0.24rem 0.5rem;
     border-radius: 999px;
     font-size: 0.67rem;
@@ -410,4 +614,113 @@
     background: rgba(255, 255, 255, 0.08);
     white-space: nowrap;
   }
- </style>
+
+  .search-row-actions {
+    display: flex;
+    gap: 0.28rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    padding: 0 0.2rem;
+  }
+
+  .search-action {
+    padding: 0.28rem 0.5rem;
+    font-size: 0.64rem;
+    font-weight: 800;
+    color: rgba(228, 235, 243, 0.88);
+  }
+
+  .search-start-panel,
+  .search-empty-state,
+  .search-helper-block {
+    display: grid;
+    gap: 0.62rem;
+  }
+
+  .search-helper-block {
+    padding: 0.72rem 0.76rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .search-helper-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.55rem;
+    align-items: baseline;
+  }
+
+  .search-helper-header strong {
+    color: #f4f7fb;
+    font-size: 0.8rem;
+  }
+
+  .search-helper-header small {
+    color: rgba(193, 202, 214, 0.68);
+    font-size: 0.68rem;
+  }
+
+  .search-scope-list,
+  .search-chip-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.42rem;
+  }
+
+  .search-scope-button,
+  .search-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.66rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: #eef3f8;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .search-scope-button span {
+    color: rgba(199, 209, 220, 0.7);
+    font-size: 0.66rem;
+    font-weight: 700;
+  }
+
+  .search-chip-shell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.22rem;
+  }
+
+  .search-chip-remove {
+    width: 1.8rem;
+    height: 1.8rem;
+    color: rgba(238, 243, 248, 0.86);
+  }
+
+  @media (max-width: 720px) {
+    .search-summary,
+    .search-helper-header {
+      display: grid;
+    }
+
+    .search-row {
+      gap: 0.32rem;
+    }
+
+    .search-row-hitbox {
+      grid-template-columns: auto minmax(0, 1fr);
+    }
+
+    .search-row-meta {
+      grid-column: 1 / -1;
+      justify-self: start;
+    }
+
+    .search-row-actions {
+      justify-content: flex-start;
+    }
+  }
+</style>

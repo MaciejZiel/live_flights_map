@@ -85,6 +85,14 @@
 
   const SEARCH_RESULTS_PANEL_ID = "global-search-results";
   const SEARCH_SHORTCUT_HINT_ID = "global-search-shortcuts";
+  const SEARCH_SCOPE_OPTIONS = [
+    { prefix: "reg:", label: "Registration", example: "reg: SP-LVG" },
+    { prefix: "icao:", label: "ICAO24", example: "icao: 48af19" },
+    { prefix: "route:", label: "Route", example: "route: WAW-JFK" },
+    { prefix: "airport:", label: "Airport", example: "airport: WAW" },
+    { prefix: "airline:", label: "Airline", example: "airline: LOT" },
+    { prefix: "location:", label: "Location", example: "location: Warsaw FIR" },
+  ];
 
   let state = {
     status: "idle",
@@ -267,6 +275,8 @@
   let remoteSearchError = null;
   let remoteSearchRequestId = 0;
   let searchDebounceTimer = null;
+  let recentSearches = [];
+  let savedSearches = [];
   let pendingSearchSelection = null;
   let selectedFlightSnapshot = null;
   let globalTrafficBoard = {
@@ -341,6 +351,8 @@
         savedPreferences.replayAnchorTimestamp ?? replayAnchorTimestamp;
       replayWindowMinutes = savedPreferences.replayWindowMinutes ?? replayWindowMinutes;
       replayPlaybackSpeed = savedPreferences.replayPlaybackSpeed ?? replayPlaybackSpeed;
+      recentSearches = savedPreferences.recentSearches ?? recentSearches;
+      savedSearches = savedPreferences.savedSearches ?? savedSearches;
     }
 
     applySharedStateFromUrl();
@@ -773,6 +785,8 @@
       replayAnchorTimestamp,
       replayWindowMinutes,
       replayPlaybackSpeed,
+      recentSearches,
+      savedSearches,
     };
   }
 
@@ -821,6 +835,8 @@
       normalizedWorkspaceState.replayWindowMinutes ?? replayWindowMinutes;
     replayPlaybackSpeed =
       normalizedWorkspaceState.replayPlaybackSpeed ?? replayPlaybackSpeed;
+    recentSearches = normalizedWorkspaceState.recentSearches ?? recentSearches;
+    savedSearches = normalizedWorkspaceState.savedSearches ?? savedSearches;
   }
 
   async function loadWorkspaceProfile(profileId, options = {}) {
@@ -1299,6 +1315,32 @@
     return [...prioritizedEntries, ...trailingEntries].flatMap(([, items]) => items);
   }
 
+  function scopeSearchGroups(groups, scope) {
+    if (!scope || !groups) {
+      return groups ?? {};
+    }
+
+    const allowedGroupsByScope = {
+      reg: ["registrations", "aircraft", "flights"],
+      icao: ["flights", "aircraft", "registrations"],
+      route: ["routes", "airports", "flights"],
+      airport: ["airports", "routes", "flights"],
+      airline: ["airlines", "flights"],
+      location: ["locations", "airports"],
+    };
+
+    const allowedGroups = new Set(allowedGroupsByScope[scope] ?? []);
+    const scopedEntries = Object.entries(groups).filter(
+      ([groupName, items]) => allowedGroups.has(groupName) && Array.isArray(items) && items.length
+    );
+
+    if (scopedEntries.length) {
+      return Object.fromEntries(scopedEntries);
+    }
+
+    return groups;
+  }
+
   function resetSearchSuggestions(options = {}) {
     const clearQuery = options.clearQuery ?? false;
     if (clearQuery) {
@@ -1314,6 +1356,79 @@
     remoteSearchError = null;
     searchNavigationIndex = -1;
     searchSuggestionsDismissed = Boolean(options.dismissed ?? false);
+  }
+
+  function parseScopedSearchQuery(query) {
+    const normalizedQuery = String(query ?? "").trim();
+    const scopedMatch = normalizedQuery.match(
+      /^(reg|registration|icao|route|airport|airline|location)\s*:\s*(.*)$/i
+    );
+
+    if (!scopedMatch) {
+      return {
+        raw: normalizedQuery,
+        term: normalizedQuery,
+        scope: null,
+      };
+    }
+
+    const [, rawScope, scopedTerm] = scopedMatch;
+    const scope = rawScope.toLowerCase() === "registration" ? "reg" : rawScope.toLowerCase();
+    return {
+      raw: normalizedQuery,
+      term: scopedTerm.trim(),
+      scope,
+    };
+  }
+
+  function rememberSearchQuery(query, options = {}) {
+    const normalizedQuery = String(query ?? "").trim();
+    if (normalizedQuery.length < 2) {
+      return;
+    }
+
+    recentSearches = [
+      normalizedQuery,
+      ...recentSearches.filter((entry) => entry !== normalizedQuery),
+    ].slice(0, 8);
+
+    if (options.pin) {
+      savedSearches = [
+        normalizedQuery,
+        ...savedSearches.filter((entry) => entry !== normalizedQuery),
+      ].slice(0, 8);
+    }
+  }
+
+  function saveCurrentSearchQuery() {
+    rememberSearchQuery(searchQuery, { pin: true });
+  }
+
+  function removeSavedSearch(query) {
+    savedSearches = savedSearches.filter((entry) => entry !== query);
+  }
+
+  function applySearchQuery(query, options = {}) {
+    filters = {
+      ...filters,
+      query,
+    };
+    searchSuggestionsDismissed = false;
+
+    if (options.focus !== false) {
+      window.requestAnimationFrame(() => {
+        focusSearchField({ select: Boolean(options.select ?? true) });
+      });
+    }
+  }
+
+  function applySearchScope(prefix) {
+    const normalizedPrefix = String(prefix ?? "").trim();
+    if (!normalizedPrefix) {
+      return;
+    }
+
+    applySearchQuery(`${normalizedPrefix} `, { select: false, focus: true });
   }
 
   function setSearchNavigationByResult(result) {
@@ -2834,8 +2949,8 @@
   }
 
   async function loadRemoteSearchResults(query) {
-    const normalizedQuery = query.trim();
-    if (normalizedQuery.length < 2) {
+    const normalizedSearch = parseScopedSearchQuery(query);
+    if (normalizedSearch.term.length < 2) {
       resetSearchSuggestions();
       return;
     }
@@ -2846,8 +2961,8 @@
     searchSuggestionsDismissed = false;
 
     try {
-      const searchPayload = await searchFlights(normalizedQuery, { limit: 8 });
-      if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedQuery) {
+      const searchPayload = await searchFlights(normalizedSearch.term, { limit: 8 });
+      if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedSearch.raw) {
         return;
       }
 
@@ -2858,7 +2973,7 @@
       remoteSearchError = null;
       searchNavigationIndex = remoteSearchResults.length ? 0 : -1;
     } catch (error) {
-      if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedQuery) {
+      if (requestId !== remoteSearchRequestId || filters.query.trim() !== normalizedSearch.raw) {
         return;
       }
 
@@ -2917,6 +3032,8 @@
       return;
     }
 
+    rememberSearchQuery(searchQuery);
+
     if (
       result.entity_type === "flight" ||
       result.entity_type === "aircraft" ||
@@ -2952,6 +3069,74 @@
     }
 
     resetSearchSuggestions({ clearQuery: true, dismissed: true });
+  }
+
+  function handleSearchQuickAction(action, result) {
+    if (!result || !action) {
+      return;
+    }
+
+    rememberSearchQuery(searchQuery);
+
+    if (action === "open") {
+      selectSearchResult(result);
+      return;
+    }
+
+    if (action === "track") {
+      openFlightInspector(result, {
+        focusMap: true,
+        zoom: 8.4,
+        exitReplay: true,
+        inspectorTab: "tracking",
+      });
+      followAircraft = true;
+      resetSearchSuggestions({ clearQuery: true, dismissed: true });
+      return;
+    }
+
+    if (action === "filter") {
+      if (result.entity_type === "airport") {
+        filters = {
+          ...filters,
+          airportCode: result.iata ?? result.icao ?? result.entity_key ?? "",
+        };
+      } else if (result.entity_type === "route") {
+        filters = {
+          ...filters,
+          route: result.entity_key ?? result.label ?? "",
+        };
+      } else if (result.entity_type === "airline") {
+        filters = {
+          ...filters,
+          operator: result.entity_key ?? result.label ?? "",
+        };
+      }
+
+      selectSearchResult(result);
+      return;
+    }
+
+    if (action === "alert") {
+      if (result.entity_type === "flight" || result.entity_type === "aircraft" || result.entity_type === "registration") {
+        addAlertForFlightTarget(result);
+      } else if (result.entity_type === "airport") {
+        addAlertRule({
+          type: "airport",
+          query: normalizeAirportKey(result),
+          payload: {
+            latitude: result.latitude,
+            longitude: result.longitude,
+            radiusKm: 48,
+          },
+        });
+      } else if (result.entity_type === "airline" || result.entity_type === "route" || result.entity_type === "location") {
+        openEntityContext(result);
+        addEntityContextAlert();
+      }
+
+      resetSearchSuggestions({ clearQuery: true, dismissed: true });
+    }
   }
 
   function updateSelectedFlightNotes(notes) {
@@ -4475,7 +4660,13 @@
     lastSearchQuery = searchQuery;
     searchSuggestionsDismissed = false;
   }
-  $: flattenedSearchResults = flattenSearchGroups(remoteSearchGroups);
+  $: searchScopeMeta = parseScopedSearchQuery(searchQuery);
+  $: scopedSearchGroups = scopeSearchGroups(remoteSearchGroups, searchScopeMeta.scope);
+  $: scopedSearchCount = Object.values(scopedSearchGroups).reduce(
+    (total, items) => total + (Array.isArray(items) ? items.length : 0),
+    0
+  );
+  $: flattenedSearchResults = flattenSearchGroups(scopedSearchGroups);
   $: if (searchNavigationIndex >= flattenedSearchResults.length) {
     searchNavigationIndex = flattenedSearchResults.length ? 0 : -1;
   }
@@ -4486,9 +4677,14 @@
     ? buildSearchResultOptionId(activeSearchResultKey)
     : undefined;
   $: showSearchSuggestions =
-    searchQuery.length >= 2 &&
+    (searchQuery.length >= 2 || (searchScopeMeta.scope && !searchScopeMeta.term.length)) &&
     !searchSuggestionsDismissed &&
-    (remoteSearchStatus !== "idle" || remoteSearchCount > 0 || remoteSearchError);
+    (
+      remoteSearchStatus !== "idle" ||
+      scopedSearchCount > 0 ||
+      remoteSearchError ||
+      (searchScopeMeta.scope && !searchScopeMeta.term.length)
+    );
   $: selectedFlightLiveCandidate = selectedIcao24 ? getKnownFlightByIcao24(selectedIcao24) : null;
   $: if (
     selectedIcao24 &&
@@ -4783,6 +4979,8 @@
       replayWindowMinutes,
       replayAnchorTimestamp,
       replayPlaybackSpeed,
+      recentSearches,
+      savedSearches,
     });
   }
   $: if (preferencesReady) {
@@ -4811,6 +5009,8 @@
     replayAnchorTimestamp;
     replayWindowMinutes;
     replayPlaybackSpeed;
+    recentSearches;
+    savedSearches;
     queueWorkspaceSave();
   }
 </script>
@@ -4903,14 +5103,23 @@
                 <div class="search-suggestions" data-testid="search-suggestions">
                   <EntitySearchPanel
                     query={searchQuery}
+                    queryScope={searchScopeMeta.scope}
                     status={remoteSearchStatus}
                     error={remoteSearchError}
-                    groups={remoteSearchGroups}
-                    totalCount={remoteSearchCount}
+                    groups={scopedSearchGroups}
+                    totalCount={scopedSearchCount}
                     activeResultKey={activeSearchResultKey}
                     panelId={SEARCH_RESULTS_PANEL_ID}
+                    recentSearches={recentSearches}
+                    savedSearches={savedSearches}
+                    scopeOptions={SEARCH_SCOPE_OPTIONS}
                     onHoverResult={handleSearchResultHover}
                     onRequestSearchFocus={() => focusSearchField({ select: false })}
+                    onUseSearchQuery={applySearchQuery}
+                    onUseSearchScope={applySearchScope}
+                    onSaveSearchQuery={saveCurrentSearchQuery}
+                    onRemoveSavedSearch={removeSavedSearch}
+                    onQuickAction={handleSearchQuickAction}
                     onSelectResult={selectSearchResult}
                   />
                 </div>

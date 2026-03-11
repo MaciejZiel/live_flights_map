@@ -20,6 +20,8 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
     replayAnchorTimestamp: "2026-03-10T12:00:00Z",
     replayWindowMinutes: 720,
     replayPlaybackSpeed: 1.5,
+    recentSearches: ["reg: SP-LVG", "airport: WAW"],
+    savedSearches: ["route: WAW-JFK"],
     alertDelivery: {
       browserNotificationsEnabled: true,
       browserPermission: "granted",
@@ -55,6 +57,8 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
   assert.equal(normalized.replayAnchorTimestamp, "2026-03-10T12:00:00.000Z");
   assert.equal(normalized.replayWindowMinutes, 720);
   assert.equal(normalized.replayPlaybackSpeed, 1.5);
+  assert.deepEqual(normalized.recentSearches, ["reg: SP-LVG", "airport: WAW"]);
+  assert.deepEqual(normalized.savedSearches, ["route: WAW-JFK"]);
   assert.deepEqual(normalized.alertDelivery, {
     browserNotificationsEnabled: true,
     browserPermission: "granted",
@@ -69,6 +73,8 @@ test("normalizeUserPreferences falls back for invalid airport flow and non-objec
 
   const normalized = normalizeUserPreferences({
     simpleModeEnabled: "nope",
+    recentSearches: ["airport: WAW", 123, "route: EHAM-KJFK"],
+    savedSearches: ["reg: SP-LVG", null],
     filters: {
       airportFlow: "sideways",
       route: 123,
@@ -76,6 +82,8 @@ test("normalizeUserPreferences falls back for invalid airport flow and non-objec
   });
 
   assert.equal(normalized.simpleModeEnabled, true);
+  assert.deepEqual(normalized.recentSearches, ["airport: WAW", "route: EHAM-KJFK"]);
+  assert.deepEqual(normalized.savedSearches, ["reg: SP-LVG"]);
   assert.equal(normalized.filters.airportFlow, "all");
   assert.equal(normalized.filters.route, "");
 });

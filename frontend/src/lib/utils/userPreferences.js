@@ -204,6 +204,8 @@ export function normalizeUserPreferences(value) {
       Number.isFinite(value.replayPlaybackSpeed) && value.replayPlaybackSpeed > 0
         ? value.replayPlaybackSpeed
         : 1,
+    recentSearches: sanitizeStringArray(value.recentSearches).slice(0, 8),
+    savedSearches: sanitizeStringArray(value.savedSearches).slice(0, 8),
   };
 
   return sanitized;

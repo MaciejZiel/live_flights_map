@@ -345,9 +345,6 @@
             </div>
 
             <div class="photo-copy">
-              {#if hasPhoto}
-                <p class="eyebrow">Live route</p>
-              {/if}
               <h3>{routeLabel ?? identity.callsign}</h3>
               <p class="hero-subtitle">{heroSubtitle}</p>
               <div class="hero-status-row">
@@ -360,12 +357,6 @@
           </div>
         </div>
 
-        {#if photoUrl}
-          <div class="photo-credit">
-            <span>{photo?.source ?? "photo"}</span>
-            <strong>{photo?.photographer ?? "Unknown photographer"}</strong>
-          </div>
-        {/if}
       </div>
 
       <div class="hero-copy">
@@ -848,13 +839,11 @@
     line-height: 1.1;
   }
 
-  .photo-credit,
   .detail-warning {
     display: grid;
     gap: 0.15rem;
   }
 
-  .photo-credit span,
   .hero-subtitle,
   .detail-warning span,
   .empty-copy,
@@ -864,7 +853,6 @@
     font-size: 0.78rem;
   }
 
-  .photo-credit strong,
   .photo-copy h3,
   .route-node strong,
   .fact-row strong,

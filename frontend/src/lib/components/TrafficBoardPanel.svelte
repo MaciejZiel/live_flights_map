@@ -34,30 +34,31 @@
 </script>
 
 <section aria-label={title} class="panel traffic-board-panel">
-  {#if subtitle}
-    <p class="board-note">{subtitle}</p>
-  {/if}
+  <div class="board-header">
+    <div>
+      <p class="board-note">{title}</p>
+      {#if subtitle}
+        <strong class="board-subtitle">{subtitle}</strong>
+      {/if}
+    </div>
 
-  {#if featuredFlight}
-    <button class="featured-card" type="button" on:click={() => onSelectFlight(featuredFlight.icao24)}>
-      <span class="featured-kicker">Fastest in view</span>
-      <strong>{featuredFlight.callsign ?? featuredFlight.icao24}</strong>
-      <p>{buildFlightSubtitle(featuredFlight)}</p>
-      <div class="featured-metrics">
-        <span>
-          <strong>{formatSpeed(featuredFlight.velocity)}</strong>
-          <small>Speed</small>
-        </span>
-        <span>
-          <strong>{formatAltitude(featuredFlight.altitude)}</strong>
-          <small>Altitude</small>
-        </span>
-      </div>
-      <span class="featured-action">Track aircraft</span>
-    </button>
-  {/if}
+    {#if featuredFlight}
+      <button class="board-highlight" type="button" on:click={() => onSelectFlight(featuredFlight.icao24)}>
+        <span>Lead</span>
+        <strong>{featuredFlight.callsign ?? featuredFlight.icao24}</strong>
+        <small>{formatSpeed(featuredFlight.velocity)} · {formatAltitude(featuredFlight.altitude)}</small>
+      </button>
+    {/if}
+  </div>
 
   {#if visibleRows.length}
+    <div class="board-columns" aria-hidden="true">
+      <span>Flight</span>
+      <span>Altitude</span>
+      <span>Speed</span>
+      <span>Age</span>
+    </div>
+
     <div class="board-list">
       {#each visibleRows as flight, index}
         <button
@@ -66,23 +67,18 @@
           type="button"
           on:click={() => onSelectFlight(flight.icao24)}
         >
-          <span class="board-rank">{index + 1}</span>
+          <span class="board-rank">{String(index + 1).padStart(2, "0")}</span>
           <span class="board-main">
             <strong>{flight.callsign ?? flight.icao24}</strong>
             <span>{buildFlightSubtitle(flight)}</span>
           </span>
           <span class="board-metric">
             <strong>{formatAltitude(flight.altitude)}</strong>
-            <span>ALT</span>
           </span>
           <span class="board-metric">
             <strong>{formatSpeed(flight.velocity)}</strong>
-            <span>SPD</span>
           </span>
-          <span class="board-metric compact">
-            <strong>{formatLastContact(flight.last_contact)}</strong>
-            <span>AGE</span>
-          </span>
+          <span class="board-age">{formatLastContact(flight.last_contact)}</span>
         </button>
       {/each}
     </div>
@@ -94,163 +90,139 @@
 <style>
   .traffic-board-panel {
     display: grid;
-    gap: 0.65rem;
+    gap: 0.55rem;
   }
 
   p {
     margin: 0;
   }
 
+  .board-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.7rem;
+    align-items: end;
+  }
+
   .board-note {
-    font-size: 0.69rem;
+    font-size: 0.64rem;
     text-transform: uppercase;
-    letter-spacing: 0.18em;
-    color: rgba(194, 206, 219, 0.56);
+    letter-spacing: 0.16em;
+    color: rgba(194, 206, 219, 0.5);
+  }
+
+  .board-subtitle {
+    display: block;
+    margin-top: 0.22rem;
+    color: var(--color-text);
+    font-size: 0.84rem;
+    line-height: 1.15;
+  }
+
+  .board-highlight {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    justify-self: end;
+    padding: 0.42rem 0.58rem;
+    border-radius: 999px;
+    border: 1px solid rgba(245, 185, 8, 0.16);
+    color: inherit;
+    background: rgba(245, 185, 8, 0.08);
+    cursor: pointer;
+  }
+
+  .board-highlight span,
+  .board-highlight small {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(194, 206, 219, 0.7);
+  }
+
+  .board-highlight strong {
+    color: var(--color-text);
+    font-size: 0.78rem;
+  }
+
+  .board-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1.7fr) repeat(3, minmax(0, 0.72fr));
+    gap: 0.5rem;
+    padding: 0 0.2rem 0 1.9rem;
+  }
+
+  .board-columns span {
+    font-size: 0.6rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(182, 193, 205, 0.48);
+  }
+
+  .board-columns span:not(:first-child) {
+    justify-self: end;
   }
 
   .board-list {
     display: grid;
-    gap: 0.4rem;
+    gap: 0.22rem;
     align-content: start;
-  }
-
-  .featured-card {
-    display: grid;
-    gap: 0.48rem;
-    width: 100%;
-    padding: 0.86rem 0.88rem;
-    border: 1px solid rgba(245, 185, 8, 0.18);
-    border-radius: 16px;
-    color: inherit;
-    background:
-      radial-gradient(circle at top right, rgba(245, 185, 8, 0.16), transparent 38%),
-      linear-gradient(180deg, rgba(39, 42, 48, 0.98) 0%, rgba(21, 24, 28, 0.98) 100%);
-    text-align: left;
-    cursor: pointer;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.02),
-      0 12px 22px rgba(0, 0, 0, 0.2);
-  }
-
-  .featured-kicker,
-  .featured-card p,
-  .featured-metrics small {
-    margin: 0;
-    font-size: 0.69rem;
-    text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: rgba(194, 206, 219, 0.62);
-  }
-
-  .featured-card strong {
-    color: var(--color-text);
-    font-size: 1rem;
-  }
-
-  .featured-card p {
-    text-transform: none;
-    letter-spacing: 0;
-    font-size: 0.76rem;
-  }
-
-  .featured-metrics {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.45rem;
-  }
-
-  .featured-metrics span {
-    display: grid;
-    gap: 0.14rem;
-    padding: 0.56rem 0.6rem;
-    border-radius: 11px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .featured-metrics strong {
-    font-size: 0.86rem;
-  }
-
-  .featured-action {
-    display: inline-flex;
-    justify-self: start;
-    align-items: center;
-    padding: 0.46rem 0.72rem;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    font-weight: 800;
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
   }
 
   .board-row {
     display: grid;
-    grid-template-columns: auto minmax(0, 1.35fr) repeat(3, minmax(0, 0.7fr));
-    gap: 0.58rem;
+    grid-template-columns: auto minmax(0, 1.45fr) repeat(2, minmax(0, 0.75fr)) auto;
+    gap: 0.5rem;
     align-items: center;
     width: 100%;
-    padding: 0.7rem 0.74rem;
-    border: 1px solid rgba(255, 255, 255, 0.07);
-    border-radius: 14px;
+    padding: 0.62rem 0.68rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 12px;
     color: inherit;
-    background:
-      linear-gradient(180deg, rgba(34, 37, 42, 0.98) 0%, rgba(22, 24, 28, 0.98) 100%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.02),
-      0 10px 18px rgba(0, 0, 0, 0.18);
+    background: rgba(18, 21, 25, 0.88);
     text-align: left;
     cursor: pointer;
     transition:
-      transform 160ms ease,
       border-color 160ms ease,
       background 160ms ease;
   }
 
   .board-row:hover {
-    transform: translateY(-1px);
-    border-color: rgba(255, 211, 79, 0.22);
+    border-color: rgba(255, 211, 79, 0.18);
+    background: rgba(24, 27, 32, 0.92);
   }
 
   .board-row.selected {
-    border-color: rgba(245, 185, 8, 0.58);
-    background:
-      linear-gradient(180deg, rgba(51, 43, 14, 0.98) 0%, rgba(27, 25, 16, 0.98) 100%);
-    box-shadow:
-      inset 0 0 0 1px rgba(245, 185, 8, 0.34),
-      0 14px 24px rgba(0, 0, 0, 0.2);
+    border-color: rgba(245, 185, 8, 0.34);
+    background: rgba(48, 39, 11, 0.86);
   }
 
   .board-rank {
-    display: grid;
-    place-items: center;
-    width: 1.7rem;
-    height: 1.7rem;
-    border-radius: 999px;
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     font-weight: 800;
-    color: #171a1f;
-    background: rgba(255, 211, 79, 0.92);
+    letter-spacing: 0.12em;
+    color: rgba(255, 211, 79, 0.82);
   }
 
   .board-main,
   .board-metric {
     display: grid;
-    gap: 0.16rem;
+    gap: 0.12rem;
   }
 
   .board-main strong,
-  .board-metric strong {
+  .board-metric strong,
+  .board-age {
     color: var(--color-text);
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     line-height: 1.15;
   }
 
   .board-main span,
-  .board-metric span,
   .empty-copy {
     color: rgba(194, 206, 219, 0.72);
-    font-size: 0.7rem;
+    font-size: 0.68rem;
     line-height: 1.15;
   }
 
@@ -258,17 +230,38 @@
     justify-items: end;
   }
 
+  .board-age {
+    justify-self: end;
+    color: rgba(194, 206, 219, 0.82);
+  }
+
+  .empty-copy {
+    padding: 0.32rem 0;
+    font-size: 0.72rem;
+  }
+
   @media (max-width: 720px) {
-    .board-row {
-      grid-template-columns: auto minmax(0, 1fr) minmax(0, 0.8fr);
+    .board-header {
+      align-items: start;
+      flex-direction: column;
     }
 
-    .board-metric.compact {
+    .board-highlight {
+      flex-wrap: wrap;
+      justify-self: start;
+    }
+
+    .board-columns {
       display: none;
     }
 
+    .board-row {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 0.4rem;
+    }
+
     .board-metric {
-      justify-items: start;
+      display: none;
     }
   }
 </style>

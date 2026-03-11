@@ -3881,6 +3881,7 @@
   $: showDesktopFocusHint =
     !embedMode &&
     !isMobileViewport &&
+    !onboardingDismissed &&
     !selectedFlight &&
     !selectedAirport &&
     !selectedEntityContext &&
@@ -3907,6 +3908,7 @@
         ? "Archive controls"
         : "Saved desks";
   $: workspaceSavedCount = watchlist.length + savedEntities.length;
+  $: workspaceQuickCount = watchlist.length + savedEntities.length + alertRules.length;
   $: workspaceSetupCount =
     workspaceAccounts.length +
     workspaceProfiles.length +
@@ -3924,6 +3926,12 @@
   $: statusLabel = getStatusLabel(state);
   $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
   $: confidenceLabel = getConfidenceLabel(state);
+  $: topbarStripBadges = [
+    activeReplaySnapshot ? "Replay" : freshnessLabel,
+    activeFilterCount ? `${activeFilterCount} filters` : null,
+    weatherLayerEnabled ? "Weather" : null,
+    !showAirportMarkers ? "Airports off" : null,
+  ].filter(Boolean);
   $: transportLabel = state.transport === "sse" ? "Stream" : "Polling";
   $: coverageScopeLabel = getCoverageScopeLabel(state);
   $: coverageBreakdownLabel = getCoverageBreakdownLabel(state);
@@ -4362,12 +4370,6 @@
             </div>
 
             <div class="center-actions">
-              <div class="traffic-counter">
-                <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
-                <strong>{formatCompactCount(visibleTrackedCount)}</strong>
-                <small>aircraft</small>
-              </div>
-
               {#if isMobileViewport}
                 <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
                   Tools
@@ -4378,32 +4380,37 @@
               {:else}
                 <button
                   class:active={desktopTrafficBoardOpen && !selectedFlight && !selectedAirport && !selectedEntityContext}
-                  class="overlay-card topbar-icon topbar-action-chip"
+                  class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
                   type="button"
                   on:click={toggleTrafficBoard}
                 >
-                  {selectedFlight || selectedAirport || selectedEntityContext
-                    ? "Back to traffic"
-                    : desktopTrafficBoardOpen
-                      ? "Hide traffic"
-                      : "Traffic"}
+                  <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+                  <span class="topbar-action-label">
+                    {selectedFlight || selectedAirport || selectedEntityContext
+                      ? "Traffic"
+                      : desktopTrafficBoardOpen
+                        ? "Hide"
+                        : "Traffic"}
+                  </span>
+                  <strong>{formatCompactCount(visibleTrackedCount)}</strong>
                 </button>
                 <button
                   class:active={desktopUtilityExpanded}
-                  class="overlay-card topbar-icon topbar-action-chip"
+                  class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
                   type="button"
                   on:click={() => toggleUtilityWorkspace()}
                 >
-                  {desktopUtilityExpanded ? "Hide panels" : "Panels"}
+                  <span class="topbar-action-label">Workspace</span>
+                  <strong>{workspaceQuickCount}</strong>
                 </button>
               {/if}
             </div>
           </div>
 
-          {#if topbarStatusBadges.length}
+          {#if topbarStripBadges.length}
             <div class="topbar-status-strip" aria-label="Radar status strip">
               <span class="topbar-status-chip">{statusLabel}</span>
-              {#each topbarStatusBadges as badge}
+              {#each topbarStripBadges as badge}
                 <span>{badge}</span>
               {/each}
             </div>
@@ -6180,7 +6187,7 @@
             selectedIcao24={selectedIcao24}
             title="Visible traffic"
             subtitle={`${visibleTrackedCount} aircraft in view`}
-            maxRows={14}
+            maxRows={10}
             featuredFlight={leadFeedFlight}
             onSelectFlight={selectWatchedFlight}
           />
@@ -6394,29 +6401,29 @@
   .center-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 0.45rem;
+    gap: 0.4rem;
     align-items: center;
   }
 
   .topbar-status-strip {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
+    gap: 0.3rem;
     padding-left: 0.04rem;
   }
 
   .topbar-status-strip span {
     display: inline-flex;
     align-items: center;
-    min-height: 1.65rem;
-    padding: 0 0.58rem;
+    min-height: 1.48rem;
+    padding: 0 0.54rem;
     border-radius: 999px;
-    font-size: 0.66rem;
+    font-size: 0.62rem;
     font-weight: 800;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
     color: #d7e0ea;
-    background: rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.04);
     border: 1px solid rgba(255, 255, 255, 0.06);
   }
 
@@ -6502,15 +6509,16 @@
   }
 
   .traffic-dot {
-    width: 0.48rem;
-    height: 0.48rem;
+    width: 0.44rem;
+    height: 0.44rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.28);
+    flex: 0 0 auto;
   }
 
   .traffic-dot.online {
     background: #63d77e;
-    box-shadow: 0 0 0 4px rgba(99, 215, 126, 0.14);
+    box-shadow: 0 0 0 3px rgba(99, 215, 126, 0.12);
   }
 
   .topbar-icon {
@@ -6536,9 +6544,14 @@
   }
 
   .topbar-action-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.42rem;
     width: auto;
+    height: 2.25rem;
     min-width: 4.4rem;
-    padding: 0 0.85rem;
+    padding: 0 0.78rem;
     font-size: 0.72rem;
     letter-spacing: 0.04em;
   }
@@ -6547,6 +6560,20 @@
     color: #171a1f;
     background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
     border-color: transparent;
+  }
+
+  .topbar-action-label {
+    color: inherit;
+    font-size: 0.69rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .topbar-action-summary strong {
+    color: inherit;
+    font-size: 0.82rem;
+    letter-spacing: 0;
   }
 
   .floating-messages {

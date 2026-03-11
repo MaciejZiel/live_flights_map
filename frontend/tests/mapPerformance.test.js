@@ -28,14 +28,14 @@ test("switches to lite mode for dense low-zoom traffic", () => {
   );
 });
 
-test("switches to canvas mode for extreme density", () => {
+test("switches to webgl mode for extreme density", () => {
   assert.equal(
     getAircraftRenderMode({
       aircraftCount: 4000,
       zoom: 4.9,
       clusteringEnabled: false,
     }),
-    "canvas"
+    "webgl"
   );
 });
 
@@ -54,7 +54,7 @@ test("preserves detailed markers for selected and watched aircraft in lite mode"
   assert.equal(shouldUseDetailedAircraftMarker("lite", true, false), true);
   assert.equal(shouldUseDetailedAircraftMarker("lite", false, true), true);
   assert.equal(shouldUseDetailedAircraftMarker("lite", false, false), false);
-  assert.equal(shouldUseDetailedAircraftMarker("canvas", true, false), true);
-  assert.equal(shouldUseDetailedAircraftMarker("canvas", false, true), true);
-  assert.equal(shouldUseDetailedAircraftMarker("canvas", false, false), false);
+  assert.equal(shouldUseDetailedAircraftMarker("webgl", true, false), true);
+  assert.equal(shouldUseDetailedAircraftMarker("webgl", false, true), true);
+  assert.equal(shouldUseDetailedAircraftMarker("webgl", false, false), false);
 });

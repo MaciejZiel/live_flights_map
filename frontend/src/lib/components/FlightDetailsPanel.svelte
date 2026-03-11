@@ -267,6 +267,30 @@
       hint: detailsStatus === "success" ? "Detail sync ready" : routeStatusText,
     },
   ];
+  $: heroMetricItems = flight
+    ? [
+        {
+          label: "Altitude",
+          value: formatAltitude(flight.altitude),
+          hint: getVerticalTrendLabel(flight.vertical_rate),
+        },
+        {
+          label: "Speed",
+          value: formatSpeed(flight.velocity),
+          hint: averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Live groundspeed",
+        },
+        {
+          label: "Heading",
+          value: formatHeading(flight.true_track),
+          hint: getTrackLabel(flight.true_track),
+        },
+        {
+          label: "Vertical rate",
+          value: formatVerticalRate(flight.vertical_rate),
+          hint: trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up",
+        },
+      ]
+    : [];
   $: routeStatusText = route?.plausible === false
     ? "Route unverified"
     : route
@@ -384,6 +408,16 @@
             </div>
           </div>
         {/if}
+
+        <div class="hero-metric-grid">
+          {#each heroMetricItems as item}
+            <article class="hero-metric-card">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.hint}</small>
+            </article>
+          {/each}
+        </div>
 
         <div class="identity-actions">
           <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
@@ -653,8 +687,8 @@
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    padding: 0.34rem 0.68rem;
-    font-size: 0.74rem;
+    padding: 0.34rem 0.64rem;
+    font-size: 0.72rem;
     font-weight: 800;
   }
 
@@ -676,14 +710,14 @@
   .facts-panel {
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.025);
-    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+    background: linear-gradient(180deg, rgba(19, 22, 28, 0.96) 0%, rgba(13, 15, 20, 0.98) 100%);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
   }
 
   .hero-card {
     display: grid;
     gap: 0.8rem;
-    padding: 0.78rem;
+    padding: 0.72rem;
     overflow: hidden;
   }
 
@@ -765,7 +799,7 @@
   }
 
   .photo-copy h3 {
-    font-size: 1.18rem;
+    font-size: 1.32rem;
     line-height: 1.1;
   }
 
@@ -813,16 +847,25 @@
   .route-label,
   .telemetry-card span,
   .fact-row span,
-  .facts-header span {
+  .facts-header span,
+  .hero-summary-card span,
+  .hero-metric-card span,
+  .quality-card span,
+  .detail-section-summary span {
     text-transform: uppercase;
-    letter-spacing: 0.1em;
+    letter-spacing: 0.08em;
   }
 
   .photo-placeholder span,
   .route-label,
   .telemetry-card span,
-  .fact-row span {
-    font-size: 0.7rem;
+  .fact-row span,
+  .facts-header span,
+  .hero-summary-card span,
+  .hero-metric-card span,
+  .quality-card span,
+  .detail-section-summary span {
+    font-size: 0.68rem;
     color: rgba(171, 186, 202, 0.56);
   }
 
@@ -843,38 +886,58 @@
   .hero-summary-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.42rem;
+    gap: 0.48rem;
   }
 
   .hero-summary-card,
   .route-summary {
-    padding: 0.62rem 0.7rem;
-    border-radius: 11px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
+    padding: 0.7rem 0.74rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
   }
 
   .hero-summary-card {
     display: grid;
-    gap: 0.14rem;
-  }
-
-  .hero-summary-card span {
-    font-size: 0.66rem;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: rgba(171, 186, 202, 0.56);
+    gap: 0.18rem;
   }
 
   .hero-summary-card strong {
     color: var(--color-text);
-    font-size: 0.88rem;
+    font-size: 1rem;
     line-height: 1.2;
   }
 
   .hero-summary-card small {
     color: rgba(190, 203, 217, 0.72);
-    font-size: 0.74rem;
+    font-size: 0.76rem;
+  }
+
+  .hero-metric-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.48rem;
+  }
+
+  .hero-metric-card {
+    display: grid;
+    gap: 0.16rem;
+    padding: 0.78rem 0.8rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      linear-gradient(180deg, rgba(30, 34, 40, 0.98) 0%, rgba(18, 21, 26, 0.98) 100%);
+  }
+
+  .hero-metric-card strong {
+    color: #f5f9fd;
+    font-size: 1.1rem;
+    line-height: 1.15;
+  }
+
+  .hero-metric-card small {
+    color: rgba(190, 203, 217, 0.76);
+    font-size: 0.75rem;
   }
 
   .route-summary {
@@ -983,19 +1046,21 @@
   }
 
   .identity-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.45rem;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.48rem;
   }
 
   .action-button {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
-    padding: 0.56rem 0.86rem;
+    border-radius: 12px;
+    min-height: 2.55rem;
+    padding: 0.58rem 0.72rem;
     font: inherit;
-    font-weight: 700;
+    font-size: 0.76rem;
+    font-weight: 800;
     color: var(--button-secondary-text);
-    background: var(--button-secondary-bg);
+    background: rgba(255, 255, 255, 0.05);
     cursor: pointer;
     transition:
       border-color 160ms ease,
@@ -1010,8 +1075,8 @@
 
   .action-button.active {
     color: #f4f7fb;
-    background: rgba(120, 200, 255, 0.16);
-    border-color: rgba(120, 200, 255, 0.22);
+    background: rgba(120, 200, 255, 0.18);
+    border-color: rgba(120, 200, 255, 0.26);
   }
 
   .detail-warning,
@@ -1027,13 +1092,13 @@
   .detail-section {
     border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 16px;
-    background: rgba(255, 255, 255, 0.025);
-    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+    background: linear-gradient(180deg, rgba(18, 21, 27, 0.98) 0%, rgba(12, 15, 19, 0.98) 100%);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.16);
     overflow: hidden;
   }
 
   .detail-section[open] {
-    background: rgba(255, 255, 255, 0.03);
+    background: linear-gradient(180deg, rgba(19, 22, 28, 0.98) 0%, rgba(13, 16, 21, 0.98) 100%);
   }
 
   .detail-section-summary {
@@ -1041,9 +1106,10 @@
     justify-content: space-between;
     gap: 0.9rem;
     align-items: center;
-    padding: 0.82rem;
+    padding: 0.9rem 0.92rem;
     cursor: pointer;
     list-style: none;
+    background: rgba(255, 255, 255, 0.03);
   }
 
   .detail-section-summary::-webkit-details-marker {
@@ -1064,12 +1130,12 @@
 
   .detail-section-summary strong {
     color: #f5f7fb;
-    font-size: 0.96rem;
+    font-size: 1.04rem;
   }
 
   .detail-section-summary small {
     color: rgba(190, 203, 217, 0.72);
-    font-size: 0.74rem;
+    font-size: 0.76rem;
     text-align: right;
   }
 
@@ -1079,34 +1145,27 @@
 
   .quality-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 0.5rem;
   }
 
   .quality-card {
     display: grid;
-    gap: 0.18rem;
-    padding: 0.72rem 0.76rem;
+    gap: 0.2rem;
+    padding: 0.8rem 0.82rem;
     border-radius: 14px;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    background: rgba(255, 255, 255, 0.03);
-  }
-
-  .quality-card span {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: rgba(171, 186, 202, 0.56);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.045);
   }
 
   .quality-card strong {
     color: #f2f6fb;
-    font-size: 0.9rem;
+    font-size: 1rem;
   }
 
   .quality-card small {
     color: rgba(190, 203, 217, 0.72);
-    font-size: 0.74rem;
+    font-size: 0.76rem;
   }
 
   .detail-warning strong {
@@ -1117,17 +1176,17 @@
   .telemetry-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.5rem;
+    gap: 0.52rem;
   }
 
   .telemetry-card {
     display: grid;
-    gap: 0.2rem;
-    padding: 0.72rem 0.76rem;
+    gap: 0.24rem;
+    padding: 0.82rem 0.82rem;
   }
 
   .telemetry-card strong {
-    font-size: 0.96rem;
+    font-size: 1.08rem;
   }
 
   .facts-panel {
@@ -1144,8 +1203,8 @@
     justify-content: space-between;
     gap: 0.9rem;
     align-items: baseline;
-    padding: 0.7rem 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 0.82rem 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .fact-row:first-child {
@@ -1154,7 +1213,7 @@
   }
 
   .fact-row strong {
-    font-size: 0.84rem;
+    font-size: 0.98rem;
     text-align: right;
   }
 
@@ -1236,9 +1295,11 @@
     }
 
     .hero-summary-grid,
+    .hero-metric-grid,
     .telemetry-grid,
     .route-strip,
-    .airport-desk-grid {
+    .airport-desk-grid,
+    .identity-actions {
       grid-template-columns: 1fr;
     }
 

@@ -15,7 +15,6 @@
   export let detailsStatus = "idle";
   export let detailsError = null;
   export let followAircraft = false;
-  export let trailPoints = [];
   export let bookmarked = false;
   export let liveStatus = "Live";
   export let snapshotFreshness = "waiting";
@@ -89,27 +88,6 @@
     }
 
     return "Level";
-  }
-
-  function calculateObservedDistanceKm(points) {
-    if (points.length < 2) {
-      return 0;
-    }
-
-    let distance = 0;
-
-    for (let index = 1; index < points.length; index += 1) {
-      const previous = points[index - 1];
-      const current = points[index];
-      distance += calculateGreatCircleDistanceKm(
-        previous.latitude,
-        previous.longitude,
-        current.latitude,
-        current.longitude
-      );
-    }
-
-    return distance;
   }
 
   function calculateGreatCircleDistanceKm(startLatitude, startLongitude, endLatitude, endLongitude) {
@@ -217,13 +195,6 @@
     };
   }
 
-  $: observedDistanceKm = calculateObservedDistanceKm(trailPoints);
-  $: averageObservedSpeed = trailPoints.length
-    ? Math.round(
-        trailPoints.reduce((total, point) => total + ((point.velocity ?? 0) * 3.6), 0) /
-          trailPoints.length
-      )
-    : 0;
   $: photo = details?.photo ?? null;
   $: route = details?.route ?? null;
   $: identity = {
@@ -243,10 +214,15 @@
   $: detailWarning = detailsError ?? details?.meta?.warning ?? routeWarning ?? null;
   $: photoUrl = resolvePhotoUrl(photo);
   $: routeProgress = calculateRouteProgress(route, flight);
+  $: heroSubtitle =
+    routeVerbose ??
+    ([identity.registration, identity.typeCode].filter(Boolean).join(" · ") ||
+      `${identity.originCountry ?? "Unknown country"} · ICAO24 ${identity.icao24}`);
   $: operatorLabel =
     route?.airline_name ??
     route?.airline_code ??
     (identity.operatorCode !== "N/A" ? identity.operatorCode : identity.originCountry ?? "Unknown");
+  $: identityMetaLine = [operatorLabel, `ICAO24 ${identity.icao24}`].filter(Boolean).join(" · ");
   $: heroSummaryItems = [
     {
       label: "Flight",
@@ -260,12 +236,6 @@
       hint: identity.registration ?? identity.icao24,
       icon: "aircraft",
     },
-    {
-      label: "Operator",
-      value: operatorLabel,
-      hint: identity.originCountry ?? "Origin unknown",
-      icon: "operator",
-    },
   ];
   $: heroMetricItems = flight
     ? [
@@ -278,7 +248,7 @@
         {
           label: "Speed",
           value: formatSpeed(flight.velocity),
-          hint: averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Live groundspeed",
+          hint: "Live groundspeed",
           icon: "speed",
         },
         {
@@ -290,7 +260,7 @@
         {
           label: "Vertical rate",
           value: formatVerticalRate(flight.vertical_rate),
-          hint: trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up",
+          hint: getVerticalTrendLabel(flight.vertical_rate),
           icon: "vertical",
         },
       ]
@@ -350,7 +320,7 @@
             <div class="photo-copy">
               <p class="eyebrow">Live route</p>
               <h3>{routeLabel ?? identity.callsign}</h3>
-              <p class="hero-subtitle">{routeVerbose ?? `${identity.originCountry ?? "Unknown country"} · ICAO24 ${identity.icao24}`}</p>
+              <p class="hero-subtitle">{heroSubtitle}</p>
             </div>
           </div>
         </div>
@@ -376,6 +346,8 @@
             </article>
           {/each}
         </div>
+
+        <p class="identity-meta-line">{identityMetaLine}</p>
 
         <div class="route-strip">
           <article class="route-node">
@@ -491,7 +463,7 @@
               <article class="quality-card">
                 <span>Transport</span>
                 <strong>{snapshotTransport}</strong>
-                <small>{trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up"}</small>
+                <small>{detailsStatus === "success" ? "Metadata synced" : "Live capture pipeline"}</small>
               </article>
             </div>
 
@@ -561,44 +533,6 @@
                 <strong>{identity.originCountry ?? "Unknown"}</strong>
               </div>
             </div>
-          </section>
-        </div>
-      </details>
-
-      <details class="detail-section">
-        <summary class="detail-section-summary">
-          <div class="detail-section-title">
-            <span class="detail-section-glyph"><InfoGlyph kind="tracking" size={15} /></span>
-            <div class="detail-section-copy">
-              <span class="detail-section-kicker">Tracking</span>
-              <strong>{trailPoints.length ? `${trailPoints.length} trail points` : "Live telemetry"}</strong>
-            </div>
-          </div>
-          <small>{observedDistanceKm ? `${observedDistanceKm.toFixed(1)} km observed` : "Trail warming up"}</small>
-        </summary>
-
-        <div class="detail-section-body">
-          <section class="telemetry-grid">
-            <article class="telemetry-card">
-              <span>Altitude</span>
-              <strong>{formatAltitude(flight.altitude)}</strong>
-              <small>{getVerticalTrendLabel(flight.vertical_rate)}</small>
-            </article>
-            <article class="telemetry-card">
-              <span>Ground speed</span>
-              <strong>{formatSpeed(flight.velocity)}</strong>
-              <small>{averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Waiting for trail"}</small>
-            </article>
-            <article class="telemetry-card">
-              <span>Heading</span>
-              <strong>{formatHeading(flight.true_track)}</strong>
-              <small>{getTrackLabel(flight.true_track)}</small>
-            </article>
-            <article class="telemetry-card">
-              <span>Vertical rate</span>
-              <strong>{formatVerticalRate(flight.vertical_rate)}</strong>
-              <small>{trailPoints.length} trail points</small>
-            </article>
           </section>
         </div>
       </details>
@@ -730,7 +664,6 @@
   }
 
   .hero-card,
-  .telemetry-card,
   .detail-warning,
   .facts-panel {
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -839,8 +772,7 @@
   .detail-warning span,
   .empty-copy,
   .facts-header span,
-  .route-node p,
-  .telemetry-card small {
+  .route-node p {
     color: rgba(190, 203, 217, 0.74);
     font-size: 0.78rem;
   }
@@ -848,7 +780,6 @@
   .photo-credit strong,
   .photo-copy h3,
   .route-node strong,
-  .telemetry-card strong,
   .fact-row strong,
   .facts-header strong {
     color: var(--color-text);
@@ -870,7 +801,6 @@
 
   .photo-placeholder span,
   .route-label,
-  .telemetry-card span,
   .fact-row span,
   .facts-header span,
   .quality-card span {
@@ -880,7 +810,6 @@
 
   .photo-placeholder span,
   .route-label,
-  .telemetry-card span,
   .fact-row span,
   .facts-header span,
   .quality-card span {
@@ -951,6 +880,11 @@
 
   .hero-summary-card small {
     color: rgba(190, 203, 217, 0.72);
+    font-size: 0.76rem;
+  }
+
+  .identity-meta-line {
+    color: rgba(190, 203, 217, 0.7);
     font-size: 0.76rem;
   }
 
@@ -1230,22 +1164,6 @@
     font-size: 0.8rem;
   }
 
-  .telemetry-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 0.52rem;
-  }
-
-  .telemetry-card {
-    display: grid;
-    gap: 0.24rem;
-    padding: 0.82rem 0.82rem;
-  }
-
-  .telemetry-card strong {
-    font-size: 1.08rem;
-  }
-
   .facts-panel {
     display: grid;
     gap: 0.55rem;
@@ -1372,7 +1290,6 @@
 
     .hero-summary-grid,
     .hero-metric-grid,
-    .telemetry-grid,
     .route-strip,
     .airport-desk-grid,
     .identity-actions,

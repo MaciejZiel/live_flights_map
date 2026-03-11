@@ -17,6 +17,7 @@
   export let watchedIcao24s = [];
   export let watchModeEnabled = false;
   export let dimmedIcao24s = [];
+  export let aircraftClusteringEnabled = false;
   export let showAirportMarkers = true;
   export let weatherLayerEnabled = false;
   export let initialViewport = null;
@@ -41,6 +42,7 @@
   let weatherRefreshTimer = null;
   const markerRegistry = new Map();
   const airportRegistry = new Map();
+  let activeAircraftClusteringEnabled = null;
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
@@ -574,6 +576,61 @@
     });
   }
 
+  function handleClusterClick(event) {
+    const cluster = event.layer;
+    if (map.getZoom() >= 8) {
+      cluster.spiderfy();
+      return;
+    }
+
+    cluster.zoomToBounds({
+      padding: [52, 52],
+    });
+  }
+
+  function createAircraftLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (aircraftLayer) {
+      aircraftLayer.off?.("clusterclick", handleClusterClick);
+      for (const entry of markerRegistry.values()) {
+        if (entry.animationFrame) {
+          cancelAnimationFrame(entry.animationFrame);
+        }
+      }
+      markerRegistry.clear();
+      map.removeLayer(aircraftLayer);
+    }
+
+    aircraftLayer = aircraftClusteringEnabled
+      ? L.markerClusterGroup({
+          spiderfyOnMaxZoom: true,
+          showCoverageOnHover: false,
+          removeOutsideVisibleBounds: true,
+          disableClusteringAtZoom: 9,
+          maxClusterRadius: 38,
+          iconCreateFunction(cluster) {
+            const childCount = cluster.getChildCount();
+            const clusterSizeClass =
+              childCount >= 40 ? "cluster-large" : childCount >= 12 ? "cluster-medium" : "cluster-small";
+            return L.divIcon({
+              html: `<span>${childCount}</span>`,
+              className: `aircraft-cluster ${clusterSizeClass}`,
+              iconSize: [30, 30],
+            });
+          },
+        }).addTo(map)
+      : L.layerGroup().addTo(map);
+
+    if (aircraftClusteringEnabled) {
+      aircraftLayer.on("clusterclick", handleClusterClick);
+    }
+
+    activeAircraftClusteringEnabled = aircraftClusteringEnabled;
+  }
+
   function syncAirportLayer() {
     if (!map || !airportLayer) {
       return;
@@ -701,40 +758,13 @@
     }).setView(initialCenter, initialZoom);
 
     L.control.zoom({
-      position: "topright",
+      position: "bottomleft",
     }).addTo(map);
 
     setBasemap(mapStyle);
 
-    aircraftLayer = L.markerClusterGroup({
-      spiderfyOnMaxZoom: true,
-      showCoverageOnHover: false,
-      removeOutsideVisibleBounds: true,
-      disableClusteringAtZoom: 9,
-      maxClusterRadius: 38,
-      iconCreateFunction(cluster) {
-        const childCount = cluster.getChildCount();
-        const clusterSizeClass =
-          childCount >= 40 ? "cluster-large" : childCount >= 12 ? "cluster-medium" : "cluster-small";
-        return L.divIcon({
-          html: `<span>${childCount}</span>`,
-          className: `aircraft-cluster ${clusterSizeClass}`,
-          iconSize: [30, 30],
-        });
-      },
-    }).addTo(map);
+    createAircraftLayer();
     airportLayer = L.layerGroup().addTo(map);
-    aircraftLayer.on("clusterclick", (event) => {
-      const cluster = event.layer;
-      if (map.getZoom() >= 8) {
-        cluster.spiderfy();
-        return;
-      }
-
-      cluster.zoomToBounds({
-        padding: [52, 52],
-      });
-    });
     syncAircraftMarkers(aircraftLayer, markerRegistry, flights);
     syncAirportLayer();
     loadWeatherFrame();
@@ -773,6 +803,7 @@
       map.remove();
       activeBaseLayer = null;
       activeMapStyle = null;
+      activeAircraftClusteringEnabled = null;
       trailLayer = null;
       motionVectorLayer = null;
       routeLayer = null;
@@ -786,6 +817,10 @@
       airportRegistry.clear();
     };
   });
+
+  $: if (map && aircraftClusteringEnabled !== activeAircraftClusteringEnabled) {
+    createAircraftLayer();
+  }
 
   $: if (aircraftLayer) {
     syncAircraftMarkers(
@@ -971,15 +1006,15 @@
     box-shadow: 0 12px 26px rgba(0, 0, 0, 0.22);
   }
 
-  :global(.leaflet-top.leaflet-right) {
-    top: 5.2rem;
-    right: 20.9rem;
+  :global(.leaflet-bottom.leaflet-left) {
+    left: 1rem;
+    bottom: 7.2rem;
   }
 
   :global(.leaflet-control-zoom a) {
-    width: 38px;
-    height: 38px;
-    line-height: 38px;
+    width: 42px;
+    height: 42px;
+    line-height: 42px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     color: #f5f8fc;
     background: rgba(27, 29, 34, 0.96);
@@ -1358,9 +1393,9 @@
       text-align: center;
     }
 
-    :global(.leaflet-top.leaflet-right) {
-      top: 5rem;
-      right: 0.75rem;
+    :global(.leaflet-bottom.leaflet-left) {
+      left: 0.75rem;
+      bottom: 6.4rem;
     }
   }
 </style>

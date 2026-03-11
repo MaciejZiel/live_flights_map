@@ -169,6 +169,7 @@ export function normalizeUserPreferences(value) {
     monitoringSessions: Array.isArray(value.monitoringSessions) ? value.monitoringSessions : [],
     savedViews: Array.isArray(value.savedViews) ? value.savedViews : [],
     savedEntities: Array.isArray(value.savedEntities) ? value.savedEntities : [],
+    aircraftClusteringEnabled: sanitizeBoolean(value.aircraftClusteringEnabled, false),
     weatherLayerEnabled: sanitizeBoolean(value.weatherLayerEnabled, false),
     showAirportMarkers: sanitizeBoolean(value.showAirportMarkers, true),
     workspaceAccountId:

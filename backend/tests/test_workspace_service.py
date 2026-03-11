@@ -40,6 +40,16 @@ class WorkspaceServiceTests(unittest.TestCase):
             self.assertEqual(payload["profile"]["role"], "admin")
             self.assertEqual(payload["account"]["id"], account["account"]["id"])
 
+    def test_default_workspace_state_keeps_map_density_preferences(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = WorkspaceService(str(Path(temp_dir) / "workspace.sqlite3"))
+
+            account = service.create_account("Ops Team")
+            payload = service.get_workspace_state(account["profile"]["id"])
+
+            self.assertFalse(payload["state"]["aircraftClusteringEnabled"])
+            self.assertTrue(payload["state"]["showAirportMarkers"])
+
     def test_list_profiles_is_scoped_to_account(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = WorkspaceService(str(Path(temp_dir) / "workspace.sqlite3"))

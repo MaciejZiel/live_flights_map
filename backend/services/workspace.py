@@ -521,6 +521,7 @@ class WorkspaceService:
             "savedViews": [],
             "savedEntities": [],
             "onboardingDismissed": False,
+            "aircraftClusteringEnabled": False,
             "weatherLayerEnabled": False,
             "showAirportMarkers": True,
             "selectedAirportCode": None,

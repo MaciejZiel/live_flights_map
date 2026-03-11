@@ -128,6 +128,7 @@
   let followAircraft = false;
   let embedMode = false;
   let mapStyle = "standard";
+  let aircraftClusteringEnabled = false;
   let weatherLayerEnabled = false;
   let showAirportMarkers = true;
   let mapViewport = {
@@ -287,6 +288,8 @@
       monitoringSessions = savedPreferences.monitoringSessions ?? monitoringSessions;
       savedViews = savedPreferences.savedViews ?? savedViews;
       savedEntities = savedPreferences.savedEntities ?? savedEntities;
+      aircraftClusteringEnabled =
+        savedPreferences.aircraftClusteringEnabled ?? aircraftClusteringEnabled;
       weatherLayerEnabled = savedPreferences.weatherLayerEnabled ?? weatherLayerEnabled;
       showAirportMarkers = savedPreferences.showAirportMarkers ?? showAirportMarkers;
       activeWorkspaceAccountId =
@@ -738,6 +741,7 @@
       monitoringSessions,
       savedViews,
       savedEntities,
+      aircraftClusteringEnabled,
       weatherLayerEnabled,
       showAirportMarkers,
       selectedAirportCode,
@@ -773,6 +777,8 @@
     monitoringSessions = normalizedWorkspaceState.monitoringSessions ?? monitoringSessions;
     savedViews = normalizedWorkspaceState.savedViews ?? savedViews;
     savedEntities = normalizedWorkspaceState.savedEntities ?? savedEntities;
+    aircraftClusteringEnabled =
+      normalizedWorkspaceState.aircraftClusteringEnabled ?? aircraftClusteringEnabled;
     weatherLayerEnabled =
       normalizedWorkspaceState.weatherLayerEnabled ?? weatherLayerEnabled;
     showAirportMarkers =
@@ -1438,6 +1444,7 @@
     const sharedGroundFlag = params.get("ground");
     const sharedWeather = params.get("weather");
     const sharedAirportMarkers = params.get("airports");
+    const sharedClusters = params.get("clusters");
     const sharedReplayAt = params.get("replayAt");
     const sharedReplayWindow = Number(params.get("replayWindow"));
     const sharedEmbedMode = params.get("embed");
@@ -1538,6 +1545,10 @@
 
     if (sharedAirportMarkers === "1" || sharedAirportMarkers === "0") {
       showAirportMarkers = sharedAirportMarkers !== "0";
+    }
+
+    if (sharedClusters === "1" || sharedClusters === "0") {
+      aircraftClusteringEnabled = sharedClusters === "1";
     }
 
     if (sharedReplayAt) {
@@ -1706,6 +1717,12 @@
       params.set("airports", "0");
     } else {
       params.delete("airports");
+    }
+
+    if (aircraftClusteringEnabled) {
+      params.set("clusters", "1");
+    } else {
+      params.delete("clusters");
     }
 
     if (replayAnchorTimestamp) {
@@ -1934,6 +1951,7 @@
         watchlist: [...watchlist],
         watchModeEnabled,
         savedEntities: [...savedEntities],
+        aircraftClusteringEnabled,
         weatherLayerEnabled,
         showAirportMarkers,
         selectedIcao24,
@@ -1965,6 +1983,8 @@
     watchlist = view.state.watchlist ?? watchlist;
     watchModeEnabled = view.state.watchModeEnabled ?? watchModeEnabled;
     savedEntities = view.state.savedEntities ?? savedEntities;
+    aircraftClusteringEnabled =
+      view.state.aircraftClusteringEnabled ?? aircraftClusteringEnabled;
     weatherLayerEnabled = view.state.weatherLayerEnabled ?? weatherLayerEnabled;
     showAirportMarkers = view.state.showAirportMarkers ?? showAirportMarkers;
     selectedIcao24 = view.state.selectedIcao24 ?? null;
@@ -3229,6 +3249,7 @@
       viewport: mapViewport,
       filters: { ...filters },
       mapStyle,
+      aircraftClusteringEnabled,
       weatherLayerEnabled,
       selectedIcao24,
       selectedAirportCode,
@@ -3257,6 +3278,8 @@
       mapViewport = session.viewport;
     }
     mapStyle = session.mapStyle ?? mapStyle;
+    aircraftClusteringEnabled =
+      session.aircraftClusteringEnabled ?? aircraftClusteringEnabled;
     weatherLayerEnabled = session.weatherLayerEnabled ?? weatherLayerEnabled;
     selectedIcao24 = session.selectedIcao24 ?? null;
     selectedAirportCode = session.selectedAirportCode ?? null;
@@ -4038,6 +4061,7 @@
     selectedAirportCode;
     selectedAirportHistoryHours;
     mapViewport;
+    aircraftClusteringEnabled;
     weatherLayerEnabled;
     showAirportMarkers;
     replayAnchorTimestamp;
@@ -4063,6 +4087,7 @@
       monitoringSessions,
       savedViews,
       savedEntities,
+      aircraftClusteringEnabled,
       weatherLayerEnabled,
       showAirportMarkers,
       workspaceAccountId: activeWorkspaceAccountId,
@@ -4089,6 +4114,7 @@
     monitoringSessions;
     savedViews;
     savedEntities;
+    aircraftClusteringEnabled;
     weatherLayerEnabled;
     showAirportMarkers;
     selectedAirportCode;
@@ -4123,6 +4149,7 @@
         watchedIcao24s={watchlist}
         watchModeEnabled={watchModeEnabled}
         dimmedIcao24s={dimmedFlightIds}
+        aircraftClusteringEnabled={aircraftClusteringEnabled}
         showAirportMarkers={showAirportMarkers}
         weatherLayerEnabled={weatherLayerEnabled}
         initialViewport={mapViewport}
@@ -4210,8 +4237,15 @@
           <div class="topbar-status-strip" aria-label="Radar status strip">
             <span class="topbar-status-chip">{activeReplaySnapshot ? "Replay" : statusLabel}</span>
             <span>{mapStyleLabel}</span>
-            <span>{showAirportMarkers ? "Airports on" : "Airports off"}</span>
-            <span>{weatherLayerEnabled ? "Weather on" : "Weather off"}</span>
+            {#if aircraftClusteringEnabled}
+              <span>Clusters on</span>
+            {/if}
+            {#if weatherLayerEnabled}
+              <span>Weather</span>
+            {/if}
+            {#if !showAirportMarkers}
+              <span>Airports hidden</span>
+            {/if}
           </div>
         </div>
       {/if}
@@ -4787,6 +4821,26 @@
                       Airports
                     </button>
                     <button
+                      class:active={!aircraftClusteringEnabled}
+                      class="filter-chip"
+                      type="button"
+                      on:click={() => {
+                        aircraftClusteringEnabled = false;
+                      }}
+                    >
+                      All aircraft
+                    </button>
+                    <button
+                      class:active={aircraftClusteringEnabled}
+                      class="filter-chip"
+                      type="button"
+                      on:click={() => {
+                        aircraftClusteringEnabled = true;
+                      }}
+                    >
+                      Cluster nearby
+                    </button>
+                    <button
                       class:active={weatherLayerEnabled}
                       class="filter-chip"
                       type="button"
@@ -5324,7 +5378,6 @@
               detailsStatus={selectedFlightDetailsStatus}
               detailsError={selectedFlightDetailsError}
               followAircraft={followAircraft}
-              trailPoints={selectedFlightTrail}
               bookmarked={watchlist.includes(selectedFlight.icao24)}
               liveStatus={selectedFlightRadarModeLabel}
               snapshotFreshness={selectedFlightFreshnessLabel}
@@ -7153,14 +7206,14 @@
   }
 
   .bottom-dock {
-    right: 0.95rem;
+    left: 50%;
     bottom: 0.95rem;
-    left: auto;
-    transform: none;
+    right: auto;
+    transform: translateX(-50%);
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, auto));
-    gap: 0.32rem;
-    padding: 0.28rem;
+    grid-template-columns: repeat(4, minmax(0, auto));
+    gap: 0.36rem;
+    padding: 0.32rem;
     border-radius: 18px;
     background: rgba(12, 14, 18, 0.94);
   }

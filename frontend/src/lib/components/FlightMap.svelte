@@ -66,6 +66,7 @@
   let lastFocusRequestId = null;
   let lastRouteFocusKey = null;
   let currentZoom = initialViewport?.zoom ?? 7.1;
+  const TRAIL_PANE_NAME = "selected-flight-trail-pane";
   const viewPresets = {
     poland: [
       [49.0, 14.0],
@@ -400,16 +401,74 @@
       return;
     }
 
-    trailLayer = L.polyline(
-      trailPoints.map((point) => [point.latitude, point.longitude]),
-      {
-        color: "#c46a17",
-        weight: 3,
-        opacity: 0.85,
-        dashArray: "8 6",
+    const latLngs = trailPoints.map((point) => [point.latitude, point.longitude]);
+    const recentTrailLatLngs = latLngs.slice(-Math.min(16, latLngs.length));
+    const breadcrumbStep = Math.max(1, Math.floor(latLngs.length / 22));
+    const breadcrumbMarkers = trailPoints
+      .filter((_, index) => index !== 0 && index !== trailPoints.length - 1 && index % breadcrumbStep === 0)
+      .map((point, index, markers) => {
+        const progress = markers.length <= 1 ? 0.6 : index / (markers.length - 1);
+        return L.circleMarker([point.latitude, point.longitude], {
+          pane: TRAIL_PANE_NAME,
+          radius: 2.2 + progress * 1.8,
+          weight: 1.1,
+          color: "rgba(63, 32, 5, 0.78)",
+          fillColor: `rgba(255, ${Math.round(184 + progress * 48)}, ${Math.round(
+            72 + progress * 74
+          )}, ${0.26 + progress * 0.38})`,
+          fillOpacity: 1,
+        });
+      });
+
+    const startPoint = trailPoints[0];
+    const latestPoint = trailPoints[trailPoints.length - 1];
+
+    trailLayer = L.layerGroup([
+      L.polyline(latLngs, {
+        pane: TRAIL_PANE_NAME,
+        color: "rgba(43, 21, 4, 0.38)",
+        weight: 10,
+        opacity: 1,
         lineCap: "round",
-      }
-    ).addTo(map);
+        lineJoin: "round",
+        smoothFactor: 1.2,
+      }),
+      L.polyline(latLngs, {
+        pane: TRAIL_PANE_NAME,
+        color: "#f59e0b",
+        weight: 4.2,
+        opacity: 0.9,
+        lineCap: "round",
+        lineJoin: "round",
+        smoothFactor: 1.2,
+      }),
+      L.polyline(recentTrailLatLngs, {
+        pane: TRAIL_PANE_NAME,
+        color: "#fff1a6",
+        weight: 2.4,
+        opacity: 0.94,
+        lineCap: "round",
+        lineJoin: "round",
+        smoothFactor: 1.2,
+      }),
+      ...breadcrumbMarkers,
+      L.circleMarker([startPoint.latitude, startPoint.longitude], {
+        pane: TRAIL_PANE_NAME,
+        radius: 4,
+        weight: 1.6,
+        color: "rgba(68, 33, 5, 0.86)",
+        fillColor: "#f59e0b",
+        fillOpacity: 0.9,
+      }),
+      L.circleMarker([latestPoint.latitude, latestPoint.longitude], {
+        pane: TRAIL_PANE_NAME,
+        radius: 5.2,
+        weight: 1.8,
+        color: "rgba(94, 56, 10, 0.94)",
+        fillColor: "#fff1a6",
+        fillOpacity: 0.96,
+      }),
+    ]).addTo(map);
   }
 
   function syncMotionVectorLayer() {
@@ -817,6 +876,10 @@
       preferCanvas: true,
     }).setView(initialCenter, initialZoom);
     currentZoom = map.getZoom();
+
+    const trailPane = map.createPane(TRAIL_PANE_NAME);
+    trailPane.style.zIndex = "350";
+    trailPane.style.pointerEvents = "none";
 
     L.control.zoom({
       position: "bottomleft",

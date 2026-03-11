@@ -166,6 +166,7 @@
   let mobileSidebarOpen = true;
   let mobileUtilityOpen = false;
   let desktopUtilityExpanded = false;
+  let desktopTrafficBoardOpen = false;
   let inspectorScroll;
   let utilityPanelMode = "radar";
   let inspectorTab = "details";
@@ -1066,6 +1067,8 @@
     selectedAirportStatus = "idle";
     selectedAirportError = null;
     selectedEntityContext = null;
+    desktopUtilityExpanded = false;
+    desktopTrafficBoardOpen = false;
     inspectorTab = options.inspectorTab ?? "details";
     suppressSelectionClearUntil = Date.now() + (options.selectionHoldMs ?? 220);
 
@@ -1119,6 +1122,8 @@
     selectedFlightSnapshot = null;
     selectedEntityContext = null;
     followAircraft = false;
+    desktopUtilityExpanded = false;
+    desktopTrafficBoardOpen = false;
 
     if (
       options.focusMap !== false &&
@@ -1139,6 +1144,9 @@
   }
 
   function focusLocationEntity(locationEntity) {
+    desktopUtilityExpanded = false;
+    desktopTrafficBoardOpen = false;
+
     if (locationEntity?.bbox) {
       flightFocusRequest = {
         id: crypto.randomUUID(),
@@ -1350,6 +1358,8 @@
     selectedAirportDashboard = null;
     selectedAirportStatus = "idle";
     selectedAirportError = null;
+    desktopUtilityExpanded = false;
+    desktopTrafficBoardOpen = false;
 
     if (Number.isFinite(entity?.latitude) && Number.isFinite(entity?.longitude)) {
       flightFocusRequest = {
@@ -1393,16 +1403,11 @@
     }
 
     if (!selectedIcao24 && !selectedAirportCode && !selectedEntityContext) {
+      desktopTrafficBoardOpen = false;
       return;
     }
 
-    clearSelectedFlight({ closeSidebar: isMobileViewport });
-    selectedAirportCode = null;
-    selectedAirportSnapshot = null;
-    selectedAirportDashboard = null;
-    selectedAirportStatus = "idle";
-    selectedAirportError = null;
-    selectedEntityContext = null;
+    clearContextSelection();
   }
 
   function handleViewportChange(event) {
@@ -2114,6 +2119,8 @@
     }
 
     selectedIcao24 = fallbackIcao24;
+    desktopUtilityExpanded = false;
+    desktopTrafficBoardOpen = false;
     inspectorTab = "details";
     if (isMobileViewport) {
       mobileSidebarOpen = true;
@@ -3088,6 +3095,31 @@
     desktopUtilityExpanded = !desktopUtilityExpanded;
   }
 
+  function clearContextSelection() {
+    clearSelectedFlight({ closeSidebar: isMobileViewport });
+    selectedAirportCode = null;
+    selectedAirportSnapshot = null;
+    selectedAirportDashboard = null;
+    selectedAirportStatus = "idle";
+    selectedAirportError = null;
+    selectedEntityContext = null;
+  }
+
+  function toggleTrafficBoard() {
+    if (isMobileViewport) {
+      toggleMobileSidebar();
+      return;
+    }
+
+    if (selectedIcao24 || selectedAirportCode || selectedEntityContext) {
+      clearContextSelection();
+      desktopTrafficBoardOpen = true;
+      return;
+    }
+
+    desktopTrafficBoardOpen = !desktopTrafficBoardOpen;
+  }
+
   function selectReplaySnapshot(index) {
     replayPlaybackActive = false;
     replaySnapshotCursor = replaySourceSnapshots[index]?.fetchedAt ?? null;
@@ -3818,6 +3850,14 @@
     !selectedEntityContext &&
     !mobileSidebarOpen &&
     !mobileUtilityOpen;
+  $: showDesktopFocusHint =
+    !embedMode &&
+    !isMobileViewport &&
+    !selectedFlight &&
+    !selectedAirport &&
+    !selectedEntityContext &&
+    !desktopTrafficBoardOpen &&
+    !showSearchSuggestions;
   $: replayPanelBadge = activeReplaySnapshot
     ? "Replay"
     : activeMonitoringSession
@@ -4290,6 +4330,18 @@
                 </button>
               {:else}
                 <button
+                  class:active={desktopTrafficBoardOpen && !selectedFlight && !selectedAirport && !selectedEntityContext}
+                  class="overlay-card topbar-icon topbar-action-chip"
+                  type="button"
+                  on:click={toggleTrafficBoard}
+                >
+                  {selectedFlight || selectedAirport || selectedEntityContext
+                    ? "Back to traffic"
+                    : desktopTrafficBoardOpen
+                      ? "Hide traffic"
+                      : "Traffic"}
+                </button>
+                <button
                   class:active={desktopUtilityExpanded}
                   class="overlay-card topbar-icon topbar-action-chip"
                   type="button"
@@ -4346,6 +4398,24 @@
         <div class="mobile-start-actions">
           <button class="widget-footer-button" type="button" on:click={toggleMobileSidebar}>Open traffic</button>
           <button class="widget-footer-button" type="button" on:click={toggleMobileUtility}>Open tools</button>
+        </div>
+      </section>
+    {/if}
+
+    {#if showDesktopFocusHint}
+      <section class="overlay-card desktop-focus-hint">
+        <span>Primary flow</span>
+        <strong>Search or click an aircraft. The inspector only opens when you actually pick something.</strong>
+        <p>
+          Traffic board and workspace stay available, but they no longer occupy the map by default.
+        </p>
+        <div class="desktop-focus-actions">
+          <button class="widget-footer-button primary" type="button" on:click={toggleTrafficBoard}>
+            Open traffic board
+          </button>
+          <button class="widget-footer-button" type="button" on:click={() => toggleUtilityWorkspace("radar")}>
+            Open workspace
+          </button>
         </div>
       </section>
     {/if}
@@ -5448,7 +5518,7 @@
       <button class="sidebar-backdrop" type="button" aria-label="Close panel" on:click={closeMobileSidebar}></button>
     {/if}
 
-    {#if !embedMode}
+    {#if !embedMode && (isMobileViewport || selectedFlight || selectedAirport || selectedEntityContext || desktopTrafficBoardOpen)}
     <aside class:open={mobileSidebarOpen} class:selected-flight-inspector={Boolean(selectedFlight)} class="overlay-card radar-right-panel">
       {#if isMobileViewport}
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
@@ -6458,6 +6528,50 @@
   }
 
   .mobile-start-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .desktop-focus-hint {
+    position: absolute;
+    top: 6.1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1180;
+    width: min(26rem, calc(100vw - 36rem));
+    display: grid;
+    gap: 0.48rem;
+    padding: 0.92rem 0.96rem;
+    text-align: left;
+    background: rgba(14, 16, 20, 0.94);
+  }
+
+  .desktop-focus-hint span {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: rgba(185, 194, 206, 0.78);
+  }
+
+  .desktop-focus-hint strong,
+  .desktop-focus-hint p {
+    margin: 0;
+  }
+
+  .desktop-focus-hint strong {
+    color: #f4f7fb;
+    font-size: 0.96rem;
+    line-height: 1.35;
+  }
+
+  .desktop-focus-hint p {
+    color: rgba(205, 215, 226, 0.78);
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+
+  .desktop-focus-actions {
     display: flex;
     gap: 0.5rem;
     flex-wrap: wrap;
@@ -7622,6 +7736,10 @@
   @media (max-width: 960px) {
     .mobile-start-hint {
       display: grid;
+    }
+
+    .desktop-focus-hint {
+      display: none;
     }
 
     .radar-left-panel {

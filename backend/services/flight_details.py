@@ -47,7 +47,12 @@ class FlightDetailsService:
 
         with self._lock:
             cached = self._cache.get(cache_key)
-            if cached and cached.expires_at > now:
+            if cached and cached.expires_at > now and self._should_use_cached_entry(
+                cached.payload,
+                registration=normalized_registration,
+                type_code=normalized_type_code,
+                callsign=normalized_callsign,
+            ):
                 return deepcopy(cached.payload)
 
         warnings = []
@@ -102,6 +107,25 @@ class FlightDetailsService:
             )
 
         return deepcopy(payload)
+
+    @staticmethod
+    def _should_use_cached_entry(
+        payload: dict[str, object],
+        *,
+        registration: str | None,
+        type_code: str | None,
+        callsign: str | None,
+    ) -> bool:
+        photo = payload.get("photo")
+        if isinstance(photo, dict) and photo.get("thumbnail_url"):
+            return True
+
+        # Retry details that currently have enough identity context to potentially
+        # resolve a photo, instead of pinning a stale "no photo" cache entry for hours.
+        if registration or type_code or callsign:
+            return False
+
+        return True
 
     @staticmethod
     def _derive_operator_code(callsign: str | None) -> str | None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from backend.services.flight_archive import FlightArchiveService
@@ -21,15 +22,17 @@ class FlightArchiveServiceTests(unittest.TestCase):
                 "lomin": 18.0,
                 "lomax": 22.0,
             }
+            base_timestamp = datetime.now(timezone.utc) - timedelta(minutes=90)
+            snapshot_timestamps = [
+                base_timestamp,
+                base_timestamp + timedelta(minutes=30),
+                base_timestamp + timedelta(minutes=60),
+            ]
 
-            for timestamp in (
-                "2026-03-10T10:00:00+00:00",
-                "2026-03-10T10:30:00+00:00",
-                "2026-03-10T11:00:00+00:00",
-            ):
+            for timestamp in snapshot_timestamps:
                 service.store_snapshot(
                     {
-                        "fetched_at": timestamp,
+                        "fetched_at": timestamp.isoformat(),
                         "bbox": bbox,
                         "count": 1,
                         "flights": [
@@ -47,13 +50,13 @@ class FlightArchiveServiceTests(unittest.TestCase):
                 bbox=bbox,
                 minutes=45,
                 limit=10,
-                end_at="2026-03-10T10:45:00+00:00",
+                end_at=(base_timestamp + timedelta(minutes=45)).isoformat(),
             )
 
             self.assertEqual(payload["count"], 2)
-            self.assertEqual(payload["end_at"], "2026-03-10T10:45:00+00:00")
-            self.assertEqual(payload["snapshots"][0]["fetched_at"], "2026-03-10T10:00:00+00:00")
-            self.assertEqual(payload["snapshots"][1]["fetched_at"], "2026-03-10T10:30:00+00:00")
+            self.assertEqual(payload["end_at"], (base_timestamp + timedelta(minutes=45)).isoformat())
+            self.assertEqual(payload["snapshots"][0]["fetched_at"], snapshot_timestamps[0].isoformat())
+            self.assertEqual(payload["snapshots"][1]["fetched_at"], snapshot_timestamps[1].isoformat())
 
 
 if __name__ == "__main__":

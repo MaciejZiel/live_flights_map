@@ -272,6 +272,26 @@
       : ["loading", "refreshing"].includes(detailsStatus)
         ? "Resolving route"
         : "Live track";
+  $: flightStatusText = flight ? formatFlightStatus(flight) : "Live track";
+  $: routeSupportText = route?.plausible === false
+    ? "Route unverified"
+    : route
+      ? null
+      : ["loading", "refreshing"].includes(detailsStatus)
+        ? "Resolving route"
+        : "Live track only";
+  $: routeSummaryValue = routeStops.length
+    ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}`
+    : route
+      ? "Direct"
+      : routeStatusText;
+  $: routeSectionSummary = route?.plausible === false
+    ? "unverified route"
+    : route
+      ? routeStops.length
+        ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}`
+        : "direct route"
+      : "route pending";
   $: dataQualitySummary = detailWarning
     ? "Guarded"
     : detailsStatus === "loading" || detailsStatus === "refreshing"
@@ -305,11 +325,9 @@
           <div class="photo-overlay">
             <div class="photo-overlay-head">
               <div class="photo-badge-row">
-                <span class="status-chip overlay-chip">{formatFlightStatus(flight)}</span>
                 {#if routeFlightNumber}
                   <span class="route-badge">{routeFlightNumber}</span>
                 {/if}
-                <span class="route-badge">{routeStatusText}</span>
               </div>
 
               <button class="hero-dismiss" type="button" aria-label="Close selected aircraft" on:click={onClose}>
@@ -321,6 +339,12 @@
               <p class="eyebrow">Live route</p>
               <h3>{routeLabel ?? identity.callsign}</h3>
               <p class="hero-subtitle">{heroSubtitle}</p>
+              <div class="hero-status-row">
+                <span class="hero-status-pill">{flightStatusText}</span>
+                {#if routeSupportText}
+                  <span class="hero-status-note">{routeSupportText}</span>
+                {/if}
+              </div>
             </div>
           </div>
         </div>
@@ -365,7 +389,7 @@
 
         <div class="route-summary">
           <span>{route?.iata_codes ?? route?.airport_codes ?? "Route lookup pending"}</span>
-          <strong>{routeStops.length ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}` : routeStatusText}</strong>
+          <strong>{routeSummaryValue}</strong>
         </div>
 
         {#if routeProgress}
@@ -434,7 +458,7 @@
               <strong>{routeFlightNumber || identity.callsign}</strong>
             </div>
           </div>
-          <small>{route?.plausible === false ? "route unverified" : route ? "route resolved" : "route pending"}</small>
+          <small>{routeSectionSummary}</small>
         </summary>
 
         <div class="detail-section-body">
@@ -640,7 +664,6 @@
     color: rgba(190, 203, 217, 0.62);
   }
 
-  .status-chip,
   .route-badge {
     display: inline-flex;
     align-items: center;
@@ -649,12 +672,6 @@
     padding: 0.34rem 0.64rem;
     font-size: 0.72rem;
     font-weight: 800;
-  }
-
-  .status-chip {
-    color: #f4f7fb;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .route-badge {
@@ -747,13 +764,41 @@
     cursor: pointer;
   }
 
-  .overlay-chip {
-    background: rgba(255, 255, 255, 0.12);
-  }
-
   .photo-copy {
     display: grid;
-    gap: 0.2rem;
+    gap: 0.32rem;
+  }
+
+  .hero-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.6rem;
+    align-items: center;
+    margin-top: 0.08rem;
+  }
+
+  .hero-status-pill,
+  .hero-status-note {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.7rem;
+    border-radius: 999px;
+    padding: 0.18rem 0.62rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+
+  .hero-status-pill {
+    color: #f5f8fc;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .hero-status-note {
+    color: rgba(230, 236, 244, 0.82);
+    background: rgba(7, 8, 11, 0.34);
+    border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
   .photo-copy h3 {

@@ -3970,13 +3970,20 @@
       ? "Loading archived snapshots for the current airspace"
       : `${replaySourceSnapshots.length} snapshots ready for replay`;
   $: utilityPanelTitle =
-    utilityPanelMode === "radar" ? "Radar" : utilityPanelMode === "replay" ? "Replay" : "Tools";
+    utilityPanelMode === "radar" ? "Radar" : utilityPanelMode === "replay" ? "Replay" : "Workspace";
   $: utilityPanelEyebrow =
     utilityPanelMode === "radar"
       ? "Core controls"
       : utilityPanelMode === "replay"
         ? "Archive controls"
-        : "Secondary tools";
+        : "Saved desks";
+  $: workspaceSavedCount = watchlist.length + savedEntities.length;
+  $: workspaceSetupCount =
+    workspaceAccounts.length +
+    workspaceProfiles.length +
+    savedViews.length +
+    comparisonFlights.length +
+    (onboardingDismissed ? 0 : 1);
   $: topbarStatusBadges = [
     activeReplaySnapshot ? "Replay" : null,
     activeFilterCount ? `${activeFilterCount} filters` : null,
@@ -4457,7 +4464,7 @@
                   type="button"
                   on:click={() => toggleUtilityWorkspace()}
                 >
-                  {desktopUtilityExpanded ? "Hide panels" : "Workspace"}
+                  {desktopUtilityExpanded ? "Hide panels" : "Panels"}
                 </button>
               {/if}
             </div>
@@ -4581,7 +4588,7 @@
             utilityPanelMode = "tools";
           }}
         >
-          Tools
+          Workspace
         </button>
       </div>
 
@@ -5191,19 +5198,49 @@
             </div>
           </details>
         {:else}
-          <section class="widget-card utility-summary-card">
+          <section class="widget-card utility-summary-card utility-compact-card">
             <div class="widget-header">
               <div class="widget-heading">
-                <strong>Workspace sync</strong>
+                <strong>Workspace hub</strong>
                 <span class="live-pill utility-state-pill">{workspaceSyncStatus === "success" ? "SYNC" : workspaceSyncStatus === "saving" ? "SAVE" : workspaceSyncStatus === "loading" ? "LOAD" : "ERR"}</span>
               </div>
             </div>
-            <p class="widget-empty">
-              Accounts and desk profiles now sync filters, bookmarks, notes and replay sessions to the backend workspace store while local cache stays as fallback.
-            </p>
+            <div class="utility-overview-grid">
+              <article>
+                <span>Saved</span>
+                <strong>{workspaceSavedCount}</strong>
+                <small>watchlist + bookmarks</small>
+              </article>
+              <article>
+                <span>Alerts</span>
+                <strong>{alertRules.length}</strong>
+                <small>{activeAlertEvents.length} recent events</small>
+              </article>
+              <article>
+                <span>Profiles</span>
+                <strong>{workspaceAccounts.length}/{workspaceProfiles.length}</strong>
+                <small>{workspaceSyncStatus === "success" ? "synced" : "sync pending"}</small>
+              </article>
+              <article>
+                <span>Extras</span>
+                <strong>{workspaceSetupCount}</strong>
+                <small>views, guides and compare</small>
+              </article>
+            </div>
+            <div class="utility-action-row">
+              <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("replay")}>
+                Replay
+              </button>
+              <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
+                Save area
+              </button>
+              <button class="widget-footer-button" type="button" on:click={addSelectedFlightAlert} disabled={!selectedFlight}>
+                Alert selected
+              </button>
+            </div>
           </section>
 
-          <details class="utility-drawer" open>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Reports</span>
               <strong>CSV</strong>
@@ -5233,10 +5270,14 @@
 
           <details class="utility-drawer" open={false}>
             <summary>
-              <span>Profiles</span>
+              <span>Workspace setup</span>
               <strong>{workspaceAccounts.length}/{workspaceProfiles.length}</strong>
             </summary>
             <div class="utility-drawer-body">
+              <p class="drawer-caption">
+                Accounts, desk profiles, saved views and onboarding helpers stay here instead of
+                competing with the live radar.
+              </p>
               <WorkspaceProfilesPanel
                 accounts={workspaceAccounts}
                 activeAccountId={activeWorkspaceAccountId}
@@ -5266,10 +5307,54 @@
                 }}
                 onCreateProfile={createWorkspaceDesk}
               />
+
+              <section class="utility-stack-panel">
+                {#if !onboardingDismissed}
+                  <OnboardingPanel onDismiss={dismissOnboarding} />
+                {:else}
+                  <section class="widget-card utility-summary-card utility-compact-card">
+                    <div class="widget-header">
+                      <div class="widget-heading">
+                        <strong>Quick start hidden</strong>
+                        <span class="live-pill utility-state-pill">Guide</span>
+                      </div>
+                    </div>
+                    <p class="widget-empty">Bring back the onboarding tips at any time.</p>
+                    <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
+                      Show tips again
+                    </button>
+                  </section>
+                {/if}
+
+                <LegendPanel />
+                <ShortcutsPanel />
+              </section>
+
+              <section class="utility-stack-panel">
+                <SavedViewsPanel
+                  views={savedViews}
+                  activeViewId={activeSavedViewId}
+                  currentName={savedViewName}
+                  onNameChange={(value) => {
+                    savedViewName = value;
+                  }}
+                  onSaveView={saveCurrentView}
+                  onLoadView={loadSavedView}
+                  onDeleteView={deleteSavedView}
+                />
+              </section>
+
+              <section class="utility-stack-panel">
+                <ComparisonPanel
+                  flights={comparisonFlights}
+                  selectedIcao24={selectedIcao24}
+                  onSelectFlight={selectWatchedFlight}
+                />
+              </section>
             </div>
           </details>
 
-          <details class="utility-drawer" open={watchlist.length > 0}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Tracked aircraft</span>
               <strong>{watchlist.length}</strong>
@@ -5289,7 +5374,7 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={savedEntities.length > 0}>
+          <details class="utility-drawer" open={false}>
             <summary>
               <span>Saved entities</span>
               <strong>{savedEntities.length}</strong>
@@ -5423,69 +5508,6 @@
             </div>
           </details>
 
-          <details class="utility-drawer" open={false}>
-            <summary>
-              <span>Workspace extras</span>
-              <strong>{savedViews.length + comparisonFlights.length + (onboardingDismissed ? 0 : 1)}</strong>
-            </summary>
-            <div class="utility-drawer-body">
-              <section class="utility-stack-panel">
-                <p class="drawer-caption">
-                  Quick start, shortcuts, saved views and comparison stay here without
-                  competing with the main map and inspector workflow.
-                </p>
-                {#if !onboardingDismissed}
-                  <OnboardingPanel onDismiss={dismissOnboarding} />
-                {:else}
-                  <section class="widget-card utility-summary-card utility-compact-card">
-                    <div class="widget-header">
-                      <div class="widget-heading">
-                        <strong>Quick start hidden</strong>
-                        <span class="live-pill utility-state-pill">Guide</span>
-                      </div>
-                    </div>
-                    <p class="widget-empty">Bring back the onboarding tips at any time.</p>
-                    <button class="widget-footer-button" type="button" on:click={showOnboardingTips}>
-                      Show tips again
-                    </button>
-                  </section>
-                {/if}
-
-                <LegendPanel />
-                <ShortcutsPanel />
-              </section>
-
-              <section class="utility-stack-panel">
-                <p class="drawer-caption">
-                  Saved views now stay in the synced workspace so every desk profile can reopen a
-                  full radar setup.
-                </p>
-                <SavedViewsPanel
-                  views={savedViews}
-                  activeViewId={activeSavedViewId}
-                  currentName={savedViewName}
-                  onNameChange={(value) => {
-                    savedViewName = value;
-                  }}
-                  onSaveView={saveCurrentView}
-                  onLoadView={loadSavedView}
-                  onDeleteView={deleteSavedView}
-                />
-              </section>
-
-              <section class="utility-stack-panel">
-                <p class="drawer-caption">
-                  Comparison stays available here without competing with the live radar by default.
-                </p>
-                <ComparisonPanel
-                  flights={comparisonFlights}
-                  selectedIcao24={selectedIcao24}
-                  onSelectFlight={selectWatchedFlight}
-                />
-              </section>
-            </div>
-          </details>
-
           <details class="utility-drawer" open={alertRules.length > 0 || activeAlertEvents.length > 0}>
             <summary>
               <span>Alerts</span>
@@ -5602,13 +5624,13 @@
 
             <div class="workspace-launch-grid">
               <button class="widget-footer-button primary" type="button" on:click={() => openUtilityWorkspace("radar")}>
-                Radar tools
+                Radar
               </button>
               <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("replay")}>
                 Replay
               </button>
               <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("tools")}>
-                Saved & alerts
+                Workspace
               </button>
               <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
                 Save area

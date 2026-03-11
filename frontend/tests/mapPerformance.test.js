@@ -51,12 +51,31 @@ test("keeps detailed markers when traffic is manageable", () => {
   );
 });
 
-test("enables gpu traffic layer whenever webgl is available and clustering is off", () => {
+test("enables gpu traffic layer only in webgl mode", () => {
   assert.equal(
     shouldUseGpuAircraftLayer({
       aircraftCount: 240,
       clusteringEnabled: false,
       webglSupported: true,
+      renderMode: "detailed",
+    }),
+    false
+  );
+  assert.equal(
+    shouldUseGpuAircraftLayer({
+      aircraftCount: 240,
+      clusteringEnabled: false,
+      webglSupported: true,
+      renderMode: "lite",
+    }),
+    false
+  );
+  assert.equal(
+    shouldUseGpuAircraftLayer({
+      aircraftCount: 240,
+      clusteringEnabled: false,
+      webglSupported: true,
+      renderMode: "webgl",
     }),
     true
   );
@@ -65,6 +84,7 @@ test("enables gpu traffic layer whenever webgl is available and clustering is of
       aircraftCount: 240,
       clusteringEnabled: true,
       webglSupported: true,
+      renderMode: "webgl",
     }),
     false
   );
@@ -73,6 +93,7 @@ test("enables gpu traffic layer whenever webgl is available and clustering is of
       aircraftCount: 240,
       clusteringEnabled: false,
       webglSupported: false,
+      renderMode: "webgl",
     }),
     false
   );

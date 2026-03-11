@@ -906,6 +906,7 @@
     aircraftCount: flights?.length ?? 0,
     clusteringEnabled: aircraftClusteringEnabled,
     webglSupported: Boolean(denseAircraftOverlay),
+    renderMode: aircraftRenderMode,
   });
 
   $: effectiveAircraftRenderMode =

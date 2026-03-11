@@ -54,8 +54,14 @@ export function shouldUseGpuAircraftLayer({
   aircraftCount = 0,
   clusteringEnabled = false,
   webglSupported = false,
+  renderMode = "detailed",
 } = {}) {
-  return Boolean(webglSupported && !clusteringEnabled && aircraftCount > 0);
+  return Boolean(
+    webglSupported &&
+      !clusteringEnabled &&
+      aircraftCount > 0 &&
+      renderMode === "webgl"
+  );
 }
 
 export function shouldUseDetailedAircraftMarker(renderMode, selected = false, watched = false) {

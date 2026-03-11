@@ -2256,6 +2256,14 @@
     };
   }
 
+  function shouldRefreshCachedFlightDetails(details) {
+    if (!details) {
+      return true;
+    }
+
+    return !details?.photo?.thumbnail_url;
+  }
+
   async function loadSelectedFlightDetails(flight, options = {}) {
     const key = buildFlightDetailsKey(flight);
     if (!key) {
@@ -2270,7 +2278,7 @@
     if (pendingSearchSelection === flight?.icao24) {
       pendingSearchSelection = null;
     }
-    if (cachedDetails && !force) {
+    if (cachedDetails && !force && !shouldRefreshCachedFlightDetails(cachedDetails)) {
       selectedFlightDetails = mergeFlightDetails(flight, cachedDetails);
       selectedFlightDetailsStatus = "success";
       selectedFlightDetailsError = null;

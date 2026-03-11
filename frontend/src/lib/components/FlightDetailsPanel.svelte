@@ -308,12 +308,15 @@
       <div class="photo-shell">
         <div class:no-photo={!hasPhoto} class="photo-visual">
           {#if photoUrl}
+            <div aria-hidden="true" class="photo-backdrop" style={`background-image: url("${photoUrl}")`}></div>
             {#if photo?.link}
-              <a class="photo-link" href={photo.link} rel="noreferrer" target="_blank">
+              <a class="photo-link photo-asset" href={photo.link} rel="noreferrer" target="_blank">
                 <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
               </a>
             {:else}
-              <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
+              <div class="photo-asset">
+                <img alt={`Photo of ${identity.registration ?? identity.icao24}`} src={photoUrl} />
+              </div>
             {/if}
           {:else}
             <div class:loading={detailsStatus === "loading" || detailsStatus === "refreshing"} class="photo-placeholder">
@@ -730,16 +733,50 @@
       linear-gradient(180deg, rgba(31, 37, 47, 0.96) 0%, rgba(10, 13, 18, 0.98) 100%);
   }
 
-  .photo-shell img,
-  .photo-placeholder {
+  .photo-placeholder,
+  .photo-asset {
     width: 100%;
     aspect-ratio: 16 / 10;
   }
 
+  .photo-backdrop {
+    position: absolute;
+    inset: -8%;
+    background-position: center center;
+    background-repeat: no-repeat;
+    background-size: cover;
+    filter: blur(26px) saturate(1.08);
+    opacity: 0.62;
+    transform: scale(1.06);
+  }
+
+  .photo-backdrop::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(180deg, rgba(6, 7, 10, 0.18) 0%, rgba(6, 7, 10, 0.42) 100%);
+  }
+
+  .photo-asset {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.48rem;
+    box-sizing: border-box;
+  }
+
   .photo-shell img {
     display: block;
-    object-fit: cover;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center center;
+    border-radius: 10px;
     background: rgba(255, 255, 255, 0.04);
+    filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.28));
   }
 
   .photo-link {
@@ -751,6 +788,7 @@
     right: 0;
     bottom: 0;
     left: 0;
+    z-index: 2;
     display: grid;
     gap: 0.52rem;
     padding: 1rem 0.9rem 0.82rem;

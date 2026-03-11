@@ -477,33 +477,6 @@
       .map(([value]) => value);
   }
 
-  function buildCountryActivity(flights, limit = 3) {
-    const grouped = new Map();
-
-    for (const flight of flights) {
-      const key = flight.origin_country ?? "Unknown";
-      const current = grouped.get(key) ?? {
-        country: key,
-        count: 0,
-        averageSpeed: 0,
-        ground: 0,
-      };
-
-      current.count += 1;
-      current.averageSpeed += (flight.velocity ?? 0) * 3.6;
-      current.ground += flight.on_ground ? 1 : 0;
-      grouped.set(key, current);
-    }
-
-    return [...grouped.values()]
-      .map((entry) => ({
-        ...entry,
-        averageSpeed: entry.count ? Math.round(entry.averageSpeed / entry.count) : 0,
-      }))
-      .sort((left, right) => right.count - left.count || right.averageSpeed - left.averageSpeed)
-      .slice(0, limit);
-  }
-
   function formatAirportCode(airport) {
     return airport?.iata ?? airport?.icao ?? airport?.location ?? "?";
   }
@@ -3461,25 +3434,6 @@
     return knownLabels[normalizedValue] ?? normalizedValue;
   }
 
-  function getCoverageScopeLabel(stateValue) {
-    const scope = stateValue.meta?.airspace_scope ?? "focused";
-    return {
-      focused: "Focused",
-      regional: "Regional",
-      continental: "Continental",
-      global: "Global",
-    }[scope] ?? "Focused";
-  }
-
-  function getCoverageBreakdownLabel(stateValue) {
-    const identity = stateValue.meta?.quality?.identity;
-    if (!identity) {
-      return stateValue.warning ?? "Waiting for live metadata.";
-    }
-
-    return `${identity.registration_pct}% reg · ${identity.type_pct}% type`;
-  }
-
   function getQualitySummaryLabel(stateValue) {
     return (
       stateValue.meta?.quality?.summary ??
@@ -3869,24 +3823,7 @@
       : null,
   ].filter(Boolean);
   $: activeAlertEvents = alertEvents.slice(0, 4);
-  $: countryActivity = buildCountryActivity(filteredFlights, 3);
   $: leadFeedFlight = visibleLeaderboardFlights[0] ?? null;
-  $: showMobileStartHint =
-    isMobileViewport &&
-    !selectedFlight &&
-    !selectedAirport &&
-    !selectedEntityContext &&
-    !mobileSidebarOpen &&
-    !mobileUtilityOpen;
-  $: showDesktopFocusHint =
-    !embedMode &&
-    !isMobileViewport &&
-    !onboardingDismissed &&
-    !selectedFlight &&
-    !selectedAirport &&
-    !selectedEntityContext &&
-    !desktopTrafficBoardOpen &&
-    !showSearchSuggestions;
   $: replayPanelBadge = activeReplaySnapshot
     ? "Replay"
     : activeMonitoringSession
@@ -3926,21 +3863,10 @@
   $: statusLabel = getStatusLabel(state);
   $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
   $: confidenceLabel = getConfidenceLabel(state);
-  $: topbarStripBadges = [
-    activeReplaySnapshot ? "Replay" : freshnessLabel,
-    activeFilterCount ? `${activeFilterCount} filters` : null,
-    weatherLayerEnabled ? "Weather" : null,
-    !showAirportMarkers ? "Airports off" : null,
-  ].filter(Boolean);
   $: transportLabel = state.transport === "sse" ? "Stream" : "Polling";
-  $: coverageScopeLabel = getCoverageScopeLabel(state);
-  $: coverageBreakdownLabel = getCoverageBreakdownLabel(state);
   $: qualitySummaryLabel = getQualitySummaryLabel(state);
   $: feedLabel = getFeedLabel(state);
   $: feedSummaryLabel = getFeedSummaryLabel(state);
-  $: mapCenterLabel = mapViewport?.center
-    ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
-    : "52.23, 21.01";
   $: zoomLabel = Number.isFinite(mapViewport?.zoom) ? mapViewport.zoom.toFixed(1) : "7.1";
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: canStepReplayBackward =
@@ -4378,6 +4304,11 @@
                   {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
                 </button>
               {:else}
+                <div class="topbar-live-pill" aria-label="Live radar summary">
+                  <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+                  <strong>{activeReplaySnapshot ? "Replay" : freshnessLabel}</strong>
+                  <small>{activeReplaySnapshot ? "Archive frame" : feedLabel}</small>
+                </div>
                 <button
                   class:active={desktopTrafficBoardOpen && !selectedFlight && !selectedAirport && !selectedEntityContext}
                   class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
@@ -4406,15 +4337,6 @@
               {/if}
             </div>
           </div>
-
-          {#if topbarStripBadges.length}
-            <div class="topbar-status-strip" aria-label="Radar status strip">
-              <span class="topbar-status-chip">{statusLabel}</span>
-              {#each topbarStripBadges as badge}
-                <span>{badge}</span>
-              {/each}
-            </div>
-          {/if}
         </div>
       {/if}
     </header>
@@ -4444,35 +4366,6 @@
         <div class="alert-toast">{reportFeedback}</div>
       {/if}
     </div>
-
-    {#if showMobileStartHint && !embedMode}
-      <section class="overlay-card mobile-start-hint">
-        <span>Tryb mobilny</span>
-        <strong>Panele sa schowane. Kliknij `Traffic` albo `Tools` u gory.</strong>
-        <div class="mobile-start-actions">
-          <button class="widget-footer-button" type="button" on:click={toggleMobileSidebar}>Open traffic</button>
-          <button class="widget-footer-button" type="button" on:click={toggleMobileUtility}>Open tools</button>
-        </div>
-      </section>
-    {/if}
-
-    {#if showDesktopFocusHint}
-      <section class="overlay-card desktop-focus-hint">
-        <span>Primary flow</span>
-        <strong>Search or click an aircraft. The inspector only opens when you actually pick something.</strong>
-        <p>
-          Traffic board and workspace stay available, but they no longer occupy the map by default.
-        </p>
-        <div class="desktop-focus-actions">
-          <button class="widget-footer-button primary" type="button" on:click={toggleTrafficBoard}>
-            Open traffic board
-          </button>
-          <button class="widget-footer-button" type="button" on:click={() => toggleUtilityWorkspace("radar")}>
-            Open workspace
-          </button>
-        </div>
-      </section>
-    {/if}
 
     {#if !embedMode}
     <aside class:open={mobileUtilityOpen} class:compact={!isMobileViewport && !desktopUtilityExpanded} class="overlay-card radar-left-panel">
@@ -4531,95 +4424,6 @@
 
       <div class="panel-stack">
         {#if utilityPanelMode === "radar"}
-          <section class="widget-card utility-overview-card">
-            <div class="widget-header">
-              <div class="widget-heading">
-                <strong>Airspace overview</strong>
-                <span class="live-pill utility-state-pill">{transportLabel}</span>
-              </div>
-              <button class="widget-mini-action" type="button" on:click={() => triggerViewPreset("europe")}>
-                Wider airspace
-              </button>
-            </div>
-
-            <div class="utility-overview-grid">
-              <article>
-                <span>Status</span>
-                <strong>{statusLabel}</strong>
-                <small>{freshnessLabel}</small>
-              </article>
-              <article>
-                <span>Map center</span>
-                <strong>{mapCenterLabel}</strong>
-                <small>Zoom {zoomLabel}</small>
-              </article>
-              <article>
-                <span>Traffic</span>
-                <strong>{visibleTrackedCount}</strong>
-                <small>{airborneCount} airborne · {groundCount} ground</small>
-              </article>
-              <article>
-                <span>Data quality</span>
-                <strong>{confidenceLabel}</strong>
-                <small>{activeReplaySnapshot ? "Replay frame" : qualitySummaryLabel}</small>
-              </article>
-            </div>
-
-            {#if leadFeedFlight}
-              <button class="featured-flight-card" type="button" on:click={() => selectWatchedFlight(leadFeedFlight)}>
-                <span class="featured-flight-copy">
-                  <small>Fastest in view</small>
-                  <strong>{leadFeedFlight.callsign ?? leadFeedFlight.icao24.toUpperCase()}</strong>
-                  <span>
-                    {leadFeedFlight.origin_country ?? "Unknown"}
-                    {#if deriveOperatorCode(leadFeedFlight)}
-                      · {deriveOperatorCode(leadFeedFlight)}
-                    {/if}
-                  </span>
-                </span>
-                <span class="featured-flight-metrics">
-                  <strong>{formatSpeed(leadFeedFlight.velocity)}</strong>
-                  <small>{formatAltitude(leadFeedFlight.altitude)}</small>
-                </span>
-              </button>
-            {/if}
-
-            {#if countryActivity.length}
-              <div class="overview-country-row">
-                {#each countryActivity as entry}
-                  <button
-                    class:active={filters.country.trim().toLowerCase() === entry.country.toLowerCase()}
-                    class="overview-country-pill"
-                    type="button"
-                    on:click={() => {
-                      const isActive = filters.country.trim().toLowerCase() === entry.country.toLowerCase();
-                      filters = {
-                        ...filters,
-                        country: isActive ? "" : entry.country,
-                      };
-                    }}
-                  >
-                    <span>{entry.country}</span>
-                    <strong>{entry.count}</strong>
-                    <small>{entry.ground} ground</small>
-                  </button>
-                {/each}
-              </div>
-            {/if}
-
-            <div class="utility-action-row">
-              <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
-                Save area
-              </button>
-              <button class="widget-footer-button" type="button" on:click={monitorCurrentMapArea}>
-                Monitor area
-              </button>
-              <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("poland")}>
-                Poland view
-              </button>
-            </div>
-          </section>
-
           <section class="widget-card filter-card filter-card-compact">
             <div class="widget-header">
               <div class="widget-heading">
@@ -4664,6 +4468,18 @@
             <div class="compact-filter-meta">
               <span>{filters.dimFilteredTraffic ? "Unmatched traffic dimmed" : "Unmatched traffic hidden"}</span>
               <strong>{airportFeed.airports.length} airports loaded</strong>
+            </div>
+
+            <div class="utility-action-row compact-utility-actions">
+              <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
+                Save area
+              </button>
+              <button class="widget-footer-button" type="button" on:click={monitorCurrentMapArea}>
+                Monitor area
+              </button>
+              <button class="widget-footer-button" type="button" on:click={() => triggerViewPreset("europe")}>
+                Europe
+              </button>
             </div>
           </section>
 
@@ -5465,10 +5281,10 @@
       </div>
       {:else}
         <div class="panel-stack compact-utility-stack">
-          <section class="widget-card utility-shell-compact-card">
+          <section class="widget-card utility-shell-compact-card utility-shell-launcher">
             <div class="widget-header">
               <div class="widget-heading">
-                <strong>Radar shell</strong>
+                <strong>Radar launcher</strong>
                 <span class="live-pill utility-state-pill">{statusLabel}</span>
               </div>
               <button class="widget-mini-action" type="button" on:click={() => openUtilityWorkspace("radar")}>
@@ -5476,7 +5292,7 @@
               </button>
             </div>
 
-            <div class="compact-shell-stats">
+            <div class="compact-shell-stats compact-shell-stats-tight">
               <article>
                 <span>Traffic</span>
                 <strong>{visibleTrackedCount}</strong>
@@ -5484,93 +5300,34 @@
               </article>
               <article>
                 <span>Freshness</span>
-                <strong>{freshnessLabel}</strong>
-                <small>{transportLabel}</small>
+                <strong>{activeReplaySnapshot ? "Replay" : freshnessLabel}</strong>
+                <small>{activeReplaySnapshot ? "Archive frame" : feedLabel}</small>
               </article>
-              <article>
-                <span>Map</span>
-                <strong>{mapStyleLabel}</strong>
-                <small>Zoom {zoomLabel}</small>
-              </article>
-              <article>
-                <span>Coverage</span>
-                <strong>{coverageScopeLabel}</strong>
-                <small>{activeReplaySnapshot ? "Replay frame" : coverageBreakdownLabel}</small>
-              </article>
-            </div>
-
-            {#if topbarStatusBadges.length}
-              <div class="filter-token-list compact-shell-badges">
-                {#each topbarStatusBadges as badge}
-                  <span class="filter-token compact-shell-token">
-                    <span>{badge}</span>
-                  </span>
-                {/each}
-              </div>
-            {/if}
-          </section>
-
-          <section class="widget-card utility-shell-compact-card">
-            <div class="widget-header">
-              <div class="widget-heading">
-                <strong>Quick filters</strong>
-                <span class="live-pill utility-state-pill">{activeFilterCount}</span>
-              </div>
-              <button class="widget-mini-action" type="button" on:click={resetFilters}>Reset</button>
-            </div>
-
-            <div class="filter-chip-row">
-              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("fast")}>Fast jets</button>
-              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("high")}>High altitude</button>
-              <button class="filter-chip" type="button" on:click={() => applyQuickFilter("cargo")}>Cargo</button>
-              <button
-                class:active={weatherLayerEnabled}
-                class="filter-chip"
-                type="button"
-                on:click={() => {
-                  weatherLayerEnabled = !weatherLayerEnabled;
-                }}
-              >
-                Weather
-              </button>
             </div>
 
             {#if activeFilterTokens.length}
-              <div class="filter-token-list">
-                {#each activeFilterTokens.slice(0, 4) as token}
-                  <button class="filter-token" type="button" on:click={() => clearFilterToken(token.key)}>
+              <div class="filter-token-list compact-shell-badges">
+                {#each activeFilterTokens.slice(0, 2) as token}
+                  <button class="filter-token compact-shell-token" type="button" on:click={() => clearFilterToken(token.key)}>
                     <span>{token.label}</span>
                     <strong>×</strong>
                   </button>
                 {/each}
               </div>
             {/if}
-          </section>
 
-          <section class="widget-card utility-shell-compact-card">
-            <div class="widget-header">
-              <div class="widget-heading">
-                <strong>Workspace</strong>
-                <span class="live-pill utility-state-pill">{watchlist.length + savedEntities.length + alertRules.length}</span>
-              </div>
-            </div>
-
-            <p class="compact-shell-copy">
-              Saved items, replay, reports and profiles stay one click away instead of living on the map all the time.
-            </p>
-
-            <div class="workspace-launch-grid">
+            <div class="workspace-launch-grid compact-launch-grid">
               <button class="widget-footer-button primary" type="button" on:click={() => openUtilityWorkspace("radar")}>
-                Radar
+                Filters {activeFilterCount}
               </button>
               <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("replay")}>
-                Replay
+                Replay {replaySourceSnapshots.length}
               </button>
               <button class="widget-footer-button" type="button" on:click={() => openUtilityWorkspace("tools")}>
-                Workspace
+                Workspace {workspaceQuickCount}
               </button>
-              <button class="widget-footer-button" type="button" on:click={saveCurrentMapArea}>
-                Save area
+              <button class="widget-footer-button" type="button" on:click={toggleTrafficBoard}>
+                Traffic {formatCompactCount(visibleTrackedCount)}
               </button>
             </div>
           </section>
@@ -6405,32 +6162,30 @@
     align-items: center;
   }
 
-  .topbar-status-strip {
+  .topbar-live-pill {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-    padding-left: 0.04rem;
-  }
-
-  .topbar-status-strip span {
-    display: inline-flex;
     align-items: center;
-    min-height: 1.48rem;
-    padding: 0 0.54rem;
-    border-radius: 999px;
-    font-size: 0.62rem;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: #d7e0ea;
-    background: rgba(255, 255, 255, 0.04);
+    gap: 0.5rem;
+    min-height: 2.7rem;
+    padding: 0.48rem 0.68rem 0.48rem 0.62rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.06);
   }
 
-  .topbar-status-chip {
-    color: #171a1f;
-    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%) !important;
-    border-color: transparent !important;
+  .topbar-live-pill strong {
+    display: block;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #f3f6fb;
+  }
+
+  .topbar-live-pill small {
+    display: block;
+    margin-top: 0.1rem;
+    font-size: 0.66rem;
+    color: rgba(189, 201, 214, 0.72);
   }
 
   .filter-token-list,
@@ -6591,82 +6346,6 @@
     display: flex;
     gap: 0.42rem;
     padding: 0.42rem;
-  }
-
-  .mobile-start-hint {
-    position: absolute;
-    top: 9.25rem;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1180;
-    width: min(22rem, calc(100vw - 1.5rem));
-    display: none;
-    gap: 0.42rem;
-    padding: 0.9rem;
-    text-align: left;
-  }
-
-  .mobile-start-hint span {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: rgba(185, 194, 206, 0.78);
-  }
-
-  .mobile-start-hint strong {
-    color: #f4f7fb;
-    font-size: 0.92rem;
-    line-height: 1.35;
-  }
-
-  .mobile-start-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .desktop-focus-hint {
-    position: absolute;
-    top: 6.1rem;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 1180;
-    width: min(26rem, calc(100vw - 36rem));
-    display: grid;
-    gap: 0.48rem;
-    padding: 0.92rem 0.96rem;
-    text-align: left;
-    background: rgba(14, 16, 20, 0.94);
-  }
-
-  .desktop-focus-hint span {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    color: rgba(185, 194, 206, 0.78);
-  }
-
-  .desktop-focus-hint strong,
-  .desktop-focus-hint p {
-    margin: 0;
-  }
-
-  .desktop-focus-hint strong {
-    color: #f4f7fb;
-    font-size: 0.96rem;
-    line-height: 1.35;
-  }
-
-  .desktop-focus-hint p {
-    color: rgba(205, 215, 226, 0.78);
-    font-size: 0.76rem;
-    line-height: 1.45;
-  }
-
-  .desktop-focus-actions {
-    display: flex;
-    gap: 0.5rem;
-    flex-wrap: wrap;
   }
 
   .error-banner,
@@ -6861,10 +6540,18 @@
     padding: 0.8rem 0.8rem 0.76rem;
   }
 
+  .utility-shell-launcher {
+    gap: 0.78rem;
+  }
+
   .compact-shell-stats {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.46rem;
+  }
+
+  .compact-shell-stats-tight {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .compact-shell-stats article {
@@ -6888,15 +6575,10 @@
     font-size: 0.9rem;
   }
 
-  .compact-shell-stats small,
-  .compact-shell-copy {
+  .compact-shell-stats small {
     color: rgba(190, 203, 217, 0.74);
     font-size: 0.74rem;
     line-height: 1.45;
-  }
-
-  .compact-shell-copy {
-    margin: 0;
   }
 
   .compact-shell-badges {
@@ -6913,12 +6595,16 @@
     gap: 0.45rem;
   }
 
+  .compact-launch-grid .widget-footer-button {
+    justify-content: space-between;
+  }
+
   .utility-compact-card {
     background: rgba(255, 255, 255, 0.022);
   }
 
-  .utility-overview-card {
-    gap: 0.72rem;
+  .compact-utility-actions {
+    padding-top: 0.12rem;
   }
 
   .utility-overview-grid {
@@ -6953,97 +6639,13 @@
     font-size: 0.74rem;
   }
 
-  .featured-flight-card {
-    display: flex;
-    justify-content: space-between;
-    gap: 0.85rem;
-    align-items: center;
-    width: 100%;
-    padding: 0.86rem 0.88rem;
-    border: 1px solid rgba(255, 211, 79, 0.18);
-    border-radius: 16px;
-    color: inherit;
-    background:
-      radial-gradient(circle at top right, rgba(245, 185, 8, 0.16), transparent 42%),
-      linear-gradient(180deg, rgba(27, 31, 37, 0.98) 0%, rgba(16, 18, 22, 0.98) 100%);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .featured-flight-copy,
-  .featured-flight-metrics {
-    display: grid;
-    gap: 0.16rem;
-  }
-
-  .featured-flight-copy {
-    min-width: 0;
-  }
-
-  .featured-flight-copy small,
-  .featured-flight-copy span,
   .compact-filter-meta span {
     color: rgba(190, 203, 217, 0.76);
     font-size: 0.74rem;
   }
 
-  .featured-flight-copy strong,
-  .featured-flight-metrics strong,
   .compact-filter-meta strong {
     color: #f4f7fb;
-  }
-
-  .featured-flight-metrics {
-    justify-items: end;
-  }
-
-  .featured-flight-metrics strong {
-    font-size: 0.94rem;
-  }
-
-  .featured-flight-metrics small {
-    color: #b3bcc8;
-    font-size: 0.72rem;
-  }
-
-  .overview-country-row {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 0.42rem;
-  }
-
-  .overview-country-pill {
-    display: grid;
-    gap: 0.14rem;
-    padding: 0.7rem 0.72rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 14px;
-    color: inherit;
-    background: rgba(255, 255, 255, 0.035);
-    text-align: left;
-    cursor: pointer;
-  }
-
-  .overview-country-pill.active {
-    border-color: rgba(245, 185, 8, 0.28);
-    background: rgba(245, 185, 8, 0.09);
-  }
-
-  .overview-country-pill span {
-    color: rgba(190, 203, 217, 0.8);
-    font-size: 0.74rem;
-  }
-
-  .overview-country-pill strong {
-    color: #f5f7fb;
-    font-size: 0.92rem;
-  }
-
-  .overview-country-pill small {
-    color: rgba(171, 186, 202, 0.64);
-    font-size: 0.66rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
   }
 
   .utility-action-row {
@@ -7826,14 +7428,6 @@
   }
 
   @media (max-width: 960px) {
-    .mobile-start-hint {
-      display: grid;
-    }
-
-    .desktop-focus-hint {
-      display: none;
-    }
-
     .radar-left-panel {
       top: 4.65rem;
       right: 0.75rem;
@@ -7918,16 +7512,11 @@
       flex-wrap: wrap;
     }
 
-    .topbar-status-strip {
-      padding-left: 0;
-    }
-
     .filter-form-grid,
     .preset-save-row,
     .preset-card,
     .utility-overview-grid,
     .utility-action-row,
-    .overview-country-row,
     .workflow-metrics,
     .inspector-tab-row,
     .workflow-header,

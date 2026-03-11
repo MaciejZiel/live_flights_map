@@ -213,6 +213,7 @@
   $: routeWarning = route?.plausible === false ? "Route is not fully verified yet." : null;
   $: detailWarning = detailsError ?? details?.meta?.warning ?? routeWarning ?? null;
   $: photoUrl = resolvePhotoUrl(photo);
+  $: hasPhoto = Boolean(photoUrl);
   $: routeProgress = calculateRouteProgress(route, flight);
   $: heroSubtitle =
     routeVerbose ??
@@ -305,7 +306,7 @@
   {#if flight}
     <section class="hero-card">
       <div class="photo-shell">
-        <div class="photo-visual">
+        <div class:no-photo={!hasPhoto} class="photo-visual">
           {#if photoUrl}
             {#if photo?.link}
               <a class="photo-link" href={photo.link} rel="noreferrer" target="_blank">
@@ -316,17 +317,23 @@
             {/if}
           {:else}
             <div class:loading={detailsStatus === "loading" || detailsStatus === "refreshing"} class="photo-placeholder">
-              <span>{detailsStatus === "loading" || detailsStatus === "refreshing" ? "Resolving aircraft" : "Photo unavailable"}</span>
-              <strong>{identity.registration ?? identity.icao24}</strong>
-              <small>{identity.typeCode ?? "Type unknown"}</small>
+              <div aria-hidden="true" class="photo-placeholder-glow"></div>
+              <div aria-hidden="true" class="photo-placeholder-grid">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
             </div>
           {/if}
 
-          <div class="photo-overlay">
+          <div class:no-photo={!hasPhoto} class="photo-overlay">
             <div class="photo-overlay-head">
               <div class="photo-badge-row">
                 {#if routeFlightNumber}
                   <span class="route-badge">{routeFlightNumber}</span>
+                {/if}
+                {#if !hasPhoto}
+                  <span class="route-badge muted">No photo</span>
                 {/if}
               </div>
 
@@ -336,7 +343,9 @@
             </div>
 
             <div class="photo-copy">
-              <p class="eyebrow">Live route</p>
+              {#if hasPhoto}
+                <p class="eyebrow">Live route</p>
+              {/if}
               <h3>{routeLabel ?? identity.callsign}</h3>
               <p class="hero-subtitle">{heroSubtitle}</p>
               <div class="hero-status-row">
@@ -680,6 +689,11 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
   }
 
+  .route-badge.muted {
+    color: rgba(214, 224, 235, 0.76);
+    background: rgba(7, 8, 11, 0.3);
+  }
+
   .hero-card,
   .detail-warning,
   .facts-panel {
@@ -709,6 +723,13 @@
     background: rgba(255, 255, 255, 0.04);
   }
 
+  .photo-visual.no-photo {
+    min-height: 13.2rem;
+    background:
+      radial-gradient(circle at top left, rgba(104, 144, 198, 0.2), transparent 48%),
+      linear-gradient(180deg, rgba(31, 37, 47, 0.96) 0%, rgba(10, 13, 18, 0.98) 100%);
+  }
+
   .photo-shell img,
   .photo-placeholder {
     width: 100%;
@@ -735,6 +756,14 @@
     padding: 1rem 0.9rem 0.82rem;
     background:
       linear-gradient(180deg, rgba(6, 7, 10, 0) 0%, rgba(7, 8, 11, 0.7) 46%, rgba(7, 8, 11, 0.9) 100%);
+  }
+
+  .photo-overlay.no-photo {
+    inset: 0;
+    align-content: space-between;
+    padding-top: 0.82rem;
+    background:
+      linear-gradient(180deg, rgba(9, 12, 16, 0.22) 0%, rgba(7, 9, 12, 0.76) 52%, rgba(7, 9, 12, 0.94) 100%);
   }
 
   .photo-overlay-head {
@@ -831,20 +860,60 @@
   }
 
   .photo-placeholder {
-    display: grid;
-    align-content: center;
-    gap: 0.3rem;
-    padding: 0.95rem;
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: inherit;
+    overflow: hidden;
     background:
-      radial-gradient(circle at top, rgba(120, 200, 255, 0.14), transparent 58%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+      radial-gradient(circle at top left, rgba(120, 200, 255, 0.16), transparent 42%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.015));
   }
 
   .photo-placeholder.loading {
     border: 1px solid rgba(245, 185, 8, 0.2);
   }
 
-  .photo-placeholder span,
+  .photo-placeholder-glow {
+    position: absolute;
+    top: -12%;
+    left: -8%;
+    width: 62%;
+    height: 78%;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(100, 138, 188, 0.26), transparent 68%);
+    filter: blur(12px);
+  }
+
+  .photo-placeholder-grid {
+    position: absolute;
+    right: 0.95rem;
+    bottom: 1rem;
+    left: 0.95rem;
+    display: grid;
+    gap: 0.5rem;
+    opacity: 0.42;
+  }
+
+  .photo-placeholder-grid span {
+    display: block;
+    height: 0.7rem;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(215, 228, 241, 0.12), rgba(215, 228, 241, 0.04));
+  }
+
+  .photo-placeholder-grid span:nth-child(1) {
+    width: 42%;
+  }
+
+  .photo-placeholder-grid span:nth-child(2) {
+    width: 68%;
+  }
+
+  .photo-placeholder-grid span:nth-child(3) {
+    width: 34%;
+  }
+
   .route-label,
   .fact-row span,
   .facts-header span,
@@ -853,22 +922,12 @@
     letter-spacing: 0.08em;
   }
 
-  .photo-placeholder span,
   .route-label,
   .fact-row span,
   .facts-header span,
   .quality-card span {
     font-size: 0.68rem;
     color: rgba(171, 186, 202, 0.56);
-  }
-
-  .photo-placeholder strong {
-    font-size: 1rem;
-  }
-
-  .photo-placeholder small {
-    color: rgba(190, 203, 217, 0.72);
-    font-size: 0.78rem;
   }
 
   .hero-copy {

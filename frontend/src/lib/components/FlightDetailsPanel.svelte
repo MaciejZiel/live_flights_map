@@ -327,36 +327,35 @@
               </div>
             </div>
           {/if}
+        </div>
 
-          <div class:no-photo={!hasPhoto} class="photo-overlay">
-            <div class="photo-overlay-head">
-              <div class="photo-badge-row">
-                {#if routeFlightNumber}
-                  <span class="route-badge">{routeFlightNumber}</span>
-                {/if}
-                {#if !hasPhoto}
-                  <span class="route-badge muted">No photo</span>
-                {/if}
-              </div>
-
-              <button class="hero-dismiss" type="button" aria-label="Close selected aircraft" on:click={onClose}>
-                ×
-              </button>
+        <div class="photo-meta">
+          <div class="photo-meta-head">
+            <div class="photo-badge-row">
+              {#if routeFlightNumber}
+                <span class="route-badge">{routeFlightNumber}</span>
+              {/if}
+              {#if !hasPhoto}
+                <span class="route-badge muted">No photo</span>
+              {/if}
             </div>
 
-            <div class="photo-copy">
-              <h3>{routeLabel ?? identity.callsign}</h3>
-              <p class="hero-subtitle">{heroSubtitle}</p>
-              <div class="hero-status-row">
-                <span class="hero-status-pill">{flightStatusText}</span>
-                {#if routeSupportText}
-                  <span class="hero-status-note">{routeSupportText}</span>
-                {/if}
-              </div>
+            <button class="hero-dismiss" type="button" aria-label="Close selected aircraft" on:click={onClose}>
+              ×
+            </button>
+          </div>
+
+          <div class="photo-copy">
+            <h3>{routeLabel ?? identity.callsign}</h3>
+            <p class="hero-subtitle">{heroSubtitle}</p>
+            <div class="hero-status-row">
+              <span class="hero-status-pill">{flightStatusText}</span>
+              {#if routeSupportText}
+                <span class="hero-status-note">{routeSupportText}</span>
+              {/if}
             </div>
           </div>
         </div>
-
       </div>
 
       <div class="hero-copy">
@@ -705,11 +704,10 @@
 
   .photo-shell {
     display: grid;
-    gap: 0.48rem;
+    gap: 0.62rem;
   }
 
   .photo-visual {
-    position: relative;
     overflow: hidden;
     border-radius: 13px;
     border: 1px solid rgba(255, 255, 255, 0.07);
@@ -749,32 +747,17 @@
     display: block;
   }
 
-  .photo-overlay {
-    position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 2;
+  .photo-meta {
     display: grid;
     gap: 0.52rem;
-    padding: 0.88rem 0.82rem 0.74rem;
-    background:
-      linear-gradient(180deg, rgba(6, 7, 10, 0) 38%, rgba(7, 8, 11, 0.52) 72%, rgba(7, 8, 11, 0.84) 100%);
+    padding: 0 0.08rem;
   }
 
-  .photo-overlay.no-photo {
-    inset: 0;
-    align-content: space-between;
-    padding-top: 0.82rem;
-    background:
-      linear-gradient(180deg, rgba(9, 12, 16, 0.22) 0%, rgba(7, 9, 12, 0.76) 52%, rgba(7, 9, 12, 0.94) 100%);
-  }
-
-  .photo-overlay-head {
+  .photo-meta-head {
     display: flex;
     justify-content: space-between;
     gap: 0.65rem;
-    align-items: start;
+    align-items: center;
   }
 
   .photo-badge-row {

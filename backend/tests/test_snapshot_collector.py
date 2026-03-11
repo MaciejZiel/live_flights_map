@@ -82,11 +82,15 @@ class SnapshotCollectorServiceTests(unittest.TestCase):
                 bbox=bbox,
                 max_age_seconds=300,
             )
+            collector_summary = archive_service.summarize_collector(max_age_seconds=300)
 
             self.assertEqual(payload["sectors_synced"], 1)
             self.assertEqual(payload["latest_positions_stored"], 1)
             self.assertEqual(latest_payload["count"], 1)
             self.assertEqual(latest_payload["flights"][0]["route_label"], "WAW-LHR")
+            self.assertTrue(latest_payload["cache_meta"]["collector_ready"])
+            self.assertEqual(collector_summary["status"], "fresh")
+            self.assertEqual(collector_summary["fresh_sector_keys"], ["poland_focus"])
             self.assertFalse(snapshot_service.calls[0]["prefer_latest_cache"])
             self.assertFalse(snapshot_service.calls[0]["update_latest_cache"])
 

@@ -151,6 +151,34 @@ class FlightArchiveServiceTests(unittest.TestCase):
                 },
                 sector_key="europe",
             )
+            service.record_collector_run(
+                {
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "sectors_total": 1,
+                    "sectors_synced": 1,
+                    "flights_collected": 2,
+                    "intelligence_enriched": 0,
+                    "latest_positions_stored": 2,
+                    "warnings": [],
+                    "sectors": [
+                        {
+                            "key": "europe",
+                            "bbox": {
+                                "lamin": 35.0,
+                                "lamax": 71.0,
+                                "lomin": -11.0,
+                                "lomax": 35.0,
+                            },
+                            "started_at": datetime.now(timezone.utc).isoformat(),
+                            "fetched_at": datetime.now(timezone.utc).isoformat(),
+                            "status": "ok",
+                            "flight_count": 2,
+                            "latest_positions_stored": 2,
+                        }
+                    ],
+                }
+            )
 
             payload = service.list_latest_flights(bbox=bbox, max_age_seconds=300)
 
@@ -158,6 +186,8 @@ class FlightArchiveServiceTests(unittest.TestCase):
             self.assertEqual(payload["flights"][0]["icao24"], "abc123")
             self.assertEqual(payload["flights"][0]["route_label"], "WAW-LHR")
             self.assertEqual(payload["cache_meta"]["sector_keys"], ["europe"])
+            self.assertTrue(payload["cache_meta"]["collector_ready"])
+            self.assertEqual(payload["cache_meta"]["collector_coverage_status"], "ready")
 
     def test_run_maintenance_prunes_stale_latest_positions(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -188,6 +218,71 @@ class FlightArchiveServiceTests(unittest.TestCase):
             self.assertEqual(maintenance["latest_position_rows_before"], 1)
             self.assertEqual(maintenance["latest_position_rows_after"], 0)
             self.assertEqual(maintenance["latest_positions_pruned"], 1)
+
+    def test_collector_summary_marks_stale_and_partial_sector_coverage(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = FlightArchiveService(
+                archive_path=str(Path(temp_dir) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+            )
+            bbox = {
+                "lamin": 40.0,
+                "lamax": 60.0,
+                "lomin": -20.0,
+                "lomax": 20.0,
+            }
+            service.record_collector_run(
+                {
+                    "started_at": datetime.now(timezone.utc).isoformat(),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "sectors_total": 2,
+                    "sectors_synced": 1,
+                    "flights_collected": 50,
+                    "intelligence_enriched": 10,
+                    "latest_positions_stored": 50,
+                    "warnings": ["north_atlantic: timeout"],
+                    "sectors": [
+                        {
+                            "key": "europe",
+                            "bbox": {
+                                "lamin": 35.0,
+                                "lamax": 71.0,
+                                "lomin": -11.0,
+                                "lomax": 35.0,
+                            },
+                            "started_at": datetime.now(timezone.utc).isoformat(),
+                            "fetched_at": datetime.now(timezone.utc).isoformat(),
+                            "status": "ok",
+                            "flight_count": 50,
+                            "latest_positions_stored": 50,
+                        },
+                        {
+                            "key": "north_atlantic",
+                            "bbox": {
+                                "lamin": 35.0,
+                                "lamax": 68.0,
+                                "lomin": -52.0,
+                                "lomax": -11.0,
+                            },
+                            "started_at": datetime.now(timezone.utc).isoformat(),
+                            "status": "error",
+                            "warning": "timeout",
+                            "flight_count": 0,
+                            "latest_positions_stored": 0,
+                        },
+                    ],
+                }
+            )
+
+            payload = service.list_latest_flights(bbox=bbox, max_age_seconds=300)
+            summary = service.summarize_collector(max_age_seconds=300)
+
+            self.assertFalse(payload["cache_meta"]["collector_ready"])
+            self.assertEqual(payload["cache_meta"]["collector_coverage_status"], "partial")
+            self.assertIn("north_atlantic", payload["cache_meta"]["collector_stale_sector_keys"])
+            self.assertEqual(summary["status"], "partial")
+            self.assertEqual(summary["warning_sector_count"], 1)
 
 
 if __name__ == "__main__":

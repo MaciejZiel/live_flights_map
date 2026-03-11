@@ -12,7 +12,19 @@ class SnapshotCollectorService:
             "key": "poland_focus",
             "bbox": {"lamin": 49.0, "lamax": 55.1, "lomin": 14.0, "lomax": 24.5},
         },
+        {
+            "key": "north_atlantic",
+            "bbox": {"lamin": 35.0, "lamax": 68.0, "lomin": -52.0, "lomax": -11.0},
+        },
         *GlobalTrafficBoardService.SECTORS,
+        {
+            "key": "north_pacific_west",
+            "bbox": {"lamin": 18.0, "lamax": 62.0, "lomin": 140.0, "lomax": 180.0},
+        },
+        {
+            "key": "north_pacific_east",
+            "bbox": {"lamin": 18.0, "lamax": 62.0, "lomin": -180.0, "lomax": -120.0},
+        },
     )
 
     def __init__(
@@ -28,13 +40,16 @@ class SnapshotCollectorService:
         self.sectors = sectors or self.DEFAULT_SECTORS
 
     def collect_once(self) -> dict[str, object]:
+        started_at = datetime.now(timezone.utc)
         warnings: list[str] = []
         sectors_synced = 0
         flights_collected = 0
         enriched_flights = 0
         latest_positions_stored = 0
+        sector_results: list[dict[str, object]] = []
 
         for sector in self.sectors:
+            sector_started_at = datetime.now(timezone.utc)
             try:
                 payload = self.snapshot_service.get_flights(
                     sector["bbox"],
@@ -43,12 +58,24 @@ class SnapshotCollectorService:
                 )
             except FlightProviderError as exc:
                 warnings.append(f"{sector['key']}: {exc}")
+                sector_results.append(
+                    {
+                        "key": sector["key"],
+                        "bbox": sector["bbox"],
+                        "started_at": sector_started_at.isoformat(),
+                        "status": "error",
+                        "warning": str(exc),
+                        "flight_count": 0,
+                        "latest_positions_stored": 0,
+                    }
+                )
                 continue
 
             sectors_synced += 1
             flights = [flight for flight in payload.get("flights") or [] if isinstance(flight, dict)]
             flights_collected += len(flights)
             stored_flights = flights
+            sector_meta = payload.get("meta") if isinstance(payload, dict) else None
 
             if self.traffic_intelligence_service is not None and flights:
                 try:
@@ -77,12 +104,40 @@ class SnapshotCollectorService:
                     cache_result = {"stored": 0}
                 latest_positions_stored += int(cache_result.get("stored") or 0)
 
-        return {
+            sector_results.append(
+                {
+                    "key": sector["key"],
+                    "bbox": sector["bbox"],
+                    "started_at": sector_started_at.isoformat(),
+                    "fetched_at": payload.get("fetched_at"),
+                    "status": "ok",
+                    "source": None if not isinstance(sector_meta, dict) else sector_meta.get("source"),
+                    "provider_used": None
+                    if not isinstance(sector_meta, dict)
+                    else sector_meta.get("provider_used"),
+                    "flight_count": len(stored_flights),
+                    "latest_positions_stored": int(cache_result.get("stored") or 0)
+                    if self.archive_service is not None and stored_flights
+                    else 0,
+                    "quality": None if not isinstance(sector_meta, dict) else sector_meta.get("quality"),
+                }
+            )
+
+        payload = {
+            "started_at": started_at.isoformat(),
             "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "finished_at": datetime.now(timezone.utc).isoformat(),
             "sectors_total": len(self.sectors),
             "sectors_synced": sectors_synced,
             "flights_collected": flights_collected,
             "intelligence_enriched": enriched_flights,
             "latest_positions_stored": latest_positions_stored,
             "warnings": warnings,
+            "sectors": sector_results,
         }
+        if self.archive_service is not None and hasattr(self.archive_service, "record_collector_run"):
+            try:
+                self.archive_service.record_collector_run(payload)
+            except Exception:
+                pass
+        return payload

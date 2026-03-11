@@ -129,6 +129,9 @@ class FlightArchiveService:
                 latest_position_rows_before = cursor.execute(
                     "SELECT COUNT(*) FROM latest_positions"
                 ).fetchone()[0]
+                collector_run_rows_before = cursor.execute(
+                    "SELECT COUNT(*) FROM collector_runs"
+                ).fetchone()[0]
                 self._prune_locked(cursor, cutoff_timestamp)
                 connection.commit()
 
@@ -144,6 +147,9 @@ class FlightArchiveService:
                 latest_position_rows_after = cursor.execute(
                     "SELECT COUNT(*) FROM latest_positions"
                 ).fetchone()[0]
+                collector_run_rows_after = cursor.execute(
+                    "SELECT COUNT(*) FROM collector_runs"
+                ).fetchone()[0]
             finally:
                 connection.close()
 
@@ -156,11 +162,17 @@ class FlightArchiveService:
             "position_rows_after": position_rows_after,
             "latest_position_rows_before": latest_position_rows_before,
             "latest_position_rows_after": latest_position_rows_after,
+            "collector_run_rows_before": collector_run_rows_before,
+            "collector_run_rows_after": collector_run_rows_after,
             "snapshots_pruned": max(0, snapshot_rows_before - snapshot_rows_after),
             "positions_pruned": max(0, position_rows_before - position_rows_after),
             "latest_positions_pruned": max(
                 0,
                 latest_position_rows_before - latest_position_rows_after,
+            ),
+            "collector_runs_pruned": max(
+                0,
+                collector_run_rows_before - collector_run_rows_after,
             ),
         }
 
@@ -607,6 +619,23 @@ class FlightArchiveService:
             connection = self._connect()
             try:
                 rows = connection.execute(query, tuple(parameters)).fetchall()
+                sector_rows = connection.execute(
+                    """
+                    SELECT
+                        sector_key,
+                        bbox_lamin,
+                        bbox_lamax,
+                        bbox_lomin,
+                        bbox_lomax,
+                        last_started_at,
+                        last_synced_at,
+                        status,
+                        flight_count,
+                        latest_positions_stored,
+                        warning
+                    FROM collector_sectors
+                    """
+                ).fetchall()
             finally:
                 connection.close()
 
@@ -629,6 +658,12 @@ class FlightArchiveService:
                 sector_keys.add(sector_key)
             flights.append(flight)
 
+        collector_cache_meta = self._build_collector_cache_meta(
+            bbox=normalized_bbox,
+            sector_rows=sector_rows,
+            max_age_seconds=normalized_max_age_seconds,
+        )
+
         return {
             "bbox": normalized_bbox,
             "count": len(flights),
@@ -639,7 +674,227 @@ class FlightArchiveService:
                 "max_age_seconds": normalized_max_age_seconds,
                 "sector_keys": sorted(sector_keys),
                 "freshest_position_at": freshest_at,
+                **collector_cache_meta,
             },
+        }
+
+    def record_collector_run(self, payload: dict[str, object]) -> dict[str, object]:
+        started_at = self._normalize_timestamp(payload.get("started_at")) or datetime.now(
+            timezone.utc
+        )
+        finished_at = self._normalize_timestamp(payload.get("finished_at")) or started_at
+        sectors_total = max(int(payload.get("sectors_total") or 0), 0)
+        sectors_synced = max(int(payload.get("sectors_synced") or 0), 0)
+        flights_collected = max(int(payload.get("flights_collected") or 0), 0)
+        intelligence_enriched = max(int(payload.get("intelligence_enriched") or 0), 0)
+        latest_positions_stored = max(int(payload.get("latest_positions_stored") or 0), 0)
+        warnings = [str(warning) for warning in payload.get("warnings") or [] if str(warning).strip()]
+        sector_reports = [
+            sector
+            for sector in payload.get("sectors") or []
+            if isinstance(sector, dict)
+        ]
+        status = "ok"
+        if warnings or sectors_synced < sectors_total:
+            status = "partial" if sectors_synced > 0 else "error"
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                cursor = connection.cursor()
+                cursor.execute(
+                    """
+                    INSERT INTO collector_runs (
+                        started_at,
+                        finished_at,
+                        status,
+                        sectors_total,
+                        sectors_synced,
+                        flights_collected,
+                        intelligence_enriched,
+                        latest_positions_stored,
+                        warnings_json,
+                        payload_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        started_at.isoformat(),
+                        finished_at.isoformat(),
+                        status,
+                        sectors_total,
+                        sectors_synced,
+                        flights_collected,
+                        intelligence_enriched,
+                        latest_positions_stored,
+                        json.dumps(warnings),
+                        json.dumps(payload),
+                    ),
+                )
+
+                for sector in sector_reports:
+                    bbox = self._normalize_bbox(sector.get("bbox"))
+                    sector_key = self._normalize_text(sector.get("key"))
+                    if bbox is None or not sector_key:
+                        continue
+
+                    sector_started_at = self._normalize_timestamp(sector.get("started_at")) or started_at
+                    sector_synced_at = self._normalize_timestamp(sector.get("fetched_at"))
+                    sector_status = self._normalize_text(sector.get("status")) or "error"
+                    sector_warning = self._normalize_text(sector.get("warning"))
+                    sector_payload = json.dumps(sector)
+                    cursor.execute(
+                        """
+                        INSERT INTO collector_sectors (
+                            sector_key,
+                            bbox_lamin,
+                            bbox_lamax,
+                            bbox_lomin,
+                            bbox_lomax,
+                            last_started_at,
+                            last_synced_at,
+                            status,
+                            flight_count,
+                            latest_positions_stored,
+                            warning,
+                            payload_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(sector_key) DO UPDATE SET
+                            bbox_lamin = excluded.bbox_lamin,
+                            bbox_lamax = excluded.bbox_lamax,
+                            bbox_lomin = excluded.bbox_lomin,
+                            bbox_lomax = excluded.bbox_lomax,
+                            last_started_at = excluded.last_started_at,
+                            last_synced_at = COALESCE(excluded.last_synced_at, collector_sectors.last_synced_at),
+                            status = excluded.status,
+                            flight_count = excluded.flight_count,
+                            latest_positions_stored = excluded.latest_positions_stored,
+                            warning = excluded.warning,
+                            payload_json = excluded.payload_json
+                        """,
+                        (
+                            sector_key,
+                            bbox["lamin"],
+                            bbox["lamax"],
+                            bbox["lomin"],
+                            bbox["lomax"],
+                            sector_started_at.isoformat(),
+                            None if sector_synced_at is None else sector_synced_at.isoformat(),
+                            sector_status,
+                            max(int(sector.get("flight_count") or 0), 0),
+                            max(int(sector.get("latest_positions_stored") or 0), 0),
+                            sector_warning,
+                            sector_payload,
+                        ),
+                    )
+
+                connection.commit()
+            finally:
+                connection.close()
+
+        return {
+            "status": status,
+            "finished_at": finished_at.isoformat(),
+            "sectors_total": sectors_total,
+            "sectors_synced": sectors_synced,
+        }
+
+    def summarize_collector(self, max_age_seconds: float) -> dict[str, object]:
+        normalized_max_age_seconds = max(float(max_age_seconds or 0), 1.0)
+        cutoff_timestamp = (
+            datetime.now(timezone.utc) - timedelta(seconds=normalized_max_age_seconds)
+        ).isoformat()
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                latest_run = connection.execute(
+                    """
+                    SELECT
+                        started_at,
+                        finished_at,
+                        status,
+                        sectors_total,
+                        sectors_synced,
+                        flights_collected,
+                        latest_positions_stored,
+                        warnings_json
+                    FROM collector_runs
+                    ORDER BY finished_at DESC, started_at DESC
+                    LIMIT 1
+                    """
+                ).fetchone()
+                sector_rows = connection.execute(
+                    """
+                    SELECT
+                        sector_key,
+                        last_synced_at,
+                        status,
+                        warning
+                    FROM collector_sectors
+                    ORDER BY sector_key ASC
+                    """
+                ).fetchall()
+            finally:
+                connection.close()
+
+        fresh_sectors: list[str] = []
+        stale_sectors: list[str] = []
+        warning_sectors: list[str] = []
+        latest_synced_at = None
+
+        for row in sector_rows:
+            sector_key = self._normalize_text(row["sector_key"])
+            last_synced_at = self._normalize_timestamp(row["last_synced_at"])
+            status = self._normalize_text(row["status"]) or "unknown"
+
+            if sector_key and row["warning"]:
+                warning_sectors.append(sector_key)
+            if last_synced_at and (
+                latest_synced_at is None or last_synced_at > latest_synced_at
+            ):
+                latest_synced_at = last_synced_at
+
+            if (
+                sector_key
+                and last_synced_at is not None
+                and last_synced_at.isoformat() >= cutoff_timestamp
+                and status == "ok"
+            ):
+                fresh_sectors.append(sector_key)
+            elif sector_key:
+                stale_sectors.append(sector_key)
+
+        latest_run_payload = None
+        if latest_run is not None:
+            latest_run_payload = {
+                "started_at": latest_run["started_at"],
+                "finished_at": latest_run["finished_at"],
+                "status": latest_run["status"],
+                "sectors_total": latest_run["sectors_total"],
+                "sectors_synced": latest_run["sectors_synced"],
+                "flights_collected": latest_run["flights_collected"],
+                "latest_positions_stored": latest_run["latest_positions_stored"],
+                "warnings": json.loads(latest_run["warnings_json"] or "[]"),
+            }
+
+        status = "idle"
+        if sector_rows:
+            status = "fresh" if len(fresh_sectors) == len(sector_rows) else "partial"
+            if not fresh_sectors:
+                status = "stale"
+
+        return {
+            "available": True,
+            "status": status,
+            "max_age_seconds": normalized_max_age_seconds,
+            "sector_count": len(sector_rows),
+            "fresh_sector_count": len(fresh_sectors),
+            "stale_sector_count": len(stale_sectors),
+            "warning_sector_count": len(warning_sectors),
+            "fresh_sector_keys": fresh_sectors,
+            "stale_sector_keys": stale_sectors,
+            "latest_synced_at": None if latest_synced_at is None else latest_synced_at.isoformat(),
+            "latest_run": latest_run_payload,
         }
 
     def _initialize_database(self) -> None:
@@ -698,6 +953,35 @@ class FlightArchiveService:
                     payload_json TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS collector_runs (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    sectors_total INTEGER NOT NULL DEFAULT 0,
+                    sectors_synced INTEGER NOT NULL DEFAULT 0,
+                    flights_collected INTEGER NOT NULL DEFAULT 0,
+                    intelligence_enriched INTEGER NOT NULL DEFAULT 0,
+                    latest_positions_stored INTEGER NOT NULL DEFAULT 0,
+                    warnings_json TEXT NOT NULL DEFAULT '[]',
+                    payload_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS collector_sectors (
+                    sector_key TEXT PRIMARY KEY,
+                    bbox_lamin REAL NOT NULL,
+                    bbox_lamax REAL NOT NULL,
+                    bbox_lomin REAL NOT NULL,
+                    bbox_lomax REAL NOT NULL,
+                    last_started_at TEXT,
+                    last_synced_at TEXT,
+                    status TEXT NOT NULL DEFAULT 'error',
+                    flight_count INTEGER NOT NULL DEFAULT 0,
+                    latest_positions_stored INTEGER NOT NULL DEFAULT 0,
+                    warning TEXT,
+                    payload_json TEXT NOT NULL DEFAULT '{}'
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_snapshots_bbox_time
                     ON snapshots (bbox_key, fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_positions_icao24_time
@@ -712,6 +996,10 @@ class FlightArchiveService:
                     ON latest_positions (fetched_at DESC);
                 CREATE INDEX IF NOT EXISTS idx_latest_positions_bbox_time
                     ON latest_positions (latitude, longitude, fetched_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_collector_runs_finished_time
+                    ON collector_runs (finished_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_collector_sectors_synced_time
+                    ON collector_sectors (last_synced_at DESC);
                 """
             )
             connection.commit()
@@ -737,6 +1025,10 @@ class FlightArchiveService:
         )
         cursor.execute(
             "DELETE FROM latest_positions WHERE fetched_at < ?",
+            (cutoff_timestamp,),
+        )
+        cursor.execute(
+            "DELETE FROM collector_runs WHERE finished_at < ?",
             (cutoff_timestamp,),
         )
 
@@ -909,3 +1201,151 @@ class FlightArchiveService:
             return int(value)
         except (TypeError, ValueError):
             return None
+
+    @classmethod
+    def _build_collector_cache_meta(
+        cls,
+        bbox: dict[str, float],
+        sector_rows: list[sqlite3.Row],
+        max_age_seconds: float,
+    ) -> dict[str, object]:
+        intersecting_rectangles: list[dict[str, float]] = []
+        fresh_rectangles: list[dict[str, float]] = []
+        overlapping_sector_keys: list[str] = []
+        fresh_sector_keys: list[str] = []
+        stale_sector_keys: list[str] = []
+        now = datetime.now(timezone.utc)
+
+        for row in sector_rows:
+            sector_key = cls._normalize_text(row["sector_key"])
+            sector_bbox = cls._normalize_bbox(
+                {
+                    "lamin": row["bbox_lamin"],
+                    "lamax": row["bbox_lamax"],
+                    "lomin": row["bbox_lomin"],
+                    "lomax": row["bbox_lomax"],
+                }
+            )
+            if not sector_key or sector_bbox is None:
+                continue
+
+            intersection = cls._intersect_bbox(bbox, sector_bbox)
+            if intersection is None:
+                continue
+
+            overlapping_sector_keys.append(sector_key)
+            intersecting_rectangles.append(intersection)
+
+            last_synced_at = cls._normalize_timestamp(row["last_synced_at"])
+            is_fresh = (
+                last_synced_at is not None
+                and (now - last_synced_at).total_seconds() <= max_age_seconds
+                and (cls._normalize_text(row["status"]) or "error") == "ok"
+            )
+
+            if is_fresh:
+                fresh_sector_keys.append(sector_key)
+                fresh_rectangles.append(intersection)
+            else:
+                stale_sector_keys.append(sector_key)
+
+        overlap_ratio = cls._calculate_bbox_coverage_ratio(bbox, intersecting_rectangles)
+        fresh_ratio = cls._calculate_bbox_coverage_ratio(bbox, fresh_rectangles)
+        fully_covered = fresh_ratio >= 0.995 and overlap_ratio >= 0.995
+
+        if not overlapping_sector_keys:
+            coverage_status = "uncovered"
+        elif fully_covered:
+            coverage_status = "ready"
+        elif fresh_sector_keys:
+            coverage_status = "partial"
+        else:
+            coverage_status = "stale"
+
+        return {
+            "collector_ready": fully_covered,
+            "collector_coverage_status": coverage_status,
+            "collector_overlap_ratio": overlap_ratio,
+            "collector_coverage_ratio": fresh_ratio,
+            "collector_overlapping_sector_keys": sorted(overlapping_sector_keys),
+            "collector_fresh_sector_keys": sorted(fresh_sector_keys),
+            "collector_stale_sector_keys": sorted(stale_sector_keys),
+            "collector_fully_covered": fully_covered,
+        }
+
+    @staticmethod
+    def _intersect_bbox(
+        left: dict[str, float],
+        right: dict[str, float],
+    ) -> dict[str, float] | None:
+        lamin = max(left["lamin"], right["lamin"])
+        lamax = min(left["lamax"], right["lamax"])
+        lomin = max(left["lomin"], right["lomin"])
+        lomax = min(left["lomax"], right["lomax"])
+        if lamin >= lamax or lomin >= lomax:
+            return None
+        return {
+            "lamin": lamin,
+            "lamax": lamax,
+            "lomin": lomin,
+            "lomax": lomax,
+        }
+
+    @classmethod
+    def _calculate_bbox_coverage_ratio(
+        cls,
+        bbox: dict[str, float],
+        rectangles: list[dict[str, float]],
+    ) -> float:
+        bbox_area = max(
+            0.0,
+            (bbox["lamax"] - bbox["lamin"]) * (bbox["lomax"] - bbox["lomin"]),
+        )
+        if bbox_area <= 0 or not rectangles:
+            return 0.0
+        union_area = cls._calculate_rectangles_union_area(rectangles)
+        return round(min(1.0, union_area / bbox_area), 3)
+
+    @staticmethod
+    def _calculate_rectangles_union_area(rectangles: list[dict[str, float]]) -> float:
+        x_points = sorted(
+            {
+                round(rectangle["lomin"], 6)
+                for rectangle in rectangles
+            }
+            | {
+                round(rectangle["lomax"], 6)
+                for rectangle in rectangles
+            }
+        )
+        area = 0.0
+
+        for index in range(len(x_points) - 1):
+            left = x_points[index]
+            right = x_points[index + 1]
+            if right <= left:
+                continue
+
+            y_intervals = sorted(
+                (
+                    rectangle["lamin"],
+                    rectangle["lamax"],
+                )
+                for rectangle in rectangles
+                if rectangle["lomin"] < right and rectangle["lomax"] > left
+            )
+            if not y_intervals:
+                continue
+
+            merged_height = 0.0
+            current_start, current_end = y_intervals[0]
+            for start, end in y_intervals[1:]:
+                if start <= current_end:
+                    current_end = max(current_end, end)
+                    continue
+                merged_height += current_end - current_start
+                current_start, current_end = start, end
+            merged_height += current_end - current_start
+            area += merged_height * (right - left)
+
+        return area

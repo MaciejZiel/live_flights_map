@@ -45,7 +45,11 @@ class _ArchiveStub:
             "count": 0,
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "flights": [],
-            "cache_meta": {"fresh": False, "max_age_seconds": max_age_seconds},
+            "cache_meta": {
+                "fresh": False,
+                "max_age_seconds": max_age_seconds,
+                "collector_ready": False,
+            },
         }
 
 
@@ -188,6 +192,8 @@ class FlightSnapshotServiceTests(unittest.TestCase):
                     "max_age_seconds": 180,
                     "sector_keys": ["europe"],
                     "freshest_position_at": datetime.now(timezone.utc).isoformat(),
+                    "collector_ready": True,
+                    "collector_coverage_status": "ready",
                 },
             }
         )
@@ -205,6 +211,62 @@ class FlightSnapshotServiceTests(unittest.TestCase):
         self.assertEqual(payload["meta"]["source"], "collector_cache")
         self.assertEqual(payload["meta"]["reason"], "collector_cache_hit")
         self.assertEqual(payload["flights"][0]["route_label"], "WAW-LHR")
+
+    def test_skips_collector_cache_when_sector_coverage_is_partial(self) -> None:
+        bbox = {"lamin": 40.0, "lamax": 60.0, "lomin": -20.0, "lomax": 20.0}
+        provider = _ProviderStub(
+            "adsb_lol",
+            {
+                "count": 1,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "bbox": bbox,
+                "flights": [
+                    {
+                        "icao24": "abc999",
+                        "callsign": "DLH2AB",
+                        "registration": "D-AINX",
+                        "latitude": 52.2,
+                        "longitude": 21.0,
+                        "on_ground": False,
+                    }
+                ],
+            },
+        )
+        archive_service = _ArchiveStub(
+            latest_payload={
+                "count": 1,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "bbox": bbox,
+                "flights": [
+                    {
+                        "icao24": "abc001",
+                        "callsign": "LOT123",
+                        "registration": "SP-LVG",
+                        "latitude": 52.2,
+                        "longitude": 21.0,
+                        "on_ground": False,
+                    }
+                ],
+                "cache_meta": {
+                    "fresh": True,
+                    "max_age_seconds": 180,
+                    "collector_ready": False,
+                    "collector_coverage_status": "partial",
+                },
+            }
+        )
+        service = FlightSnapshotService(
+            providers=[provider],
+            cache_ttl=3600,
+            cooldown_seconds=60,
+            archive_service=archive_service,
+            latest_cache_max_age_seconds=180,
+        )
+
+        payload = service.get_flights(bbox)
+
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(payload["meta"]["source"], "live")
 
 
 if __name__ == "__main__":

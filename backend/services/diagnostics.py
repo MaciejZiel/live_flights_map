@@ -24,6 +24,7 @@ class DiagnosticsService:
         warnings = []
         live_snapshot = self._build_snapshot_diagnostics()
         archive = self._summarize_archive()
+        collector = self._summarize_collector()
         workspace = self._summarize_workspace()
         aircraft_photos = self._summarize_aircraft_photos()
 
@@ -31,6 +32,8 @@ class DiagnosticsService:
             warnings.append("Some live data providers are cooling down.")
         if not archive["available"]:
             warnings.append("Flight archive database is unavailable.")
+        if collector["status"] in {"stale", "idle"}:
+            warnings.append("Warm live-data collector is not fully fresh.")
         if not workspace["available"]:
             warnings.append("Workspace database is unavailable.")
         if aircraft_photos and not aircraft_photos["available"]:
@@ -43,6 +46,7 @@ class DiagnosticsService:
             "services": {
                 "live_snapshot": live_snapshot,
                 "archive": archive,
+                "collector": collector,
                 "workspace": workspace,
                 "aircraft_photos": aircraft_photos,
             },
@@ -98,6 +102,23 @@ class DiagnosticsService:
                 "latest_profile_update_at": "SELECT MAX(updated_at) FROM profiles",
             },
         )
+
+    def _summarize_collector(self) -> dict[str, object]:
+        if not hasattr(self.archive_service, "summarize_collector"):
+            return {
+                "available": False,
+                "status": "disabled",
+            }
+        try:
+            return self.archive_service.summarize_collector(
+                getattr(self.snapshot_service, "latest_cache_max_age_seconds", 150.0)
+            )
+        except sqlite3.Error as exc:
+            return {
+                "available": False,
+                "status": "error",
+                "error": str(exc),
+            }
 
     def _summarize_aircraft_photos(self) -> dict[str, object]:
         if self.aircraft_photo_cache_service is None:

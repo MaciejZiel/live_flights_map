@@ -285,10 +285,13 @@ class FlightSnapshotService:
         except Exception:
             return None
 
-        if not latest_payload or int(latest_payload.get("count") or 0) <= 0:
+        if not latest_payload:
             return None
 
         cache_meta = latest_payload.get("cache_meta") if isinstance(latest_payload, dict) else None
+        if not isinstance(cache_meta, dict) or not bool(cache_meta.get("collector_ready")):
+            return None
+
         return self._with_meta(
             latest_payload,
             source="collector_cache",

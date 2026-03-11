@@ -40,6 +40,7 @@ class HealthcheckRouteTests(unittest.TestCase):
                     ["adsb_lol"],
                 )
                 self.assertTrue(payload["services"]["archive"]["file_present"])
+                self.assertIn("collector", payload["services"])
                 self.assertTrue(payload["services"]["workspace"]["file_present"])
                 self.assertIn("aircraft_photos", payload["services"])
                 self.assertTrue(payload["services"]["aircraft_photos"]["file_present"])

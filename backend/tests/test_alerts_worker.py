@@ -123,7 +123,78 @@ class AlertSweepServiceTests(unittest.TestCase):
         second_payload = service.run_once()
 
         self.assertEqual(first_payload["profiles_updated"], 0)
+        self.assertEqual(first_payload["profiles_persisted"], 1)
         self.assertEqual(second_payload["profiles_updated"], 1)
+        self.assertEqual(len(workspace_service.state["alertEvents"]), 1)
+        self.assertIn(
+            "Takeoff Visible traffic matched LOT123",
+            workspace_service.state["alertEvents"][0]["message"],
+        )
+
+    def test_restored_worker_uses_persisted_transition_state(self) -> None:
+        workspace_service = _WorkspaceServiceStub(
+            {
+                "alertRules": [
+                    {"id": "rule-3", "type": "takeoff", "query": "Visible traffic"},
+                ],
+                "alertEvents": [],
+            }
+        )
+        first_worker = AlertSweepService(
+            snapshot_service=_SnapshotServiceStub(
+                [
+                    {
+                        "count": 1,
+                        "flights": [
+                            {
+                                "icao24": "48af06",
+                                "callsign": "LOT123",
+                                "registration": "SP-LVG",
+                                "on_ground": True,
+                            }
+                        ],
+                    }
+                ]
+            ),
+            traffic_intelligence_service=_TrafficIntelligenceStub(),
+            workspace_service=workspace_service,
+            sectors=({"key": "local", "bbox": {"lamin": 50.0, "lamax": 54.0, "lomin": 18.0, "lomax": 22.0}},),
+        )
+
+        first_payload = first_worker.run_once()
+
+        self.assertEqual(first_payload["profiles_updated"], 0)
+        self.assertEqual(first_payload["profiles_persisted"], 1)
+        self.assertEqual(
+            workspace_service.state["_alertEngineState"]["previousFlightsByIcao24"]["48af06"]["on_ground"],
+            True,
+        )
+
+        restarted_worker = AlertSweepService(
+            snapshot_service=_SnapshotServiceStub(
+                [
+                    {
+                        "count": 1,
+                        "flights": [
+                            {
+                                "icao24": "48af06",
+                                "callsign": "LOT123",
+                                "registration": "SP-LVG",
+                                "on_ground": False,
+                            }
+                        ],
+                    }
+                ]
+            ),
+            traffic_intelligence_service=_TrafficIntelligenceStub(),
+            workspace_service=workspace_service,
+            sectors=({"key": "local", "bbox": {"lamin": 50.0, "lamax": 54.0, "lomin": 18.0, "lomax": 22.0}},),
+        )
+
+        second_payload = restarted_worker.run_once()
+
+        self.assertEqual(second_payload["profiles_updated"], 1)
+        self.assertEqual(second_payload["profiles_persisted"], 1)
         self.assertEqual(len(workspace_service.state["alertEvents"]), 1)
         self.assertIn(
             "Takeoff Visible traffic matched LOT123",

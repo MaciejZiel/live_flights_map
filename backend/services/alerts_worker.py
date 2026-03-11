@@ -22,13 +22,12 @@ class AlertSweepService:
         self.traffic_intelligence_service = traffic_intelligence_service
         self.workspace_service = workspace_service
         self.sectors = sectors or self.DEFAULT_SECTORS
-        self._match_state_by_profile: dict[str, dict[str, set[str]]] = {}
-        self._previous_flights_by_icao24: dict[str, dict[str, object]] = {}
 
     def run_once(self) -> dict[str, object]:
         flights, warnings = self._fetch_live_flights()
         profiles_scanned = 0
         events_written = 0
+        states_persisted = 0
 
         for account in self.workspace_service.list_accounts().get("accounts") or []:
             account_id = account.get("id")
@@ -40,30 +39,29 @@ class AlertSweepService:
 
                 profiles_scanned += 1
                 state_payload = self.workspace_service.get_workspace_state(profile_id).get("state") or {}
-                next_events = self._evaluate_profile_alerts(
+                evaluation = self._evaluate_profile_alerts(
                     profile_id=profile_id,
                     alert_rules=state_payload.get("alertRules") or [],
                     existing_events=state_payload.get("alertEvents") or [],
                     flights=flights,
+                    engine_state=state_payload.get("_alertEngineState"),
                 )
-                if not next_events:
+                if not evaluation["state_changed"]:
                     continue
 
-                state_payload["alertEvents"] = next_events
+                state_payload["alertEvents"] = evaluation["alertEvents"]
+                state_payload["_alertEngineState"] = evaluation["engine_state"]
                 self.workspace_service.save_workspace_state(profile_id, state_payload)
-                events_written += 1
-
-        self._previous_flights_by_icao24 = {
-            str(flight.get("icao24") or "").strip().lower(): flight
-            for flight in flights
-            if isinstance(flight, dict) and flight.get("icao24")
-        }
+                states_persisted += 1
+                if evaluation["events_changed"]:
+                    events_written += 1
 
         return {
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "flight_count": len(flights),
             "profiles_scanned": profiles_scanned,
             "profiles_updated": events_written,
+            "profiles_persisted": states_persisted,
             "warnings": warnings,
         }
 
@@ -105,29 +103,46 @@ class AlertSweepService:
         alert_rules: list[dict[str, object]],
         existing_events: list[dict[str, object]],
         flights: list[dict[str, object]],
-    ) -> list[dict[str, object]] | None:
-        if not alert_rules:
-            self._match_state_by_profile[profile_id] = {}
-            return None
+        engine_state: object,
+    ) -> dict[str, object]:
+        normalized_engine_state = self._normalize_engine_state(engine_state)
+        previous_rule_state = self._deserialize_rule_matches(
+            normalized_engine_state.get("ruleMatches")
+        )
+        previous_flights_by_icao24 = self._normalize_previous_flights(
+            normalized_engine_state.get("previousFlightsByIcao24")
+        )
 
-        previous_rule_state = self._match_state_by_profile.get(profile_id, {})
+        if not alert_rules:
+            cleared_engine_state = self._empty_engine_state()
+            return {
+                "alertEvents": existing_events,
+                "engine_state": cleared_engine_state,
+                "events_changed": False,
+                "state_changed": normalized_engine_state != cleared_engine_state,
+            }
+
         next_rule_state: dict[str, set[str]] = {}
         new_events: list[dict[str, object]] = []
+        needs_transition_state = False
 
         for rule in alert_rules:
             rule_id = str(rule.get("id") or f"{rule.get('type')}:{rule.get('query')}")
             previous_match_ids = previous_rule_state.get(rule_id, set())
-            matches = self._find_rule_matches(flights, rule)
+            rule_type = str(rule.get("type") or "")
+            if rule_type in {"takeoff", "landing"}:
+                needs_transition_state = True
+            matches = self._find_rule_matches(flights, rule, previous_flights_by_icao24)
             current_match_ids = {
                 str(match.get("icao24") or "").strip().lower()
                 for match in matches
                 if isinstance(match, dict) and match.get("icao24")
             }
             next_rule_state[rule_id] = current_match_ids
-            rule_label = self._get_rule_label(rule.get("type"))
+            rule_label = self._get_rule_label(rule_type)
             query = self._normalize_text(rule.get("query")) or "Visible traffic"
 
-            if rule.get("type") in {"takeoff", "landing"}:
+            if rule_type in {"takeoff", "landing"}:
                 for match in matches[:3]:
                     icao24 = str(match.get("icao24") or "").strip().lower()
                     if icao24 in previous_match_ids:
@@ -150,20 +165,35 @@ class AlertSweepService:
                     self._build_event(f"{rule_label} {query} is no longer visible")
                 )
 
-        self._match_state_by_profile[profile_id] = next_rule_state
-        if not new_events:
-            return None
+        next_engine_state = {
+            "ruleMatches": self._serialize_rule_matches(next_rule_state),
+            "previousFlightsByIcao24": self._build_previous_flight_state(flights)
+            if needs_transition_state
+            else {},
+        }
+        next_events = [*new_events, *existing_events][:30] if new_events else existing_events
 
-        return [*new_events, *existing_events][:30]
+        return {
+            "alertEvents": next_events,
+            "engine_state": next_engine_state,
+            "events_changed": bool(new_events),
+            "state_changed": bool(new_events)
+            or normalized_engine_state != next_engine_state,
+        }
 
     def _find_rule_matches(
         self,
         flights: list[dict[str, object]],
         rule: dict[str, object],
+        previous_flights_by_icao24: dict[str, dict[str, object]],
     ) -> list[dict[str, object]]:
         rule_type = rule.get("type")
         if rule_type in {"takeoff", "landing"}:
-            return self._find_transition_matches(flights, rule_type)
+            return self._find_transition_matches(
+                flights,
+                rule_type,
+                previous_flights_by_icao24,
+            )
 
         return [
             flight
@@ -244,13 +274,14 @@ class AlertSweepService:
         self,
         flights: list[dict[str, object]],
         rule_type: object,
+        previous_flights_by_icao24: dict[str, dict[str, object]],
     ) -> list[dict[str, object]]:
         transition_to_ground = rule_type == "landing"
         matches = []
 
         for flight in flights:
             icao24 = str(flight.get("icao24") or "").strip().lower()
-            previous_flight = self._previous_flights_by_icao24.get(icao24)
+            previous_flight = previous_flights_by_icao24.get(icao24)
             if not previous_flight:
                 continue
 
@@ -265,6 +296,102 @@ class AlertSweepService:
                 matches.append(flight)
 
         return matches
+
+    @classmethod
+    def _empty_engine_state(cls) -> dict[str, object]:
+        return {
+            "ruleMatches": {},
+            "previousFlightsByIcao24": {},
+        }
+
+    @classmethod
+    def _normalize_engine_state(cls, engine_state: object) -> dict[str, object]:
+        normalized = cls._empty_engine_state()
+        if not isinstance(engine_state, dict):
+            return normalized
+
+        normalized["ruleMatches"] = cls._serialize_rule_matches(
+            cls._deserialize_rule_matches(engine_state.get("ruleMatches"))
+        )
+        normalized["previousFlightsByIcao24"] = cls._normalize_previous_flights(
+            engine_state.get("previousFlightsByIcao24")
+        )
+        return normalized
+
+    @staticmethod
+    def _deserialize_rule_matches(raw_matches: object) -> dict[str, set[str]]:
+        if not isinstance(raw_matches, dict):
+            return {}
+
+        normalized: dict[str, set[str]] = {}
+        for rule_id, match_ids in raw_matches.items():
+            normalized_rule_id = str(rule_id or "").strip()
+            if not normalized_rule_id or not isinstance(match_ids, (list, tuple, set)):
+                continue
+            normalized_match_ids = {
+                str(match_id or "").strip().lower()
+                for match_id in match_ids
+                if str(match_id or "").strip()
+            }
+            normalized[normalized_rule_id] = normalized_match_ids
+        return normalized
+
+    @staticmethod
+    def _serialize_rule_matches(rule_matches: dict[str, set[str]]) -> dict[str, list[str]]:
+        serialized: dict[str, list[str]] = {}
+        for rule_id, match_ids in rule_matches.items():
+            normalized_rule_id = str(rule_id or "").strip()
+            if not normalized_rule_id:
+                continue
+            serialized[normalized_rule_id] = sorted(
+                {
+                    str(match_id or "").strip().lower()
+                    for match_id in match_ids
+                    if str(match_id or "").strip()
+                }
+            )
+        return serialized
+
+    @classmethod
+    def _normalize_previous_flights(cls, raw_previous_flights: object) -> dict[str, dict[str, object]]:
+        if not isinstance(raw_previous_flights, dict):
+            return {}
+
+        normalized: dict[str, dict[str, object]] = {}
+        for icao24, flight in raw_previous_flights.items():
+            if not isinstance(flight, dict):
+                continue
+            normalized_icao24 = str(icao24 or flight.get("icao24") or "").strip().lower()
+            if not normalized_icao24:
+                continue
+            normalized[normalized_icao24] = cls._compact_flight_state(
+                {
+                    **flight,
+                    "icao24": normalized_icao24,
+                }
+            )
+        return normalized
+
+    @classmethod
+    def _build_previous_flight_state(cls, flights: list[dict[str, object]]) -> dict[str, dict[str, object]]:
+        return {
+            compacted["icao24"]: compacted
+            for compacted in (
+                cls._compact_flight_state(flight)
+                for flight in flights
+                if isinstance(flight, dict)
+            )
+            if compacted.get("icao24")
+        }
+
+    @staticmethod
+    def _compact_flight_state(flight: dict[str, object]) -> dict[str, object]:
+        return {
+            "icao24": str(flight.get("icao24") or "").strip().lower(),
+            "callsign": AlertSweepService._normalize_text(flight.get("callsign")),
+            "registration": AlertSweepService._normalize_text(flight.get("registration")),
+            "on_ground": bool(flight.get("on_ground")),
+        }
 
     @staticmethod
     def _is_better_candidate(candidate: dict[str, object], existing: dict[str, object]) -> bool:

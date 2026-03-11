@@ -529,6 +529,10 @@ class WorkspaceService:
             "replayAnchorTimestamp": None,
             "replayWindowMinutes": 90,
             "replayPlaybackSpeed": 1,
+            "_alertEngineState": {
+                "ruleMatches": {},
+                "previousFlightsByIcao24": {},
+            },
         }
 
     @classmethod

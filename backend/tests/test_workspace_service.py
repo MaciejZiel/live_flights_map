@@ -75,6 +75,38 @@ class WorkspaceServiceTests(unittest.TestCase):
                 )
             )
 
+    def test_workspace_state_persists_hidden_alert_engine_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = WorkspaceService(str(Path(temp_dir) / "workspace.sqlite3"))
+
+            account = service.create_account("Ops Team")
+            payload = service.save_workspace_state(
+                account["profile"]["id"],
+                {
+                    "alertRules": [{"id": "rule-1", "type": "takeoff", "query": "Visible traffic"}],
+                    "_alertEngineState": {
+                        "ruleMatches": {"rule-1": ["48af06"]},
+                        "previousFlightsByIcao24": {
+                            "48af06": {
+                                "icao24": "48AF06",
+                                "callsign": "LOT123",
+                                "registration": "SP-LVG",
+                                "on_ground": True,
+                            }
+                        },
+                    },
+                },
+            )
+
+            self.assertEqual(
+                payload["state"]["_alertEngineState"]["ruleMatches"]["rule-1"],
+                ["48af06"],
+            )
+            self.assertEqual(
+                payload["state"]["_alertEngineState"]["previousFlightsByIcao24"]["48af06"]["on_ground"],
+                True,
+            )
+
     def test_existing_database_is_migrated_with_default_role_and_account(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             db_path = Path(temp_dir) / "workspace.sqlite3"

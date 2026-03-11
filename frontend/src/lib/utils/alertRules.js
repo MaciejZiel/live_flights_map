@@ -14,6 +14,12 @@ export const ALERT_RULE_OPTIONS = [
   { value: "landing", label: "Landing", placeholder: "Visible traffic", queryOptional: true },
 ];
 
+export const ALERT_SEVERITY_OPTIONS = [
+  { value: "info", label: "Info" },
+  { value: "important", label: "Important" },
+  { value: "critical", label: "Critical" },
+];
+
 const ALERT_RULE_LABELS = {
   callsign: "Callsign",
   icao24: "ICAO24",
@@ -31,6 +37,22 @@ const ALERT_RULE_LABELS = {
 };
 
 const DEFAULT_TRANSITION_QUERY = "Visible traffic";
+const DEFAULT_ALERT_COOLDOWN_MINUTES = 10;
+const DEFAULT_ALERT_SEVERITY = {
+  callsign: "important",
+  icao24: "important",
+  airline: "info",
+  country: "info",
+  registration: "important",
+  type_code: "info",
+  route: "important",
+  airport: "info",
+  area: "info",
+  altitude_min: "important",
+  speed_min: "important",
+  takeoff: "critical",
+  landing: "critical",
+};
 
 function normalizeText(value) {
   return String(value ?? "").trim();
@@ -49,8 +71,16 @@ export function getAlertRuleLabel(type) {
   return ALERT_RULE_LABELS[type] ?? "Rule";
 }
 
+export function getAlertSeverityLabel(value) {
+  return ALERT_SEVERITY_OPTIONS.find((option) => option.value === value)?.label ?? "Info";
+}
+
 export function getAlertRuleOption(type) {
   return ALERT_RULE_OPTIONS.find((option) => option.value === type) ?? null;
+}
+
+export function getAlertRuleDefaultSeverity(type) {
+  return DEFAULT_ALERT_SEVERITY[type] ?? "info";
 }
 
 export function normalizeAlertRuleDraft(rule) {
@@ -61,6 +91,10 @@ export function normalizeAlertRuleDraft(rule) {
 
   const option = getAlertRuleOption(type);
   const query = normalizeText(rule?.query);
+  const severity = ALERT_SEVERITY_OPTIONS.some((entry) => entry.value === rule?.severity)
+    ? rule.severity
+    : getAlertRuleDefaultSeverity(type);
+  const cooldownMinutes = Math.max(1, Math.min(180, Math.round(normalizeNumber(rule?.cooldownMinutes) ?? DEFAULT_ALERT_COOLDOWN_MINUTES)));
 
   if (type === "altitude_min" || type === "speed_min") {
     const threshold = normalizeNumber(query);
@@ -74,6 +108,8 @@ export function normalizeAlertRuleDraft(rule) {
       payload: {
         threshold: Math.round(threshold),
       },
+      severity,
+      cooldownMinutes,
     };
   }
 
@@ -82,6 +118,8 @@ export function normalizeAlertRuleDraft(rule) {
       type,
       query: query || option?.placeholder || DEFAULT_TRANSITION_QUERY,
       payload: rule?.payload ?? null,
+      severity,
+      cooldownMinutes,
     };
   }
 
@@ -93,7 +131,15 @@ export function normalizeAlertRuleDraft(rule) {
     type,
     query,
     payload: rule?.payload ?? null,
+    severity,
+    cooldownMinutes,
   };
+}
+
+export function buildAlertEventFingerprint(rule, eventType, flight = null) {
+  const ruleId = normalizeText(rule?.id || `${rule?.type}:${rule?.query}`).toLowerCase();
+  const flightKey = normalizeText(flight?.icao24 ?? flight?.registration ?? "").toLowerCase();
+  return [ruleId, normalizeText(eventType).toLowerCase(), flightKey].filter(Boolean).join(":");
 }
 
 export function matchesAlertRule(flight, rule, helpers = {}) {

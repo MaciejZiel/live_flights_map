@@ -15,6 +15,7 @@ from .services.airport_catalog import AirportCatalogService
 from .services.airport_weather import AirportWeatherService
 from .services.airport_workflow import AirportWorkflowService
 from .services.alerts_worker import AlertSweepService
+from .services.alert_delivery import AlertDeliveryService
 from .services.diagnostics import DiagnosticsService
 from .services.entity_search import EntitySearchService
 from .services.flight_archive import FlightArchiveService
@@ -48,6 +49,7 @@ class BackendRuntime:
     diagnostics_service: DiagnosticsService
     snapshot_collector_service: SnapshotCollectorService
     alert_sweep_service: AlertSweepService
+    alert_delivery_service: AlertDeliveryService
 
 
 def build_runtime(config: object | None = None) -> BackendRuntime:
@@ -176,6 +178,10 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         traffic_intelligence_service=traffic_intelligence_service,
         workspace_service=workspace_service,
     )
+    alert_delivery_service = AlertDeliveryService(
+        timeout=config.ALERT_WEBHOOK_TIMEOUT,
+        allowed_schemes=config.ALERT_WEBHOOK_ALLOWED_SCHEMES,
+    )
 
     return BackendRuntime(
         config=config,
@@ -194,6 +200,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         diagnostics_service=diagnostics_service,
         snapshot_collector_service=snapshot_collector_service,
         alert_sweep_service=alert_sweep_service,
+        alert_delivery_service=alert_delivery_service,
     )
 
 
@@ -214,6 +221,7 @@ def bind_runtime(app: Flask, runtime: BackendRuntime) -> Flask:
     app.extensions["diagnostics_service"] = runtime.diagnostics_service
     app.extensions["snapshot_collector_service"] = runtime.snapshot_collector_service
     app.extensions["alert_sweep_service"] = runtime.alert_sweep_service
+    app.extensions["alert_delivery_service"] = runtime.alert_delivery_service
     return app
 
 

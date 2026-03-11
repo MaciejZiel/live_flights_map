@@ -147,22 +147,32 @@ class AlertSweepService:
                     icao24 = str(match.get("icao24") or "").strip().lower()
                     if icao24 in previous_match_ids:
                         continue
-                    new_events.append(self._build_event(
-                        f"{rule_label} {query} matched {self._flight_label(match)}"
-                    ))
+                    new_events.append(
+                        self._build_event(
+                            f"{rule_label} {query} matched {self._flight_label(match)}",
+                            severity=self._get_rule_severity(rule),
+                            fingerprint=f"{rule_id}:{rule_type}:{icao24}",
+                        )
+                    )
                 continue
 
             if matches and not previous_match_ids:
                 new_events.append(
                     self._build_event(
-                        f"{rule_label} {query} matched {self._flight_label(matches[0])}"
+                        f"{rule_label} {query} matched {self._flight_label(matches[0])}",
+                        severity=self._get_rule_severity(rule),
+                        fingerprint=f"{rule_id}:enter:{self._normalize_text(matches[0].get('icao24')).lower()}",
                     )
                 )
                 continue
 
             if not matches and previous_match_ids:
                 new_events.append(
-                    self._build_event(f"{rule_label} {query} is no longer visible")
+                    self._build_event(
+                        f"{rule_label} {query} is no longer visible",
+                        severity=self._get_rule_severity(rule),
+                        fingerprint=f"{rule_id}:exit",
+                    )
                 )
 
         next_engine_state = {
@@ -405,11 +415,19 @@ class AlertSweepService:
         return float(candidate.get("velocity") or 0) > float(existing.get("velocity") or 0)
 
     @staticmethod
-    def _build_event(message: str) -> dict[str, object]:
+    def _build_event(
+        message: str,
+        *,
+        severity: str = "info",
+        fingerprint: str | None = None,
+    ) -> dict[str, object]:
         return {
             "id": str(uuid4()),
             "message": message,
             "timestamp": int(datetime.now(timezone.utc).timestamp() * 1000),
+            "severity": severity,
+            "fingerprint": fingerprint,
+            "delivery": {},
         }
 
     @staticmethod
@@ -438,6 +456,17 @@ class AlertSweepService:
             "takeoff": "Takeoff",
             "landing": "Landing",
         }.get(str(rule_type or ""), "Rule")
+
+    @staticmethod
+    def _get_rule_severity(rule: dict[str, object]) -> str:
+        severity = str(rule.get("severity") or "").strip().lower()
+        if severity in {"info", "important", "critical"}:
+            return severity
+        if str(rule.get("type") or "") in {"takeoff", "landing"}:
+            return "critical"
+        if str(rule.get("type") or "") in {"callsign", "icao24", "registration", "route"}:
+            return "important"
+        return "info"
 
     @staticmethod
     def _normalize_text(value: object) -> str:

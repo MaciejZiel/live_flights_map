@@ -517,6 +517,13 @@ class WorkspaceService:
             "flightAnnotations": {},
             "alertRules": [],
             "alertEvents": [],
+            "alertDelivery": {
+                "browserNotificationsEnabled": False,
+                "browserPermission": "default",
+                "webhookEnabled": False,
+                "webhookUrl": "",
+                "suppressInfo": False,
+            },
             "monitoringSessions": [],
             "savedViews": [],
             "savedEntities": [],

@@ -197,6 +197,18 @@ export async function fetchWorkspaceProfiles(accountId = null) {
   return parseApiResponse(response, "Failed to load workspace profiles.");
 }
 
+export async function sendAlertWebhook(url, event) {
+  const endpoint = createApiUrl("/api/alerts/deliver");
+  const response = await fetch(API_BASE_URL ? endpoint.toString() : `${endpoint.pathname}${endpoint.search}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ url, event }),
+  });
+  return parseApiResponse(response, "Failed to deliver alert webhook.");
+}
+
 export async function fetchWorkspaceAccounts() {
   const url = createApiUrl("/api/workspace/accounts");
   const response = await fetch(API_BASE_URL ? url.toString() : `${url.pathname}${url.search}`);

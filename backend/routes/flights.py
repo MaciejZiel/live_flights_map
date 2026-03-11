@@ -6,6 +6,7 @@ from flask import Blueprint, Response, current_app, jsonify, request, stream_wit
 
 from backend.services.airport_weather import AirportWeatherError
 from backend.services.provider_base import FlightProviderError
+from backend.services.alert_delivery import AlertDeliveryError
 
 api = Blueprint("api", __name__)
 
@@ -171,6 +172,32 @@ def list_flights():
 @api.get("/health")
 def api_healthcheck():
     return jsonify(current_app.extensions["diagnostics_service"].build_healthcheck())
+
+
+@api.post("/alerts/deliver")
+def alert_webhook_delivery():
+    try:
+        payload = _parse_json_body()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    target_url = _normalize_text(payload.get("url"))
+    event = payload.get("event")
+    if not target_url or not isinstance(event, dict):
+        return jsonify({"error": "Expected alert webhook 'url' and event payload."}), 400
+
+    service = current_app.extensions["alert_delivery_service"]
+    try:
+        result = service.deliver_webhook(target_url, event)
+    except AlertDeliveryError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    return jsonify(
+        {
+            "status": "delivered",
+            "status_code": result.status_code,
+        }
+    )
 
 
 @api.get("/flights/<icao24>/details")

@@ -20,7 +20,7 @@ const HEADING_BAND_OPTIONS = new Set(["any", "north", "east", "south", "west"]);
 const TRAFFIC_STATE_OPTIONS = new Set(["all", "airborne", "ground"]);
 const AIRPORT_FLOW_OPTIONS = new Set(["all", "arrivals", "departures"]);
 const AIRPORT_HISTORY_OPTIONS = new Set([6, 12, 24]);
-const REPLAY_WINDOW_OPTIONS = new Set([30, 90, 180]);
+const REPLAY_WINDOW_OPTIONS = new Set([30, 90, 180, 360, 720, 1440]);
 const TRAFFIC_CATEGORY_OPTIONS = new Set([
   "all",
   "passenger",
@@ -166,6 +166,18 @@ export function normalizeUserPreferences(value) {
     flightAnnotations: sanitizeObjectRecord(value.flightAnnotations),
     alertRules: Array.isArray(value.alertRules) ? value.alertRules : [],
     alertEvents: Array.isArray(value.alertEvents) ? value.alertEvents : [],
+    alertDelivery: isPlainObject(value.alertDelivery)
+      ? {
+          browserNotificationsEnabled: sanitizeBoolean(
+            value.alertDelivery.browserNotificationsEnabled,
+            false
+          ),
+          browserPermission: sanitizeString(value.alertDelivery.browserPermission, "default"),
+          webhookEnabled: sanitizeBoolean(value.alertDelivery.webhookEnabled, false),
+          webhookUrl: sanitizeString(value.alertDelivery.webhookUrl),
+          suppressInfo: sanitizeBoolean(value.alertDelivery.suppressInfo, false),
+        }
+      : null,
     monitoringSessions: Array.isArray(value.monitoringSessions) ? value.monitoringSessions : [],
     savedViews: Array.isArray(value.savedViews) ? value.savedViews : [],
     savedEntities: Array.isArray(value.savedEntities) ? value.savedEntities : [],

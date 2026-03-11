@@ -17,8 +17,15 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
     selectedAirportCode: "waw",
     selectedAirportHistoryHours: 24,
     replayAnchorTimestamp: "2026-03-10T12:00:00Z",
-    replayWindowMinutes: 180,
+    replayWindowMinutes: 720,
     replayPlaybackSpeed: 1.5,
+    alertDelivery: {
+      browserNotificationsEnabled: true,
+      browserPermission: "granted",
+      webhookEnabled: true,
+      webhookUrl: "https://example.com/alerts",
+      suppressInfo: true,
+    },
   });
 
   assert.equal(normalized.mapStyle, "terrain");
@@ -44,8 +51,15 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
   assert.equal(normalized.selectedAirportCode, "WAW");
   assert.equal(normalized.selectedAirportHistoryHours, 24);
   assert.equal(normalized.replayAnchorTimestamp, "2026-03-10T12:00:00.000Z");
-  assert.equal(normalized.replayWindowMinutes, 180);
+  assert.equal(normalized.replayWindowMinutes, 720);
   assert.equal(normalized.replayPlaybackSpeed, 1.5);
+  assert.deepEqual(normalized.alertDelivery, {
+    browserNotificationsEnabled: true,
+    browserPermission: "granted",
+    webhookEnabled: true,
+    webhookUrl: "https://example.com/alerts",
+    suppressInfo: true,
+  });
 });
 
 test("normalizeUserPreferences falls back for invalid airport flow and non-object input", () => {

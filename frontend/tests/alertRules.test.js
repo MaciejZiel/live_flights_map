@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildAlertEventFingerprint,
   findTransitionAlertMatches,
   getAlertRuleLabel,
   matchesAlertRule,
@@ -15,6 +16,8 @@ test("normalizeAlertRuleDraft stores numeric thresholds for altitude and speed",
     payload: {
       threshold: 12000,
     },
+    severity: "important",
+    cooldownMinutes: 10,
   });
 
   assert.deepEqual(normalizeAlertRuleDraft({ type: "speed_min", query: "845.5" }), {
@@ -23,6 +26,8 @@ test("normalizeAlertRuleDraft stores numeric thresholds for altitude and speed",
     payload: {
       threshold: 846,
     },
+    severity: "important",
+    cooldownMinutes: 10,
   });
 });
 
@@ -31,6 +36,8 @@ test("normalizeAlertRuleDraft defaults transition alerts to visible traffic", ()
     type: "takeoff",
     query: "Visible traffic",
     payload: null,
+    severity: "critical",
+    cooldownMinutes: 10,
   });
 });
 
@@ -82,4 +89,15 @@ test("getAlertRuleLabel exposes new rule labels", () => {
   assert.equal(getAlertRuleLabel("altitude_min"), "Altitude");
   assert.equal(getAlertRuleLabel("speed_min"), "Speed");
   assert.equal(getAlertRuleLabel("landing"), "Landing");
+});
+
+test("buildAlertEventFingerprint differentiates rule transition and aircraft", () => {
+  assert.equal(
+    buildAlertEventFingerprint(
+      { id: "rule-1", type: "callsign", query: "LOT285" },
+      "enter",
+      { icao24: "48ad08" }
+    ),
+    "rule-1:enter:48ad08"
+  );
 });

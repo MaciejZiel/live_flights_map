@@ -118,6 +118,12 @@ class Config:
     AIRCRAFT_PHOTO_ASSET_CACHE_TTL = float(
         os.getenv("AIRCRAFT_PHOTO_ASSET_CACHE_TTL", "86400")
     )
+    ALERT_WEBHOOK_TIMEOUT = float(os.getenv("ALERT_WEBHOOK_TIMEOUT", "8"))
+    ALERT_WEBHOOK_ALLOWED_SCHEMES = tuple(
+        scheme.strip().lower()
+        for scheme in os.getenv("ALERT_WEBHOOK_ALLOWED_SCHEMES", "https,http").split(",")
+        if scheme.strip()
+    )
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(

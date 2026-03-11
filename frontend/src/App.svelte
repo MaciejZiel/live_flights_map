@@ -27,6 +27,7 @@
     fetchGlobalTrafficBoard,
     fetchFlightTrail,
     fetchReplayHistory,
+    sendAlertWebhook,
     fetchWorkspaceAccounts,
     fetchWorkspaceProfiles,
     fetchWorkspaceState,
@@ -74,8 +75,10 @@
     getReplayHistoryRequestLimit,
   } from "./lib/utils/replayTimeline.js";
   import {
+    buildAlertEventFingerprint,
     findTransitionAlertMatches,
     getAlertRuleLabel,
+    getAlertRuleDefaultSeverity,
     matchesAlertRule,
     normalizeAlertRuleDraft,
   } from "./lib/utils/alertRules.js";
@@ -199,6 +202,13 @@
   let alertRules = [];
   let alertEvents = [];
   let alertMatchState = {};
+  let alertDelivery = {
+    browserNotificationsEnabled: false,
+    browserPermission: "default",
+    webhookEnabled: false,
+    webhookUrl: "",
+    suppressInfo: false,
+  };
   let alertToast = null;
   let alertToastTimer = null;
   let previousLiveFlightsByIcao24 = new Map();
@@ -301,6 +311,10 @@
       flightAnnotations = savedPreferences.flightAnnotations ?? flightAnnotations;
       alertRules = savedPreferences.alertRules ?? alertRules;
       alertEvents = savedPreferences.alertEvents ?? alertEvents;
+      alertDelivery = {
+        ...alertDelivery,
+        ...(savedPreferences.alertDelivery ?? {}),
+      };
       monitoringSessions = savedPreferences.monitoringSessions ?? monitoringSessions;
       savedViews = savedPreferences.savedViews ?? savedViews;
       savedEntities = savedPreferences.savedEntities ?? savedEntities;
@@ -320,6 +334,13 @@
     }
 
     applySharedStateFromUrl();
+
+    if (typeof window !== "undefined" && "Notification" in window) {
+      alertDelivery = {
+        ...alertDelivery,
+        browserPermission: window.Notification.permission,
+      };
+    }
 
     syncThemeClass(theme);
     preferencesReady = true;
@@ -730,6 +751,7 @@
       flightAnnotations,
       alertRules,
       alertEvents,
+      alertDelivery,
       monitoringSessions,
       savedViews,
       savedEntities,
@@ -766,6 +788,10 @@
     flightAnnotations = normalizedWorkspaceState.flightAnnotations ?? flightAnnotations;
     alertRules = normalizedWorkspaceState.alertRules ?? alertRules;
     alertEvents = normalizedWorkspaceState.alertEvents ?? alertEvents;
+    alertDelivery = {
+      ...alertDelivery,
+      ...(normalizedWorkspaceState.alertDelivery ?? {}),
+    };
     monitoringSessions = normalizedWorkspaceState.monitoringSessions ?? monitoringSessions;
     savedViews = normalizedWorkspaceState.savedViews ?? savedViews;
     savedEntities = normalizedWorkspaceState.savedEntities ?? savedEntities;
@@ -1870,15 +1896,131 @@
     setReportFeedback("Print report opened");
   }
 
-  function pushAlertEvent(message) {
+  function updateAlertEventDelivery(eventId, deliveryPatch) {
+    alertEvents = alertEvents.map((event) =>
+      event.id === eventId
+        ? {
+            ...event,
+            delivery: {
+              ...(event.delivery ?? {}),
+              ...deliveryPatch,
+            },
+          }
+        : event
+    );
+  }
+
+  async function ensureBrowserAlertPermission() {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      alertDelivery = {
+        ...alertDelivery,
+        browserPermission: "unsupported",
+      };
+      return "unsupported";
+    }
+
+    if (window.Notification.permission === "granted") {
+      alertDelivery = {
+        ...alertDelivery,
+        browserPermission: "granted",
+      };
+      return "granted";
+    }
+
+    const permission = await window.Notification.requestPermission();
+    alertDelivery = {
+      ...alertDelivery,
+      browserPermission: permission,
+    };
+    return permission;
+  }
+
+  function updateAlertDeliverySettings(partial) {
+    alertDelivery = {
+      ...alertDelivery,
+      ...partial,
+      webhookUrl:
+        partial.webhookUrl !== undefined
+          ? String(partial.webhookUrl ?? "").trim()
+          : alertDelivery.webhookUrl,
+    };
+  }
+
+  async function deliverAlertEvent(event) {
+    if (!event?.id) {
+      return;
+    }
+
+    if (
+      alertDelivery.browserNotificationsEnabled &&
+      event.severity !== "info" &&
+      typeof window !== "undefined" &&
+      "Notification" in window &&
+      window.Notification.permission === "granted"
+    ) {
+      try {
+        new window.Notification(event.message, {
+          body: `${event.severity.toUpperCase()} alert`,
+        });
+        updateAlertEventDelivery(event.id, { browser: "sent" });
+      } catch {
+        updateAlertEventDelivery(event.id, { browser: "failed" });
+      }
+    } else {
+      updateAlertEventDelivery(event.id, {
+        browser:
+          event.severity === "info" && alertDelivery.suppressInfo
+            ? "muted"
+            : alertDelivery.browserNotificationsEnabled
+              ? alertDelivery.browserPermission ?? "pending"
+              : "disabled",
+      });
+    }
+
+    if (alertDelivery.webhookEnabled && alertDelivery.webhookUrl) {
+      try {
+        await sendAlertWebhook(alertDelivery.webhookUrl, event);
+        updateAlertEventDelivery(event.id, { webhook: "sent" });
+      } catch {
+        updateAlertEventDelivery(event.id, { webhook: "failed" });
+      }
+      return;
+    }
+
+    updateAlertEventDelivery(event.id, { webhook: "disabled" });
+  }
+
+  function pushAlertEvent({
+    message,
+    severity = "info",
+    fingerprint = "",
+    cooldownMinutes = 10,
+  }) {
+    const now = Date.now();
+    const normalizedFingerprint = String(fingerprint || message).trim().toLowerCase();
+    const cooldownWindow = Math.max(Number(cooldownMinutes) || 0, 1) * 60 * 1000;
+    const recentDuplicate = alertEvents.find(
+      (event) =>
+        event.fingerprint === normalizedFingerprint &&
+        now - Number(event.timestamp ?? 0) < cooldownWindow
+    );
+    if (recentDuplicate) {
+      return;
+    }
+
     const nextEvent = {
       id: crypto.randomUUID(),
       message,
-      timestamp: Date.now(),
+      timestamp: now,
+      severity,
+      fingerprint: normalizedFingerprint,
+      delivery: {},
     };
 
     alertEvents = [nextEvent, ...alertEvents].slice(0, 30);
-    alertToast = nextEvent;
+    if (!(severity === "info" && alertDelivery.suppressInfo)) {
+      alertToast = nextEvent;
+    }
 
     if (alertToastTimer) {
       window.clearTimeout(alertToastTimer);
@@ -1888,6 +2030,8 @@
       alertToast = null;
       alertToastTimer = null;
     }, 3500);
+
+    void deliverAlertEvent(nextEvent);
   }
 
   function addAlertRule(rule) {
@@ -1911,6 +2055,8 @@
         type: normalizedRule.type,
         query: normalizedRule.query,
         payload: normalizedRule.payload ?? null,
+        severity: normalizedRule.severity ?? getAlertRuleDefaultSeverity(normalizedRule.type),
+        cooldownMinutes: normalizedRule.cooldownMinutes ?? 10,
       },
       ...alertRules,
     ].slice(0, 12);
@@ -2025,24 +2171,33 @@
       if ((rule.type === "takeoff" || rule.type === "landing") && matches.length > 0) {
         const newMatches = matches.filter((flight) => !previousMatchIds.has(flight.icao24));
         for (const match of newMatches.slice(0, 3)) {
-          pushAlertEvent(
-            `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${match.callsign ?? match.registration ?? match.icao24}`
-          );
+          pushAlertEvent({
+            message: `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${match.callsign ?? match.registration ?? match.icao24}`,
+            severity: rule.severity ?? getAlertRuleDefaultSeverity(rule.type),
+            cooldownMinutes: rule.cooldownMinutes ?? 10,
+            fingerprint: buildAlertEventFingerprint(rule, rule.type, match),
+          });
         }
         continue;
       }
 
       if (matches.length > 0 && previousMatchIds.size === 0) {
         const leadFlight = matches[0];
-        pushAlertEvent(
-          `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${leadFlight.callsign ?? leadFlight.registration ?? leadFlight.icao24}`
-        );
+        pushAlertEvent({
+          message: `${getAlertRuleLabel(rule.type)} ${rule.query} matched ${leadFlight.callsign ?? leadFlight.registration ?? leadFlight.icao24}`,
+          severity: rule.severity ?? getAlertRuleDefaultSeverity(rule.type),
+          cooldownMinutes: rule.cooldownMinutes ?? 10,
+          fingerprint: buildAlertEventFingerprint(rule, "enter", leadFlight),
+        });
       }
 
       if (matches.length === 0 && previousMatchIds.size > 0) {
-        pushAlertEvent(
-          `${getAlertRuleLabel(rule.type)} ${rule.query} is no longer visible`
-        );
+        pushAlertEvent({
+          message: `${getAlertRuleLabel(rule.type)} ${rule.query} is no longer visible`,
+          severity: rule.severity ?? getAlertRuleDefaultSeverity(rule.type),
+          cooldownMinutes: rule.cooldownMinutes ?? 10,
+          fingerprint: buildAlertEventFingerprint(rule, "exit"),
+        });
       }
     }
 
@@ -4239,6 +4394,7 @@
       flightAnnotations,
       alertRules,
       alertEvents,
+      alertDelivery,
       monitoringSessions,
       savedViews,
       savedEntities,
@@ -4266,6 +4422,7 @@
     flightAnnotations;
     alertRules;
     alertEvents;
+    alertDelivery;
     monitoringSessions;
     savedViews;
     savedEntities;
@@ -5354,9 +5511,12 @@
               <AlertPanel
                 rules={alertRules}
                 events={alertEvents}
+                deliverySettings={alertDelivery}
                 onAddRule={addAlertRule}
                 onRemoveRule={removeAlertRule}
                 onClearEvents={clearAlertEvents}
+                onUpdateDeliverySettings={updateAlertDeliverySettings}
+                onEnableBrowserNotifications={ensureBrowserAlertPermission}
               />
             </div>
           </details>

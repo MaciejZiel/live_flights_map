@@ -1,4 +1,6 @@
 <script>
+  import InfoGlyph from "./InfoGlyph.svelte";
+
   import {
     formatAltitude,
     formatCoordinates,
@@ -250,21 +252,19 @@
       label: "Flight",
       value: routeFlightNumber || identity.callsign,
       hint: route?.iata_codes ?? route?.airport_codes ?? "Callsign focus",
+      icon: "flight",
     },
     {
       label: "Aircraft",
       value: identity.typeCode ?? "Type n/a",
       hint: identity.registration ?? identity.icao24,
+      icon: "aircraft",
     },
     {
       label: "Operator",
       value: operatorLabel,
       hint: identity.originCountry ?? "Origin unknown",
-    },
-    {
-      label: "Data",
-      value: detailFreshness,
-      hint: detailsStatus === "success" ? "Detail sync ready" : routeStatusText,
+      icon: "operator",
     },
   ];
   $: heroMetricItems = flight
@@ -273,21 +273,25 @@
           label: "Altitude",
           value: formatAltitude(flight.altitude),
           hint: getVerticalTrendLabel(flight.vertical_rate),
+          icon: "altitude",
         },
         {
           label: "Speed",
           value: formatSpeed(flight.velocity),
           hint: averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Live groundspeed",
+          icon: "speed",
         },
         {
           label: "Heading",
           value: formatHeading(flight.true_track),
           hint: getTrackLabel(flight.true_track),
+          icon: "heading",
         },
         {
           label: "Vertical rate",
           value: formatVerticalRate(flight.vertical_rate),
           hint: trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up",
+          icon: "vertical",
         },
       ]
     : [];
@@ -363,7 +367,10 @@
         <div class="hero-summary-grid">
           {#each heroSummaryItems as item}
             <article class="hero-summary-card">
-              <span>{item.label}</span>
+              <div class="card-label">
+                <span class="card-glyph"><InfoGlyph kind={item.icon} /></span>
+                <span class="card-label-text">{item.label}</span>
+              </div>
               <strong>{item.value}</strong>
               <small>{item.hint}</small>
             </article>
@@ -412,7 +419,10 @@
         <div class="hero-metric-grid">
           {#each heroMetricItems as item}
             <article class="hero-metric-card">
-              <span>{item.label}</span>
+              <div class="card-label">
+                <span class="card-glyph"><InfoGlyph kind={item.icon} /></span>
+                <span class="card-label-text">{item.label}</span>
+              </div>
               <strong>{item.value}</strong>
               <small>{item.hint}</small>
             </article>
@@ -426,17 +436,8 @@
           <button class:active={bookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
             {bookmarked ? "Saved to workspace" : "Save flight"}
           </button>
-          <button class="action-button secondary" type="button" on:click={onOpenTracking}>
-            Tracking
-          </button>
           <button class="action-button secondary" type="button" on:click={onShare}>
             {shareFeedback || "Share"}
-          </button>
-          <button class="action-button secondary" type="button" on:click={onAddAlert}>
-            Alert
-          </button>
-          <button class="action-button secondary" type="button" on:click={onRetryDetails}>
-            Refresh
           </button>
         </div>
       </div>
@@ -454,9 +455,12 @@
     <div class="detail-section-stack">
       <details class="detail-section" open>
         <summary class="detail-section-summary">
-          <div>
-            <span>Flight</span>
-            <strong>{routeFlightNumber || identity.callsign}</strong>
+          <div class="detail-section-title">
+            <span class="detail-section-glyph"><InfoGlyph kind="flight" size={15} /></span>
+            <div class="detail-section-copy">
+              <span class="detail-section-kicker">Flight</span>
+              <strong>{routeFlightNumber || identity.callsign}</strong>
+            </div>
           </div>
           <small>{route?.plausible === false ? "route unverified" : route ? "route resolved" : "route pending"}</small>
         </summary>
@@ -509,15 +513,30 @@
                 <strong>{formatRelativeContact(flight.last_contact)}</strong>
               </div>
             </div>
+
+            <div class="secondary-actions">
+              <button class="secondary-action-button" type="button" on:click={onOpenTracking}>
+                Open tracking
+              </button>
+              <button class="secondary-action-button" type="button" on:click={onAddAlert}>
+                Add alert
+              </button>
+              <button class="secondary-action-button" type="button" on:click={onRetryDetails}>
+                Refresh details
+              </button>
+            </div>
           </section>
         </div>
       </details>
 
-      <details class="detail-section" open>
+      <details class="detail-section">
         <summary class="detail-section-summary">
-          <div>
-            <span>Aircraft</span>
-            <strong>{identity.registration ?? identity.icao24}</strong>
+          <div class="detail-section-title">
+            <span class="detail-section-glyph"><InfoGlyph kind="aircraft" size={15} /></span>
+            <div class="detail-section-copy">
+              <span class="detail-section-kicker">Aircraft</span>
+              <strong>{identity.registration ?? identity.icao24}</strong>
+            </div>
           </div>
           <small>{identity.typeCode ?? "Type unknown"}</small>
         </summary>
@@ -546,11 +565,14 @@
         </div>
       </details>
 
-      <details class="detail-section" open>
+      <details class="detail-section">
         <summary class="detail-section-summary">
-          <div>
-            <span>Tracking</span>
-            <strong>{trailPoints.length ? `${trailPoints.length} trail points` : "Live telemetry"}</strong>
+          <div class="detail-section-title">
+            <span class="detail-section-glyph"><InfoGlyph kind="tracking" size={15} /></span>
+            <div class="detail-section-copy">
+              <span class="detail-section-kicker">Tracking</span>
+              <strong>{trailPoints.length ? `${trailPoints.length} trail points` : "Live telemetry"}</strong>
+            </div>
           </div>
           <small>{observedDistanceKm ? `${observedDistanceKm.toFixed(1)} km observed` : "Trail warming up"}</small>
         </summary>
@@ -581,11 +603,14 @@
         </div>
       </details>
 
-      <details class="detail-section" open>
+      <details class="detail-section">
         <summary class="detail-section-summary">
-          <div>
-            <span>Airports</span>
-            <strong>{route?.airports?.length ?? 0} route points</strong>
+          <div class="detail-section-title">
+            <span class="detail-section-glyph"><InfoGlyph kind="airports" size={15} /></span>
+            <div class="detail-section-copy">
+              <span class="detail-section-kicker">Airports</span>
+              <strong>{route?.airports?.length ?? 0} route points</strong>
+            </div>
           </div>
           <small>{routeStops.length ? `${routeStops.length} intermediate stop${routeStops.length > 1 ? "s" : ""}` : "Direct routing"}</small>
         </summary>
@@ -848,10 +873,7 @@
   .telemetry-card span,
   .fact-row span,
   .facts-header span,
-  .hero-summary-card span,
-  .hero-metric-card span,
-  .quality-card span,
-  .detail-section-summary span {
+  .quality-card span {
     text-transform: uppercase;
     letter-spacing: 0.08em;
   }
@@ -861,10 +883,7 @@
   .telemetry-card span,
   .fact-row span,
   .facts-header span,
-  .hero-summary-card span,
-  .hero-metric-card span,
-  .quality-card span,
-  .detail-section-summary span {
+  .quality-card span {
     font-size: 0.68rem;
     color: rgba(171, 186, 202, 0.56);
   }
@@ -900,6 +919,28 @@
   .hero-summary-card {
     display: grid;
     gap: 0.18rem;
+  }
+
+  .card-label {
+    display: flex;
+    align-items: center;
+    gap: 0.42rem;
+  }
+
+  .card-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    color: #f5b908;
+  }
+
+  .card-label-text {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(171, 186, 202, 0.56);
   }
 
   .hero-summary-card strong {
@@ -1116,19 +1157,35 @@
     display: none;
   }
 
-  .detail-section-summary div {
+  .detail-section-title {
+    display: flex;
+    align-items: start;
+    gap: 0.55rem;
+  }
+
+  .detail-section-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    color: #f5b908;
+    margin-top: 0.1rem;
+  }
+
+  .detail-section-copy {
     display: grid;
     gap: 0.14rem;
   }
 
-  .detail-section-summary span {
-    font-size: 0.66rem;
+  .detail-section-kicker {
+    font-size: 0.68rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.08em;
     color: rgba(171, 186, 202, 0.56);
   }
 
-  .detail-section-summary strong {
+  .detail-section-copy strong {
     color: #f5f7fb;
     font-size: 1.04rem;
   }
@@ -1217,6 +1274,25 @@
     text-align: right;
   }
 
+  .secondary-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.48rem;
+  }
+
+  .secondary-action-button {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    min-height: 2.4rem;
+    padding: 0.52rem 0.66rem;
+    font: inherit;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: rgba(226, 234, 242, 0.92);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+  }
+
   .airport-desks-panel,
   .airport-desk-grid,
   .route-stops,
@@ -1299,7 +1375,8 @@
     .telemetry-grid,
     .route-strip,
     .airport-desk-grid,
-    .identity-actions {
+    .identity-actions,
+    .secondary-actions {
       grid-template-columns: 1fr;
     }
 

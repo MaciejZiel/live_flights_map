@@ -238,6 +238,8 @@
   let selectedFlightTrailError = null;
   let selectedFlightTrailRequestId = 0;
   let lastSelectedFlightTrailKey = null;
+  let selectedFlightTrailVisible = true;
+  let selectedFlightTrailWindowHours = 6;
   let selectedFlightTrackCursor = -1;
   let lastSelectedFlightTrackKey = null;
   let selectedFlightTrackPoint = null;
@@ -2310,6 +2312,49 @@
     followAircraft = !followAircraft;
   }
 
+  function toggleSelectedFlightTrailVisibility() {
+    selectedFlightTrailVisible = !selectedFlightTrailVisible;
+  }
+
+  function setSelectedFlightTrailWindow(hours) {
+    if (!Number.isFinite(hours) || hours <= 0) {
+      return;
+    }
+
+    selectedFlightTrailWindowHours = hours;
+  }
+
+  function fitSelectedFlightTrailToScreen() {
+    if (!selectedFlight) {
+      return;
+    }
+
+    const visibleTrailPoints = selectedFlightTrailVisible ? selectedFlightTrail : [];
+    if (visibleTrailPoints.length >= 2) {
+      const latitudes = visibleTrailPoints.map((point) => point.latitude);
+      const longitudes = visibleTrailPoints.map((point) => point.longitude);
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        bounds: [
+          [Math.min(...latitudes), Math.min(...longitudes)],
+          [Math.max(...latitudes), Math.max(...longitudes)],
+        ],
+        maxZoom: 9.6,
+        paddingTopLeft: isMobileViewport ? [56, 56] : [56, 56],
+        paddingBottomRight: isMobileViewport ? [56, 56] : [392, 120],
+      };
+      return;
+    }
+
+    if (Number.isFinite(selectedFlight.latitude) && Number.isFinite(selectedFlight.longitude)) {
+      flightFocusRequest = {
+        id: crypto.randomUUID(),
+        center: [selectedFlight.latitude, selectedFlight.longitude],
+        zoom: Math.max(mapViewport?.zoom ?? 7.1, 8.8),
+      };
+    }
+  }
+
   function toggleSelectedFlightWatchlist() {
     if (!selectedFlight) {
       return;
@@ -3269,6 +3314,21 @@
     }
 
     return [...merged.values()].sort((left, right) => left.timestamp - right.timestamp);
+  }
+
+  function filterTrailPointsByWindow(points, hours) {
+    if (!Array.isArray(points) || !points.length || !Number.isFinite(hours) || hours <= 0) {
+      return points ?? [];
+    }
+
+    const latestTimestamp = points[points.length - 1]?.timestamp ?? null;
+    if (!Number.isFinite(latestTimestamp)) {
+      return points;
+    }
+
+    const minTimestamp = latestTimestamp - hours * 60 * 60 * 1000;
+    const filtered = points.filter((point) => point.timestamp >= minTimestamp);
+    return filtered.length ? filtered : points.slice(-1);
   }
 
   function buildSessionLabel(timestamp) {
@@ -4429,9 +4489,13 @@
       })
     : [];
   $: localSelectedFlightTrail = getTrailPoints(flightHistory, selectedIcao24);
-  $: selectedFlightTrail = activeReplaySnapshot
+  $: selectedFlightTrailAll = activeReplaySnapshot
     ? replaySelectedFlightTrail
     : mergeTrailPoints(selectedFlightTrailRemote, localSelectedFlightTrail);
+  $: selectedFlightTrail = filterTrailPointsByWindow(
+    selectedFlightTrailAll,
+    selectedFlightTrailWindowHours
+  );
   $: selectedFlightAnnotation = selectedIcao24
     ? flightAnnotations[selectedIcao24] ?? { notes: "", tags: [] }
     : { notes: "", tags: [] };
@@ -4704,7 +4768,7 @@
         selectedRouteAirports={selectedRouteAirports}
         followAircraft={followAircraft}
         mapStyle={mapStyle}
-        trailPoints={selectedFlightTrail}
+        trailPoints={selectedFlightTrailVisible ? selectedFlightTrail : []}
         watchedIcao24s={watchlist}
         watchModeEnabled={watchModeEnabled}
         dimmedIcao24s={dimmedFlightIds}
@@ -6015,6 +6079,9 @@
               detailsStatus={selectedFlightDetailsStatus}
               detailsError={selectedFlightDetailsError}
               followAircraft={followAircraft}
+              trailVisible={selectedFlightTrailVisible}
+              trailPointCount={selectedFlightTrail.length}
+              trailWindowHours={selectedFlightTrailWindowHours}
               bookmarked={watchlist.includes(selectedFlight.icao24)}
               snapshotFreshness={selectedFlightFreshnessLabel}
               snapshotConfidence={selectedFlightConfidence}
@@ -6026,6 +6093,9 @@
               isReplayActive={Boolean(activeReplaySnapshot)}
               shareFeedback={shareFeedback}
               onToggleFollow={toggleFollowAircraft}
+              onToggleTrail={toggleSelectedFlightTrailVisibility}
+              onFitTrail={fitSelectedFlightTrailToScreen}
+              onSetTrailWindow={setSelectedFlightTrailWindow}
               onToggleBookmark={toggleSelectedFlightWatchlist}
               onOpenAirport={(airport) => openAirportInspector(airport, { focusMap: true, zoom: 8.8 })}
               onRetryDetails={retrySelectedFlightDetails}

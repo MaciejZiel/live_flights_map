@@ -283,7 +283,9 @@
       map.flyToBounds(request.bounds, {
         animate: true,
         duration: 1.1,
-        padding: [72, 72],
+        padding: request.padding ?? [72, 72],
+        paddingTopLeft: request.paddingTopLeft,
+        paddingBottomRight: request.paddingBottomRight,
         maxZoom: request.maxZoom ?? 8.4,
       });
       return;

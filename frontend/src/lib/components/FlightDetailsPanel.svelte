@@ -21,6 +21,9 @@
   export let detailsStatus = "idle";
   export let detailsError = null;
   export let followAircraft = false;
+  export let trailVisible = true;
+  export let trailPointCount = 0;
+  export let trailWindowHours = 6;
   export let bookmarked = false;
   export let snapshotFreshness = "waiting";
   export let snapshotConfidence = "High";
@@ -32,6 +35,9 @@
   export let isReplayActive = false;
   export let shareFeedback = "";
   export let onToggleFollow = () => {};
+  export let onToggleTrail = () => {};
+  export let onFitTrail = () => {};
+  export let onSetTrailWindow = () => {};
   export let onToggleBookmark = () => {};
   export let onOpenAirport = () => {};
   export let onRetryDetails = () => {};
@@ -39,6 +45,12 @@
   export let onOpenTracking = () => {};
   export let onAddAlert = () => {};
   export let onClose = () => {};
+
+  const TRAIL_WINDOW_OPTIONS = [
+    { value: 0.25, label: "15m" },
+    { value: 1, label: "1h" },
+    { value: 6, label: "6h" },
+  ];
 
   function formatRelativeContact(lastContact) {
     if (lastContact === null || lastContact === undefined) {
@@ -400,15 +412,51 @@
           {/each}
         </div>
 
+        <div class="map-control-block">
+          <div class="map-control-row">
+            <button class:active={trailVisible} class="action-button" type="button" on:click={onToggleTrail}>
+              {trailVisible ? "Trail visible" : "Show trail"}
+            </button>
+            <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
+              {followAircraft ? "Following aircraft" : "Follow aircraft"}
+            </button>
+            <button
+              class="action-button secondary"
+              type="button"
+              disabled={trailPointCount < 2}
+              on:click={onFitTrail}
+            >
+              Fit trail
+            </button>
+          </div>
+
+          <div class="trail-window-row">
+            <span>Trail window</span>
+            <div class="trail-window-buttons">
+              {#each TRAIL_WINDOW_OPTIONS as option}
+                <button
+                  class:active={trailWindowHours === option.value}
+                  class="trail-window-button"
+                  type="button"
+                  on:click={() => onSetTrailWindow(option.value)}
+                >
+                  {option.label}
+                </button>
+              {/each}
+            </div>
+            <small>{trailPointCount} points loaded</small>
+          </div>
+        </div>
+
         <div class="identity-actions">
-          <button class:active={followAircraft} class="action-button" type="button" on:click={onToggleFollow}>
-            {followAircraft ? "Following on map" : "Track on map"}
-          </button>
           <button class:active={bookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
             {bookmarked ? "Saved to workspace" : "Save flight"}
           </button>
           <button class="action-button secondary" type="button" on:click={onShare}>
             {shareFeedback || "Share"}
+          </button>
+          <button class="action-button secondary" type="button" on:click={onOpenTracking}>
+            Tracking panel
           </button>
         </div>
       </div>
@@ -1123,6 +1171,66 @@
     gap: 0.48rem;
   }
 
+  .map-control-block {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .map-control-row {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.48rem;
+  }
+
+  .trail-window-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.55rem;
+    padding: 0.68rem 0.74rem;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.025);
+    flex-wrap: wrap;
+  }
+
+  .trail-window-row span {
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(186, 198, 210, 0.68);
+  }
+
+  .trail-window-row small {
+    color: rgba(196, 208, 220, 0.72);
+    font-size: 0.7rem;
+  }
+
+  .trail-window-buttons {
+    display: flex;
+    gap: 0.36rem;
+    flex-wrap: wrap;
+  }
+
+  .trail-window-button {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.38rem 0.62rem;
+    font: inherit;
+    font-size: 0.7rem;
+    font-weight: 800;
+    color: rgba(230, 237, 244, 0.86);
+    background: rgba(255, 255, 255, 0.04);
+    cursor: pointer;
+  }
+
+  .trail-window-button.active {
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+    border-color: transparent;
+  }
+
   .action-button {
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
@@ -1149,6 +1257,12 @@
     color: #f4f7fb;
     background: rgba(120, 200, 255, 0.18);
     border-color: rgba(120, 200, 255, 0.26);
+  }
+
+  .action-button:disabled {
+    cursor: default;
+    opacity: 0.55;
+    transform: none;
   }
 
   .detail-warning,
@@ -1396,6 +1510,7 @@
     }
 
     .hero-metric-grid,
+    .map-control-row,
     .route-strip,
     .airport-desk-grid,
     .identity-actions,

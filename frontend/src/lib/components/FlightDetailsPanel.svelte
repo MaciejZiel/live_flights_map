@@ -29,6 +29,7 @@
   export let onShare = () => {};
   export let onOpenTracking = () => {};
   export let onAddAlert = () => {};
+  export let onClose = () => {};
 
   function formatRelativeContact(lastContact) {
     if (lastContact === null || lastContact === undefined) {
@@ -240,6 +241,32 @@
   $: detailWarning = detailsError ?? details?.meta?.warning ?? routeWarning ?? null;
   $: photoUrl = resolvePhotoUrl(photo);
   $: routeProgress = calculateRouteProgress(route, flight);
+  $: operatorLabel =
+    route?.airline_name ??
+    route?.airline_code ??
+    (identity.operatorCode !== "N/A" ? identity.operatorCode : identity.originCountry ?? "Unknown");
+  $: heroSummaryItems = [
+    {
+      label: "Flight",
+      value: routeFlightNumber || identity.callsign,
+      hint: route?.iata_codes ?? route?.airport_codes ?? "Callsign focus",
+    },
+    {
+      label: "Aircraft",
+      value: identity.typeCode ?? "Type n/a",
+      hint: identity.registration ?? identity.icao24,
+    },
+    {
+      label: "Operator",
+      value: operatorLabel,
+      hint: identity.originCountry ?? "Origin unknown",
+    },
+    {
+      label: "Data",
+      value: detailFreshness,
+      hint: detailsStatus === "success" ? "Detail sync ready" : routeStatusText,
+    },
+  ];
   $: routeStatusText = route?.plausible === false
     ? "Route unverified"
     : route
@@ -257,16 +284,6 @@
 </script>
 
 <section class="panel details-panel">
-  <div class="panel-heading">
-    <div>
-      <p class="eyebrow">{routeLabel ? "Selected route" : "Selected aircraft"}</p>
-      <h2>{flight ? identity.callsign : "Flight inspector"}</h2>
-    </div>
-    {#if flight}
-      <span class="route-badge panel-badge">{routeStatusText}</span>
-    {/if}
-  </div>
-
   {#if flight}
     <section class="hero-card">
       <div class="photo-shell">
@@ -288,11 +305,18 @@
           {/if}
 
           <div class="photo-overlay">
-            <div class="photo-badge-row">
-              <span class="status-chip overlay-chip">{formatFlightStatus(flight)}</span>
-              {#if routeFlightNumber}
-                <span class="route-badge">{routeFlightNumber}</span>
-              {/if}
+            <div class="photo-overlay-head">
+              <div class="photo-badge-row">
+                <span class="status-chip overlay-chip">{formatFlightStatus(flight)}</span>
+                {#if routeFlightNumber}
+                  <span class="route-badge">{routeFlightNumber}</span>
+                {/if}
+                <span class="route-badge">{routeStatusText}</span>
+              </div>
+
+              <button class="hero-dismiss" type="button" aria-label="Close selected aircraft" on:click={onClose}>
+                ×
+              </button>
             </div>
 
             <div class="photo-copy">
@@ -312,10 +336,14 @@
       </div>
 
       <div class="hero-copy">
-        <div class="hero-meta">
-          <span>{identity.registration ?? "Registration n/a"}</span>
-          <span>{identity.typeCode ?? "Type n/a"}</span>
-          <span>{identity.operatorCode !== "N/A" ? `Operator ${identity.operatorCode}` : identity.originCountry ?? "Country n/a"}</span>
+        <div class="hero-summary-grid">
+          {#each heroSummaryItems as item}
+            <article class="hero-summary-card">
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+              <small>{item.hint}</small>
+            </article>
+          {/each}
         </div>
 
         <div class="route-strip">
@@ -387,159 +415,206 @@
       </section>
     {/if}
 
-    <section class="facts-panel data-quality-panel">
-      <div class="facts-header">
-        <strong>Data quality</strong>
-        <span>{dataQualitySummary}</span>
-      </div>
+    <slot name="afterHero" />
 
-      <div class="quality-grid">
-        <article class="quality-card">
-          <span>Radar mode</span>
-          <strong>{isReplayActive ? "Replay frame" : liveStatus}</strong>
-          <small>{routeStatusText}</small>
-        </article>
-        <article class="quality-card">
-          <span>Snapshot age</span>
-          <strong>{snapshotFreshness}</strong>
-          <small>{snapshotConfidence} confidence</small>
-        </article>
-        <article class="quality-card">
-          <span>Details sync</span>
-          <strong>{detailFreshness}</strong>
-          <small>{detailsStatus === "success" ? "Details ready" : detailsStatus === "error" ? "Fallback active" : "Resolving metadata"}</small>
-        </article>
-        <article class="quality-card">
-          <span>Transport</span>
-          <strong>{snapshotTransport}</strong>
-          <small>{trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up"}</small>
-        </article>
-      </div>
-    </section>
-
-    <section class="telemetry-grid">
-      <article class="telemetry-card">
-        <span>Altitude</span>
-        <strong>{formatAltitude(flight.altitude)}</strong>
-        <small>{getVerticalTrendLabel(flight.vertical_rate)}</small>
-      </article>
-      <article class="telemetry-card">
-        <span>Ground speed</span>
-        <strong>{formatSpeed(flight.velocity)}</strong>
-        <small>{averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Waiting for trail"}</small>
-      </article>
-      <article class="telemetry-card">
-        <span>Heading</span>
-        <strong>{formatHeading(flight.true_track)}</strong>
-        <small>{getTrackLabel(flight.true_track)}</small>
-      </article>
-      <article class="telemetry-card">
-        <span>Vertical rate</span>
-        <strong>{formatVerticalRate(flight.vertical_rate)}</strong>
-        <small>{trailPoints.length} trail points</small>
-      </article>
-    </section>
-
-    <section class="facts-panel">
-      <div class="facts-header">
-        <strong>Live facts</strong>
-        <span>{route?.plausible === false ? "route unverified" : route ? "route resolved" : "route pending"}</span>
-      </div>
-
-      <div class="fact-list">
-        <div class="fact-row">
-          <span>Flight number</span>
-          <strong>{routeFlightNumber || identity.callsign}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Registration</span>
-          <strong>{identity.registration ?? "Unknown"}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Type code</span>
-          <strong>{identity.typeCode ?? "Unknown"}</strong>
-        </div>
-        <div class="fact-row">
-          <span>ICAO24</span>
-          <strong>{identity.icao24}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Operator</span>
-          <strong>{identity.operatorCode ?? "Unknown"}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Current position</span>
-          <strong>{formatCoordinates(flight.latitude, flight.longitude)}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Last contact</span>
-          <strong>{formatRelativeContact(flight.last_contact)}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Observed trail</span>
-          <strong>{trailPoints.length ? `${trailPoints.length} pts / ${observedDistanceKm.toFixed(1)} km` : "Waiting for trail"}</strong>
-        </div>
-        <div class="fact-row">
-          <span>Country</span>
-          <strong>{identity.originCountry ?? "Unknown"}</strong>
-        </div>
-      </div>
-    </section>
-
-    <section class="facts-panel airport-desks-panel">
-      <div class="facts-header">
-        <strong>Airport desks</strong>
-        <span>{route?.airports?.length ?? 0} airports in route</span>
-      </div>
-
-      <div class="airport-desk-grid">
-        {#if route?.origin}
-          <button
-            class="airport-desk-card"
-            disabled={!canOpenAirport(route.origin)}
-            type="button"
-            on:click={() => onOpenAirport(route.origin)}
-          >
-            <span>Origin board</span>
-            <strong>{formatAirportCode(route.origin)}</strong>
-            <small>{formatAirportName(route.origin)}</small>
-          </button>
-        {/if}
-
-        {#if route?.destination}
-          <button
-            class="airport-desk-card"
-            disabled={!canOpenAirport(route.destination)}
-            type="button"
-            on:click={() => onOpenAirport(route.destination)}
-          >
-            <span>Destination board</span>
-            <strong>{formatAirportCode(route.destination)}</strong>
-            <small>{formatAirportName(route.destination)}</small>
-          </button>
-        {/if}
-      </div>
-
-      {#if routeStops.length}
-        <div class="route-stops">
-          <span>Intermediate stops</span>
-          <div class="route-stop-list">
-            {#each routeStops as stop}
-              <button
-                class="route-stop-pill"
-                disabled={!canOpenAirport(stop)}
-                type="button"
-                on:click={() => onOpenAirport(stop)}
-              >
-                <strong>{formatAirportCode(stop)}</strong>
-                <small>{formatAirportName(stop)}</small>
-              </button>
-            {/each}
+    <div class="detail-section-stack">
+      <details class="detail-section" open>
+        <summary class="detail-section-summary">
+          <div>
+            <span>Flight</span>
+            <strong>{routeFlightNumber || identity.callsign}</strong>
           </div>
+          <small>{route?.plausible === false ? "route unverified" : route ? "route resolved" : "route pending"}</small>
+        </summary>
+
+        <div class="detail-section-body">
+          <section class="facts-panel data-quality-panel">
+            <div class="facts-header">
+              <strong>Data quality</strong>
+              <span>{dataQualitySummary}</span>
+            </div>
+
+            <div class="quality-grid">
+              <article class="quality-card">
+                <span>Radar mode</span>
+                <strong>{isReplayActive ? "Replay frame" : liveStatus}</strong>
+                <small>{routeStatusText}</small>
+              </article>
+              <article class="quality-card">
+                <span>Snapshot age</span>
+                <strong>{snapshotFreshness}</strong>
+                <small>{snapshotConfidence} confidence</small>
+              </article>
+              <article class="quality-card">
+                <span>Details sync</span>
+                <strong>{detailFreshness}</strong>
+                <small>{detailsStatus === "success" ? "Details ready" : detailsStatus === "error" ? "Fallback active" : "Resolving metadata"}</small>
+              </article>
+              <article class="quality-card">
+                <span>Transport</span>
+                <strong>{snapshotTransport}</strong>
+                <small>{trailPoints.length ? `${trailPoints.length} trail points` : "Trail warming up"}</small>
+              </article>
+            </div>
+
+            <div class="fact-list">
+              <div class="fact-row">
+                <span>Flight number</span>
+                <strong>{routeFlightNumber || identity.callsign}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Operator</span>
+                <strong>{operatorLabel}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Current position</span>
+                <strong>{formatCoordinates(flight.latitude, flight.longitude)}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Last contact</span>
+                <strong>{formatRelativeContact(flight.last_contact)}</strong>
+              </div>
+            </div>
+          </section>
         </div>
-      {/if}
-    </section>
+      </details>
+
+      <details class="detail-section" open>
+        <summary class="detail-section-summary">
+          <div>
+            <span>Aircraft</span>
+            <strong>{identity.registration ?? identity.icao24}</strong>
+          </div>
+          <small>{identity.typeCode ?? "Type unknown"}</small>
+        </summary>
+
+        <div class="detail-section-body">
+          <section class="facts-panel">
+            <div class="fact-list">
+              <div class="fact-row">
+                <span>Registration</span>
+                <strong>{identity.registration ?? "Unknown"}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Type code</span>
+                <strong>{identity.typeCode ?? "Unknown"}</strong>
+              </div>
+              <div class="fact-row">
+                <span>ICAO24</span>
+                <strong>{identity.icao24}</strong>
+              </div>
+              <div class="fact-row">
+                <span>Country</span>
+                <strong>{identity.originCountry ?? "Unknown"}</strong>
+              </div>
+            </div>
+          </section>
+        </div>
+      </details>
+
+      <details class="detail-section" open>
+        <summary class="detail-section-summary">
+          <div>
+            <span>Tracking</span>
+            <strong>{trailPoints.length ? `${trailPoints.length} trail points` : "Live telemetry"}</strong>
+          </div>
+          <small>{observedDistanceKm ? `${observedDistanceKm.toFixed(1)} km observed` : "Trail warming up"}</small>
+        </summary>
+
+        <div class="detail-section-body">
+          <section class="telemetry-grid">
+            <article class="telemetry-card">
+              <span>Altitude</span>
+              <strong>{formatAltitude(flight.altitude)}</strong>
+              <small>{getVerticalTrendLabel(flight.vertical_rate)}</small>
+            </article>
+            <article class="telemetry-card">
+              <span>Ground speed</span>
+              <strong>{formatSpeed(flight.velocity)}</strong>
+              <small>{averageObservedSpeed ? `avg ${averageObservedSpeed} km/h` : "Waiting for trail"}</small>
+            </article>
+            <article class="telemetry-card">
+              <span>Heading</span>
+              <strong>{formatHeading(flight.true_track)}</strong>
+              <small>{getTrackLabel(flight.true_track)}</small>
+            </article>
+            <article class="telemetry-card">
+              <span>Vertical rate</span>
+              <strong>{formatVerticalRate(flight.vertical_rate)}</strong>
+              <small>{trailPoints.length} trail points</small>
+            </article>
+          </section>
+        </div>
+      </details>
+
+      <details class="detail-section" open>
+        <summary class="detail-section-summary">
+          <div>
+            <span>Airports</span>
+            <strong>{route?.airports?.length ?? 0} route points</strong>
+          </div>
+          <small>{routeStops.length ? `${routeStops.length} intermediate stop${routeStops.length > 1 ? "s" : ""}` : "Direct routing"}</small>
+        </summary>
+
+        <div class="detail-section-body">
+          <section class="facts-panel airport-desks-panel">
+            <div class="airport-desk-grid">
+              {#if route?.origin}
+                <button
+                  class="airport-desk-card"
+                  disabled={!canOpenAirport(route.origin)}
+                  type="button"
+                  on:click={() => onOpenAirport(route.origin)}
+                >
+                  <span>Origin board</span>
+                  <strong>{formatAirportCode(route.origin)}</strong>
+                  <small>{formatAirportName(route.origin)}</small>
+                </button>
+              {/if}
+
+              {#if route?.destination}
+                <button
+                  class="airport-desk-card"
+                  disabled={!canOpenAirport(route.destination)}
+                  type="button"
+                  on:click={() => onOpenAirport(route.destination)}
+                >
+                  <span>Destination board</span>
+                  <strong>{formatAirportCode(route.destination)}</strong>
+                  <small>{formatAirportName(route.destination)}</small>
+                </button>
+              {/if}
+            </div>
+
+            {#if routeStops.length}
+              <div class="route-stops">
+                <span>Intermediate stops</span>
+                <div class="route-stop-list">
+                  {#each routeStops as stop}
+                    <button
+                      class="route-stop-pill"
+                      disabled={!canOpenAirport(stop)}
+                      type="button"
+                      on:click={() => onOpenAirport(stop)}
+                    >
+                      <strong>{formatAirportCode(stop)}</strong>
+                      <small>{formatAirportName(stop)}</small>
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+          </section>
+        </div>
+      </details>
+    </div>
   {:else}
+    <div class="panel-heading">
+      <div>
+        <p class="eyebrow">Selected aircraft</p>
+        <h2>Flight inspector</h2>
+      </div>
+    </div>
     <p class="empty-copy">Click an aircraft marker to open focused route and tracking details.</p>
   {/if}
 </section>
@@ -593,10 +668,6 @@
     color: rgba(244, 247, 251, 0.9);
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .panel-badge {
-    align-self: center;
   }
 
   .hero-card,
@@ -657,11 +728,31 @@
       linear-gradient(180deg, rgba(6, 7, 10, 0) 0%, rgba(7, 8, 11, 0.7) 46%, rgba(7, 8, 11, 0.9) 100%);
   }
 
+  .photo-overlay-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.65rem;
+    align-items: start;
+  }
+
   .photo-badge-row {
     display: flex;
     flex-wrap: wrap;
     gap: 0.4rem;
     align-items: center;
+  }
+
+  .hero-dismiss {
+    border: 0;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 1.2rem;
+    line-height: 1;
+    color: #f4f7fb;
+    background: rgba(7, 8, 11, 0.52);
+    cursor: pointer;
   }
 
   .overlay-chip {
@@ -749,13 +840,13 @@
     gap: 0.72rem;
   }
 
-  .hero-meta {
+  .hero-summary-grid {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.42rem;
   }
 
-  .hero-meta span,
+  .hero-summary-card,
   .route-summary {
     padding: 0.62rem 0.7rem;
     border-radius: 11px;
@@ -763,10 +854,27 @@
     background: rgba(255, 255, 255, 0.03);
   }
 
-  .hero-meta span {
+  .hero-summary-card {
+    display: grid;
+    gap: 0.14rem;
+  }
+
+  .hero-summary-card span {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(171, 186, 202, 0.56);
+  }
+
+  .hero-summary-card strong {
     color: var(--color-text);
-    font-size: 0.77rem;
-    font-weight: 600;
+    font-size: 0.88rem;
+    line-height: 1.2;
+  }
+
+  .hero-summary-card small {
+    color: rgba(190, 203, 217, 0.72);
+    font-size: 0.74rem;
   }
 
   .route-summary {
@@ -909,6 +1017,64 @@
   .detail-warning,
   .facts-panel {
     padding: 0.82rem;
+  }
+
+  .detail-section-stack {
+    display: grid;
+    gap: 0.65rem;
+  }
+
+  .detail-section {
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.025);
+    box-shadow: 0 10px 22px rgba(0, 0, 0, 0.14);
+    overflow: hidden;
+  }
+
+  .detail-section[open] {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .detail-section-summary {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.9rem;
+    align-items: center;
+    padding: 0.82rem;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .detail-section-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .detail-section-summary div {
+    display: grid;
+    gap: 0.14rem;
+  }
+
+  .detail-section-summary span {
+    font-size: 0.66rem;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: rgba(171, 186, 202, 0.56);
+  }
+
+  .detail-section-summary strong {
+    color: #f5f7fb;
+    font-size: 0.96rem;
+  }
+
+  .detail-section-summary small {
+    color: rgba(190, 203, 217, 0.72);
+    font-size: 0.74rem;
+    text-align: right;
+  }
+
+  .detail-section-body {
+    padding: 0 0.82rem 0.82rem;
   }
 
   .quality-grid {
@@ -1069,11 +1235,19 @@
       display: grid;
     }
 
-    .hero-meta,
+    .hero-summary-grid,
     .telemetry-grid,
     .route-strip,
     .airport-desk-grid {
       grid-template-columns: 1fr;
+    }
+
+    .detail-section-summary {
+      display: grid;
+    }
+
+    .detail-section-summary small {
+      text-align: left;
     }
 
     .route-line {

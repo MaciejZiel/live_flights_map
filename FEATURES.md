@@ -50,7 +50,6 @@
 
 ## Data Quality and Performance
 
-- Progressive loading based on zoom level.
 - Unified retry and error-handling policy.
 - Performance monitoring and error logging.
 - Automated backend and frontend tests.

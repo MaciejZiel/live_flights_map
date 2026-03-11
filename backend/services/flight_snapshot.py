@@ -29,7 +29,7 @@ class FlightSnapshotService:
         self.cache_ttl = cache_ttl
         self.cooldown_seconds = cooldown_seconds
         self._cache: dict[tuple[float, float, float, float], SnapshotCacheEntry] = {}
-        self._cooldown_until: dict[tuple[str, tuple[float, float, float, float]], float] = {}
+        self._cooldown_until: dict[str, float] = {}
         self._lock = Lock()
         self._cache_path = Path(cache_path).expanduser() if cache_path else None
         self._archive_service = archive_service
@@ -48,15 +48,17 @@ class FlightSnapshotService:
                     source="cache",
                     stale=False,
                     reason="cache_hit",
+                    extra_meta={"provider_cooldowns": self._active_cooldowns(now)},
                 )
 
-        payload, fallback_reason, fallback_warning, last_error = self._fetch_from_providers(bbox, cache_key, now)
+        payload, fallback_reason, fallback_warning, last_error, diagnostics = self._fetch_from_providers(bbox, now)
         if payload is None:
             if cache_entry:
                 return self._build_stale_response(
                     cache_entry.payload,
                     reason=fallback_reason or "upstream_error",
                     warning=fallback_warning or "Upstream providers failed. Showing the last cached snapshot.",
+                    extra_meta=diagnostics,
                 )
             raise last_error or FlightProviderError("No upstream providers are currently available.")
 
@@ -74,21 +76,25 @@ class FlightSnapshotService:
                 # Archiving is best-effort and must not break the live feed.
                 pass
 
-        return self._with_meta(payload, source="live", stale=False, reason="live")
+        return self._with_meta(
+            payload,
+            source="live",
+            stale=False,
+            reason="live",
+            extra_meta=diagnostics,
+        )
 
     def _fetch_from_providers(
         self,
         bbox: dict[str, float],
-        cache_key: tuple[float, float, float, float],
         now: float,
-    ) -> tuple[dict[str, object] | None, str | None, str | None, FlightProviderError | None]:
+    ) -> tuple[dict[str, object] | None, str | None, str | None, FlightProviderError | None, dict[str, object]]:
         saw_cooldown = False
         saw_rate_limit = False
         last_error: FlightProviderError | None = None
 
         for provider in self.providers:
-            provider_cooldown_key = (provider.name, cache_key)
-            cooldown_until = self._cooldown_until.get(provider_cooldown_key, 0)
+            cooldown_until = self._cooldown_until.get(provider.name, 0)
             if cooldown_until > now:
                 saw_cooldown = True
                 continue
@@ -97,7 +103,7 @@ class FlightSnapshotService:
                 payload = provider.fetch_flights(bbox=bbox)
             except FlightProviderRateLimitError as exc:
                 with self._lock:
-                    self._cooldown_until[provider_cooldown_key] = monotonic() + self.cooldown_seconds
+                    self._cooldown_until[provider.name] = monotonic() + self.cooldown_seconds
                 saw_rate_limit = True
                 last_error = exc
                 continue
@@ -106,21 +112,42 @@ class FlightSnapshotService:
                 continue
 
             with self._lock:
-                self._cooldown_until.pop(provider_cooldown_key, None)
-            return payload, None, None, None
+                self._cooldown_until.pop(provider.name, None)
+            return payload, None, None, None, {
+                "provider_cooldowns": self._active_cooldowns(monotonic()),
+            }
 
         if saw_rate_limit:
-            return None, "rate_limit", "Upstream provider rate limit exceeded. Showing the last cached snapshot.", last_error
+            return (
+                None,
+                "rate_limit",
+                "Upstream provider rate limit exceeded. Showing the last cached snapshot.",
+                last_error,
+                {"provider_cooldowns": self._active_cooldowns(monotonic())},
+            )
         if saw_cooldown:
-            return None, "cooldown", "Using cached snapshot while upstream providers cool down.", last_error
+            return (
+                None,
+                "cooldown",
+                "Using cached snapshot while upstream providers cool down.",
+                last_error,
+                {"provider_cooldowns": self._active_cooldowns(monotonic())},
+            )
 
-        return None, "upstream_error", None if last_error is None else str(last_error), last_error
+        return (
+            None,
+            "upstream_error",
+            None if last_error is None else str(last_error),
+            last_error,
+            {"provider_cooldowns": self._active_cooldowns(monotonic())},
+        )
 
     @staticmethod
     def _build_stale_response(
         payload: dict[str, object],
         reason: str,
         warning: str,
+        extra_meta: dict[str, object] | None = None,
     ) -> dict[str, object]:
         return FlightSnapshotService._with_meta(
             payload,
@@ -128,6 +155,7 @@ class FlightSnapshotService:
             stale=True,
             reason=reason,
             warning=warning,
+            extra_meta=extra_meta,
         )
 
     @staticmethod
@@ -190,6 +218,7 @@ class FlightSnapshotService:
         stale: bool,
         reason: str,
         warning: str | None = None,
+        extra_meta: dict[str, object] | None = None,
     ) -> dict[str, object]:
         response_payload = deepcopy(payload)
         response_payload["meta"] = {
@@ -198,4 +227,13 @@ class FlightSnapshotService:
             "reason": reason,
             "warning": warning,
         }
+        if isinstance(extra_meta, dict):
+            response_payload["meta"].update(extra_meta)
         return response_payload
+
+    def _active_cooldowns(self, now: float) -> dict[str, int]:
+        return {
+            provider_name: max(1, round(cooldown_until - now))
+            for provider_name, cooldown_until in self._cooldown_until.items()
+            if cooldown_until > now
+        }

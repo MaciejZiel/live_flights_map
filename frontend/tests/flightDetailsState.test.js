@@ -33,7 +33,9 @@ test("buildFlightDetailsFallback keeps live identity and no-photo state", () => 
   });
   assert.equal(fallback.meta.warning, "Waiting for route lookup.");
   assert.equal(fallback.meta.detail_quality.photo_state, "missing");
+  assert.equal(fallback.meta.detail_quality.photo_label, "No aircraft photo");
   assert.equal(fallback.meta.detail_quality.route_state, "pending");
+  assert.equal(fallback.meta.detail_quality.route_label, "Live track only");
 });
 
 test("mergeFlightDetails preserves fallback identity while enriching remote data", () => {
@@ -52,6 +54,9 @@ test("mergeFlightDetails preserves fallback identity while enriching remote data
         band: "good",
         summary: "Resolved route with a representative aircraft photo.",
         photo_state: "representative",
+        photo_label: "Representative aircraft photo",
+        route_state: "resolved",
+        route_label: "Verified route",
       },
     },
   });
@@ -61,6 +66,8 @@ test("mergeFlightDetails preserves fallback identity while enriching remote data
   assert.equal(merged.route.flight_number, "123");
   assert.equal(merged.photo.thumbnail_url, "https://example.com/photo.jpg");
   assert.equal(merged.meta.detail_quality.photo_state, "representative");
+  assert.equal(merged.meta.detail_quality.photo_label, "Representative aircraft photo");
+  assert.equal(merged.meta.detail_quality.route_label, "Verified route");
 });
 
 test("shouldRefreshCachedFlightDetails only retries when photo is still missing", () => {

@@ -4,6 +4,11 @@
   const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
   import {
+    getFreshnessMeta,
+    getPhotoQualityMeta,
+    getRouteQualityMeta,
+  } from "../utils/detailQuality.js";
+  import {
     formatAltitude,
     formatFlightStatus,
     formatHeading,
@@ -17,7 +22,6 @@
   export let detailsError = null;
   export let followAircraft = false;
   export let bookmarked = false;
-  export let liveStatus = "Live";
   export let snapshotFreshness = "waiting";
   export let snapshotConfidence = "High";
   export let snapshotQualitySummary = "Live coverage summary pending.";
@@ -270,21 +274,18 @@
         },
       ]
     : [];
-  $: routeStatusText = route?.plausible === false
-    ? "Route unverified"
-    : route
-      ? "Route resolved"
-      : ["loading", "refreshing"].includes(detailsStatus)
-        ? "Resolving route"
-        : "Live track";
   $: flightStatusText = flight ? formatFlightStatus(flight) : "Live track";
-  $: routeSupportText = route?.plausible === false
-    ? "Route unverified"
-    : route
-      ? null
-      : ["loading", "refreshing"].includes(detailsStatus)
-        ? "Resolving route"
-        : "Live track only";
+  $: routeQualityMeta = getRouteQualityMeta(detailQuality, detailsStatus);
+  $: photoQualityMeta = getPhotoQualityMeta(detailQuality, hasPhoto);
+  $: freshnessMeta = getFreshnessMeta({
+    snapshotFreshness,
+    detailFreshness,
+    isReplayActive,
+    detailsStatus,
+    snapshotFeedLabel,
+    snapshotTransport,
+  });
+  $: routeStatusText = routeQualityMeta.label;
   $: routeSummaryValue = routeStops.length
     ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}`
     : route
@@ -297,20 +298,10 @@
         ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}`
         : "direct route"
       : "route pending";
-  $: detailQualitySummary =
-    detailQuality?.summary ??
-    (detailsStatus === "success"
-      ? "Details ready."
-      : detailsStatus === "error"
-        ? "Fallback live data active."
-        : "Resolving aircraft metadata.");
-  $: dataQualitySummary = detailWarning
-    ? "Guarded"
-    : detailsStatus === "loading" || detailsStatus === "refreshing"
-      ? "Syncing"
-      : isReplayActive
-        ? "Replay"
-        : snapshotConfidence;
+  $: coverageLabel = isReplayActive ? "Archive replay" : snapshotConfidence;
+  $: coverageNote = isReplayActive
+    ? snapshotFeedSummary
+    : `${snapshotFeedLabel} · ${snapshotQualitySummary}`;
 </script>
 
 <section class="panel details-panel" data-testid="flight-details-panel">
@@ -350,8 +341,11 @@
               {#if routeFlightNumber}
                 <span class="route-badge">{routeFlightNumber}</span>
               {/if}
-              {#if !hasPhoto}
-                <span class="route-badge muted">No photo</span>
+              <span class={`route-badge tone-${photoQualityMeta.tone}`}>
+                {hasPhoto ? photoQualityMeta.label : "No photo yet"}
+              </span>
+              {#if route?.plausible === false}
+                <span class="route-badge tone-soft">Tentative route</span>
               {/if}
             </div>
 
@@ -365,9 +359,7 @@
             <p class="hero-subtitle">{heroSubtitle}</p>
             <div class="hero-status-row">
               <span class="hero-status-pill">{flightStatusText}</span>
-              {#if routeSupportText}
-                <span class="hero-status-note">{routeSupportText}</span>
-              {/if}
+              <span class={`hero-status-note tone-${routeQualityMeta.tone}`}>{routeQualityMeta.label}</span>
             </div>
           </div>
         </div>
@@ -447,30 +439,30 @@
         <div class="detail-section-body">
           <section class="facts-panel data-quality-panel">
             <div class="facts-header">
-              <strong>Data quality</strong>
-              <span>{dataQualitySummary}</span>
+              <strong>Quality and coverage</strong>
+              <span>{freshnessMeta.label}</span>
             </div>
 
             <div class="quality-grid">
-              <article class="quality-card">
-                <span>Radar mode</span>
-                <strong>{isReplayActive ? "Replay frame" : liveStatus}</strong>
-                <small>{routeStatusText}</small>
+              <article class={`quality-card tone-${routeQualityMeta.tone}`}>
+                <span>Route</span>
+                <strong>{routeQualityMeta.label}</strong>
+                <small>{routeQualityMeta.note}</small>
+              </article>
+              <article class={`quality-card tone-${photoQualityMeta.tone}`}>
+                <span>Photo</span>
+                <strong>{photoQualityMeta.label}</strong>
+                <small>{photoQualityMeta.note}</small>
+              </article>
+              <article class={`quality-card tone-${freshnessMeta.tone}`}>
+                <span>Freshness</span>
+                <strong>{freshnessMeta.label}</strong>
+                <small>{freshnessMeta.note}</small>
               </article>
               <article class="quality-card">
-                <span>Live coverage</span>
-                <strong>{snapshotConfidence}</strong>
-                <small>{snapshotFreshness} · {snapshotQualitySummary}</small>
-              </article>
-              <article class="quality-card">
-                <span>Details sync</span>
-                <strong>{detailFreshness}</strong>
-                <small>{detailQualitySummary}</small>
-              </article>
-              <article class="quality-card">
-                <span>Feed</span>
-                <strong>{snapshotFeedLabel}</strong>
-                <small>{snapshotFeedSummary} · {snapshotTransport}</small>
+                <span>Coverage</span>
+                <strong>{coverageLabel}</strong>
+                <small>{coverageNote}</small>
               </article>
             </div>
 
@@ -696,6 +688,24 @@
     background: rgba(7, 8, 11, 0.3);
   }
 
+  .route-badge.tone-strong {
+    color: rgba(244, 247, 251, 0.94);
+    background: rgba(120, 200, 255, 0.16);
+    border-color: rgba(120, 200, 255, 0.26);
+  }
+
+  .route-badge.tone-soft {
+    color: rgba(244, 247, 251, 0.92);
+    background: rgba(245, 185, 8, 0.12);
+    border-color: rgba(245, 185, 8, 0.2);
+  }
+
+  .route-badge.tone-muted {
+    color: rgba(214, 224, 235, 0.78);
+    background: rgba(7, 8, 11, 0.3);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
   .hero-card,
   .detail-warning,
   .facts-panel {
@@ -825,6 +835,18 @@
     color: rgba(230, 236, 244, 0.82);
     background: rgba(7, 8, 11, 0.34);
     border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .hero-status-note.tone-strong {
+    background: rgba(120, 200, 255, 0.14);
+    border-color: rgba(120, 200, 255, 0.24);
+    color: rgba(244, 247, 251, 0.94);
+  }
+
+  .hero-status-note.tone-soft {
+    background: rgba(245, 185, 8, 0.1);
+    border-color: rgba(245, 185, 8, 0.18);
+    color: rgba(244, 247, 251, 0.92);
   }
 
   .photo-copy h3 {
@@ -1222,6 +1244,16 @@
     border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(255, 255, 255, 0.045);
+  }
+
+  .quality-card.tone-strong {
+    border-color: rgba(120, 200, 255, 0.2);
+    background: linear-gradient(180deg, rgba(120, 200, 255, 0.1), rgba(255, 255, 255, 0.04));
+  }
+
+  .quality-card.tone-soft {
+    border-color: rgba(245, 185, 8, 0.16);
+    background: linear-gradient(180deg, rgba(245, 185, 8, 0.08), rgba(255, 255, 255, 0.04));
   }
 
   .quality-card strong {

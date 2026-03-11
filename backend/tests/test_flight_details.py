@@ -116,6 +116,8 @@ class FlightDetailsServiceTests(unittest.TestCase):
             "https://example.com/recovered-photo.jpg",
         )
         self.assertEqual(payload_b["meta"]["detail_quality"]["photo_state"], "exact")
+        self.assertEqual(payload_b["meta"]["detail_quality"]["photo_match"], "exact")
+        self.assertEqual(payload_b["meta"]["detail_quality"]["photo_label"], "Exact aircraft photo")
 
     def test_marks_representative_photo_and_resolved_route_in_detail_quality(self) -> None:
         route_client = _RouteClientStub(
@@ -151,7 +153,14 @@ class FlightDetailsServiceTests(unittest.TestCase):
         )
 
         self.assertEqual(payload["meta"]["detail_quality"]["route_state"], "resolved")
+        self.assertEqual(payload["meta"]["detail_quality"]["route_confidence"], "verified")
+        self.assertEqual(payload["meta"]["detail_quality"]["route_label"], "Verified route")
         self.assertEqual(payload["meta"]["detail_quality"]["photo_state"], "representative")
+        self.assertEqual(payload["meta"]["detail_quality"]["photo_match"], "representative")
+        self.assertEqual(
+            payload["meta"]["detail_quality"]["photo_label"],
+            "Representative aircraft photo",
+        )
         self.assertEqual(payload["meta"]["detail_quality"]["photo_source"], "Wikimedia Commons")
         self.assertIn("representative aircraft photo", payload["meta"]["detail_quality"]["summary"].lower())
 

@@ -162,6 +162,13 @@ class FlightDetailsService:
             if route
             else "pending"
         )
+        route_confidence = (
+            "tentative"
+            if route_state == "unverified"
+            else "verified"
+            if route_state == "resolved"
+            else "pending"
+        )
         photo_match_type = str(photo.get("match_type") or "").strip().lower() if isinstance(photo, dict) else ""
         photo_state = (
             "exact"
@@ -169,6 +176,13 @@ class FlightDetailsService:
             else "representative"
             if photo
             else "missing"
+        )
+        photo_label = (
+            "Exact aircraft photo"
+            if photo_state == "exact"
+            else "Representative aircraft photo"
+            if photo_state == "representative"
+            else "No aircraft photo"
         )
         identity_fields = [
             bool(callsign),
@@ -205,10 +219,22 @@ class FlightDetailsService:
                 identity_score=identity_score,
             ),
             "route_state": route_state,
+            "route_confidence": route_confidence,
+            "route_label": FlightDetailsService._route_label(route_confidence),
             "photo_state": photo_state,
+            "photo_match": photo_state,
+            "photo_label": photo_label,
             "photo_source": photo.get("source") if isinstance(photo, dict) else None,
             "identity_score": identity_score,
         }
+
+    @staticmethod
+    def _route_label(route_confidence: str) -> str:
+        if route_confidence == "verified":
+            return "Verified route"
+        if route_confidence == "tentative":
+            return "Tentative route"
+        return "Live track only"
 
     @staticmethod
     def _summarize_detail_quality(

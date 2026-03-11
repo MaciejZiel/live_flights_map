@@ -4211,7 +4211,6 @@
   $: selectedFlightTrailRecentPoints = [...selectedFlightTrail].slice(-5).reverse();
   $: selectedFlightDetailsKey = buildFlightDetailsKey(selectedFlight);
   $: selectedRouteAirports = selectedFlightDetails?.route?.airports ?? [];
-  $: selectedFlightRadarModeLabel = activeReplaySnapshot ? "Replay frame" : statusLabel;
   $: selectedFlightFreshnessLabel = getFreshnessLabel(
     activeReplaySnapshot?.fetchedAt ?? state.fetchedAt
   );
@@ -5694,7 +5693,6 @@
               detailsError={selectedFlightDetailsError}
               followAircraft={followAircraft}
               bookmarked={watchlist.includes(selectedFlight.icao24)}
-              liveStatus={selectedFlightRadarModeLabel}
               snapshotFreshness={selectedFlightFreshnessLabel}
               snapshotConfidence={selectedFlightConfidence}
               snapshotQualitySummary={selectedFlightSnapshotSummary}

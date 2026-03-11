@@ -41,10 +41,13 @@
   let weatherLayer;
   let weatherFrame = null;
   let weatherRefreshTimer = null;
+  let denseAircraftCanvas;
+  let denseAircraftDrawFrame = null;
   const markerRegistry = new Map();
   const airportRegistry = new Map();
   let activeAircraftClusteringEnabled = null;
   let aircraftRenderMode = "detailed";
+  let markerFlights = [];
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
@@ -65,6 +68,7 @@
       [78.0, 170.0],
     ],
   };
+  const DENSE_CANVAS_MARGIN_PX = 12;
 
   function getCurrentAiracId(dateValue = new Date()) {
     const currentDate = new Date(dateValue);
@@ -635,6 +639,161 @@
     activeAircraftClusteringEnabled = aircraftClusteringEnabled;
   }
 
+  function getDenseCanvasPalette(flight, dimmed) {
+    if (dimmed) {
+      return {
+        fillColor: "#8893a0",
+        strokeColor: "#3d4650",
+        fillOpacity: 0.28,
+        strokeOpacity: 0.38,
+      };
+    }
+
+    if (watchModeEnabled) {
+      return {
+        fillColor: "#9aa5b3",
+        strokeColor: "#4b5563",
+        fillOpacity: 0.52,
+        strokeOpacity: 0.62,
+      };
+    }
+
+    if (flight.on_ground) {
+      return {
+        fillColor: "#c48616",
+        strokeColor: "#4a3706",
+        fillOpacity: 0.52,
+        strokeOpacity: 0.68,
+      };
+    }
+
+    return {
+      fillColor: "#f7c716",
+      strokeColor: "#46370a",
+      fillOpacity: 0.72,
+      strokeOpacity: 0.78,
+    };
+  }
+
+  function resizeDenseAircraftCanvas() {
+    if (!map || !denseAircraftCanvas) {
+      return null;
+    }
+
+    const size = map.getSize();
+    const pixelRatio = window.devicePixelRatio || 1;
+    const nextWidth = Math.max(1, Math.round(size.x * pixelRatio));
+    const nextHeight = Math.max(1, Math.round(size.y * pixelRatio));
+
+    if (denseAircraftCanvas.width !== nextWidth || denseAircraftCanvas.height !== nextHeight) {
+      denseAircraftCanvas.width = nextWidth;
+      denseAircraftCanvas.height = nextHeight;
+      denseAircraftCanvas.style.width = `${size.x}px`;
+      denseAircraftCanvas.style.height = `${size.y}px`;
+    }
+
+    const context = denseAircraftCanvas.getContext("2d");
+    if (!context) {
+      return null;
+    }
+
+    context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
+    return { context, size };
+  }
+
+  function clearDenseAircraftCanvas() {
+    if (!denseAircraftCanvas) {
+      return;
+    }
+
+    const context = denseAircraftCanvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.clearRect(0, 0, denseAircraftCanvas.width, denseAircraftCanvas.height);
+  }
+
+  function drawDenseAircraftCanvas() {
+    denseAircraftDrawFrame = null;
+
+    if (!map || !denseAircraftCanvas) {
+      return;
+    }
+
+    const resizedCanvas = resizeDenseAircraftCanvas();
+    if (!resizedCanvas) {
+      return;
+    }
+
+    const { context, size } = resizedCanvas;
+    context.clearRect(0, 0, size.x, size.y);
+
+    if (aircraftRenderMode !== "canvas") {
+      return;
+    }
+
+    const selectedIds = new Set([
+      selectedIcao24,
+      ...watchedIcao24s,
+    ].filter(Boolean));
+    const dimmedIds = new Set(dimmedIcao24s);
+
+    for (const flight of flights ?? []) {
+      if (
+        !flight?.icao24 ||
+        selectedIds.has(flight.icao24) ||
+        !Number.isFinite(flight.latitude) ||
+        !Number.isFinite(flight.longitude)
+      ) {
+        continue;
+      }
+
+      const point = map.latLngToContainerPoint([flight.latitude, flight.longitude]);
+      if (
+        point.x < -DENSE_CANVAS_MARGIN_PX ||
+        point.y < -DENSE_CANVAS_MARGIN_PX ||
+        point.x > size.x + DENSE_CANVAS_MARGIN_PX ||
+        point.y > size.y + DENSE_CANVAS_MARGIN_PX
+      ) {
+        continue;
+      }
+
+      const dimmed = dimmedIds.has(flight.icao24);
+      const palette = getDenseCanvasPalette(flight, dimmed);
+      const radius = flight.on_ground ? 2.2 : 2.8;
+
+      context.beginPath();
+      context.globalAlpha = palette.fillOpacity;
+      context.fillStyle = palette.fillColor;
+      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      context.fill();
+      context.closePath();
+
+      context.beginPath();
+      context.globalAlpha = palette.strokeOpacity;
+      context.strokeStyle = palette.strokeColor;
+      context.lineWidth = flight.on_ground ? 0.7 : 0.9;
+      context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+      context.stroke();
+      context.closePath();
+    }
+
+    context.globalAlpha = 1;
+  }
+
+  function scheduleDenseAircraftCanvasDraw() {
+    if (!map || !denseAircraftCanvas) {
+      return;
+    }
+
+    if (denseAircraftDrawFrame) {
+      cancelAnimationFrame(denseAircraftDrawFrame);
+    }
+
+    denseAircraftDrawFrame = requestAnimationFrame(drawDenseAircraftCanvas);
+  }
+
   function syncAirportLayer() {
     if (!map || !airportLayer) {
       return;
@@ -770,9 +929,20 @@
 
     createAircraftLayer();
     airportLayer = L.layerGroup().addTo(map);
-    syncAircraftMarkers(aircraftLayer, markerRegistry, flights, null, new Set(), false, new Set(), null, aircraftRenderMode);
+    syncAircraftMarkers(
+      aircraftLayer,
+      markerRegistry,
+      markerFlights,
+      null,
+      new Set(),
+      false,
+      new Set(),
+      null,
+      aircraftRenderMode
+    );
     syncAirportLayer();
     loadWeatherFrame();
+    scheduleDenseAircraftCanvasDraw();
     weatherRefreshTimer = window.setInterval(() => {
       loadWeatherFrame();
     }, 10 * 60 * 1000);
@@ -797,6 +967,7 @@
       dispatch("backgroundclick");
     });
     map.on("moveend zoomend", emitBounds);
+    map.on("move zoom resize", scheduleDenseAircraftCanvasDraw);
     document.addEventListener("fullscreenchange", syncFullscreenState);
     emitBounds();
 
@@ -804,6 +975,7 @@
       container.removeEventListener("click", handleMarkerElementClick, true);
       map.off("click");
       map.off("moveend zoomend", emitBounds);
+      map.off("move zoom resize", scheduleDenseAircraftCanvasDraw);
       document.removeEventListener("fullscreenchange", syncFullscreenState);
       map.remove();
       activeBaseLayer = null;
@@ -818,6 +990,9 @@
       if (weatherRefreshTimer) {
         window.clearInterval(weatherRefreshTimer);
       }
+      if (denseAircraftDrawFrame) {
+        cancelAnimationFrame(denseAircraftDrawFrame);
+      }
       markerRegistry.clear();
       airportRegistry.clear();
     };
@@ -827,11 +1002,18 @@
     createAircraftLayer();
   }
 
+  $: markerFlights =
+    aircraftRenderMode === "canvas"
+      ? (flights ?? []).filter(
+          (flight) => flight?.icao24 && (flight.icao24 === selectedIcao24 || watchedIcao24s.includes(flight.icao24))
+        )
+      : flights ?? [];
+
   $: if (aircraftLayer) {
     syncAircraftMarkers(
       aircraftLayer,
       markerRegistry,
-      flights,
+      markerFlights,
       selectedIcao24,
       new Set(watchedIcao24s),
       watchModeEnabled,
@@ -848,6 +1030,10 @@
     zoom: currentZoom,
     clusteringEnabled: aircraftClusteringEnabled,
   });
+
+  $: if (map && denseAircraftCanvas) {
+    scheduleDenseAircraftCanvasDraw();
+  }
 
   $: syncAirportLayer();
 
@@ -893,6 +1079,11 @@
 
 <div bind:this={shell} class:fullscreen={isFullscreen} class={`map-shell map-style-${mapStyle}`}>
   <div bind:this={container} class="map-root"></div>
+  <canvas
+    bind:this={denseAircraftCanvas}
+    class:active={aircraftRenderMode === "canvas"}
+    class="dense-aircraft-canvas"
+  ></canvas>
   <div class="map-tint" aria-hidden="true"></div>
   <div class="map-vignette" aria-hidden="true"></div>
 
@@ -918,6 +1109,21 @@
     width: 100%;
     height: 100%;
     min-height: 100vh;
+  }
+
+  .dense-aircraft-canvas {
+    position: absolute;
+    inset: 0;
+    z-index: 320;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 140ms ease;
+  }
+
+  .dense-aircraft-canvas.active {
+    opacity: 1;
   }
 
   .map-tint,

@@ -8,7 +8,23 @@ export function getAircraftRenderMode({
   }
 
   if (!Number.isFinite(zoom)) {
-    return aircraftCount >= 1800 ? "lite" : "detailed";
+    return aircraftCount >= 2200 ? "canvas" : aircraftCount >= 1800 ? "lite" : "detailed";
+  }
+
+  if (aircraftCount >= 4200) {
+    return "canvas";
+  }
+
+  if (zoom <= 4.8 && aircraftCount >= 1200) {
+    return "canvas";
+  }
+
+  if (zoom <= 5.8 && aircraftCount >= 2000) {
+    return "canvas";
+  }
+
+  if (zoom <= 6.8 && aircraftCount >= 3000) {
+    return "canvas";
   }
 
   if (aircraftCount >= 2800) {
@@ -31,5 +47,5 @@ export function getAircraftRenderMode({
 }
 
 export function shouldUseDetailedAircraftMarker(renderMode, selected = false, watched = false) {
-  return renderMode !== "lite" || selected || watched;
+  return renderMode === "detailed" || selected || watched;
 }

@@ -20,11 +20,22 @@ test("keeps detailed markers when clustering is enabled", () => {
 test("switches to lite mode for dense low-zoom traffic", () => {
   assert.equal(
     getAircraftRenderMode({
-      aircraftCount: 4000,
+      aircraftCount: 1600,
       zoom: 4.9,
       clusteringEnabled: false,
     }),
     "lite"
+  );
+});
+
+test("switches to canvas mode for extreme density", () => {
+  assert.equal(
+    getAircraftRenderMode({
+      aircraftCount: 4000,
+      zoom: 4.9,
+      clusteringEnabled: false,
+    }),
+    "canvas"
   );
 });
 
@@ -43,4 +54,7 @@ test("preserves detailed markers for selected and watched aircraft in lite mode"
   assert.equal(shouldUseDetailedAircraftMarker("lite", true, false), true);
   assert.equal(shouldUseDetailedAircraftMarker("lite", false, true), true);
   assert.equal(shouldUseDetailedAircraftMarker("lite", false, false), false);
+  assert.equal(shouldUseDetailedAircraftMarker("canvas", true, false), true);
+  assert.equal(shouldUseDetailedAircraftMarker("canvas", false, true), true);
+  assert.equal(shouldUseDetailedAircraftMarker("canvas", false, false), false);
 });

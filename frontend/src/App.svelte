@@ -492,6 +492,10 @@
     return airport?.iata ?? airport?.icao ?? airport?.location ?? "?";
   }
 
+  function formatAirportPlace(airport) {
+    return airport?.location ?? airport?.name ?? airport?.city ?? "Route lookup pending";
+  }
+
   function formatQuickRoute(airports) {
     if (!airports?.length) {
       return null;
@@ -3871,6 +3875,24 @@
     selectedFlightDetails?.route?.iata_codes ??
     selectedFlightDetails?.route?.airport_codes ??
     null;
+  $: selectedFlightOriginAirport = selectedRouteAirports[0] ?? selectedFlightDetails?.route?.origin ?? null;
+  $: selectedFlightDestinationAirport = selectedRouteAirports.length
+    ? selectedRouteAirports[selectedRouteAirports.length - 1]
+    : selectedFlightDetails?.route?.destination ?? null;
+  $: selectedFlightOperatorLabel = selectedFlight
+    ? selectedFlightDetails?.route?.airline_name ??
+      selectedFlightDetails?.route?.airline_code ??
+      (selectedOperatorCode !== "N/A" ? selectedOperatorCode : selectedFlight.origin_country ?? "Unknown")
+    : null;
+  $: selectedFlightIdentityLine = selectedFlight
+    ? [
+        selectedFlight.registration ?? selectedFlight.icao24.toUpperCase(),
+        selectedFlight.type_code ?? "Type n/a",
+        selectedFlightOperatorLabel,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : null;
   $: selectedFlightQuickSubtitle = selectedFlight
     ? selectedFlightQuickRoute ??
       [
@@ -5273,79 +5295,145 @@
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
       {/if}
       <div class="rail-header">
-        <div class="rail-brand">
-          <span>
-            {#if selectedFlight}
-              {selectedFlightQuickStatus}
-            {:else if selectedAirport}
-              Airport board
-            {:else if selectedEntityContext}
-              Search focus
-            {:else}
-              Click any aircraft
-            {/if}
-          </span>
-          <strong>
-            {#if selectedFlight}
-              {selectedFlightCallsignLabel}
-            {:else if selectedAirport}
-              {selectedAirport.iata ?? selectedAirport.icao ?? selectedAirport.entity_key}
-            {:else if selectedEntityContext}
-              {selectedEntityContext.label ?? selectedEntityContext.entity_key}
-            {:else}
-              Visible traffic
-            {/if}
-          </strong>
-          {#if selectedFlightQuickSubtitle}
-            <p class="rail-subtitle">{selectedFlightQuickSubtitle}</p>
-          {:else if selectedAirport}
-            <p class="rail-subtitle">
-              {selectedAirport.name ?? selectedAirport.label}
-              {#if selectedAirport.city || selectedAirport.country}
-                · {[selectedAirport.city, selectedAirport.country].filter(Boolean).join(", ")}
-              {/if}
-            </p>
-          {:else if selectedEntityContext}
-            <p class="rail-subtitle">{selectedEntityContext.subtitle ?? "Selected search entity"}</p>
-          {/if}
-
-          {#if selectedFlightQuickMetrics.length}
-            <div class="rail-metric-row" aria-label="Selected aircraft live metrics">
-              {#each selectedFlightQuickMetrics as metric}
-                <span class="rail-metric-chip">
-                  <small>{metric.label}</small>
-                  <strong>{metric.value}</strong>
-                </span>
-              {/each}
-            </div>
-          {/if}
-        </div>
         {#if selectedFlight}
-          <div class="rail-actions">
-            <button class:active={followAircraft} class="rail-toggle" type="button" on:click={toggleFollowAircraft}>
-              {followAircraft ? "Following" : "Follow"}
-            </button>
-            <button
-              class:active={watchlist.includes(selectedFlight.icao24)}
-              class="rail-toggle"
-              type="button"
-              on:click={toggleSelectedFlightWatchlist}
-            >
-              {watchlist.includes(selectedFlight.icao24) ? "Saved" : "Bookmark"}
-            </button>
-            <button class="rail-toggle" type="button" on:click={copyShareLink}>
-              {shareFeedback || "Share"}
-            </button>
-            <button
-              class="rail-close"
-              type="button"
-              aria-label="Close selected aircraft"
-              on:click={() => clearSelectedFlight({ closeSidebar: true })}
-            >
-              ×
-            </button>
+          <div class="rail-brand rail-brand-flight">
+            <div class="rail-flight-head">
+              <div class="rail-flight-copy">
+                <span class="rail-kicker">Selected aircraft</span>
+                <div class="rail-flight-title-row">
+                  <strong class="rail-flight-title">{selectedFlightCallsignLabel}</strong>
+                  <span class="rail-status-pill">{selectedFlightQuickStatus}</span>
+                </div>
+                {#if selectedFlightIdentityLine}
+                  <p class="rail-subtitle rail-subtitle-strong">{selectedFlightIdentityLine}</p>
+                {/if}
+              </div>
+              <button
+                class="rail-close rail-close-hero"
+                type="button"
+                aria-label="Close selected aircraft"
+                on:click={() => clearSelectedFlight({ closeSidebar: true })}
+              >
+                ×
+              </button>
+            </div>
+
+            {#if selectedFlightOriginAirport || selectedFlightDestinationAirport || selectedFlightQuickRoute}
+              <div class="rail-route-banner">
+                <div class="rail-route-node">
+                  <small>From</small>
+                  <strong>{selectedFlightOriginAirport ? formatAirportCode(selectedFlightOriginAirport) : "Origin"}</strong>
+                  <span>
+                    {selectedFlightOriginAirport
+                      ? formatAirportPlace(selectedFlightOriginAirport)
+                      : "Route lookup pending"}
+                  </span>
+                </div>
+                <div class="rail-route-arrow" aria-hidden="true">→</div>
+                <div class="rail-route-node">
+                  <small>To</small>
+                  <strong>{selectedFlightDestinationAirport ? formatAirportCode(selectedFlightDestinationAirport) : "Destination"}</strong>
+                  <span>
+                    {selectedFlightDestinationAirport
+                      ? formatAirportPlace(selectedFlightDestinationAirport)
+                      : selectedFlightQuickRoute ?? "Route lookup pending"}
+                  </span>
+                </div>
+              </div>
+            {:else if selectedFlightQuickSubtitle}
+              <p class="rail-subtitle">{selectedFlightQuickSubtitle}</p>
+            {/if}
+
+            <div class="rail-chip-row">
+              <span class="rail-info-chip">{selectedFlightTransportMode}</span>
+              <span class="rail-info-chip">{selectedFlightFreshnessLabel}</span>
+              <span class="rail-info-chip">{selectedFlightConfidence}</span>
+            </div>
+
+            <div class="rail-summary-grid">
+              <article class="rail-summary-card">
+                <small>Registration</small>
+                <strong>{selectedFlight.registration ?? selectedFlight.icao24.toUpperCase()}</strong>
+                <span>Aircraft identity</span>
+              </article>
+              <article class="rail-summary-card">
+                <small>Type</small>
+                <strong>{selectedFlight.type_code ?? "Type n/a"}</strong>
+                <span>Equipment</span>
+              </article>
+              <article class="rail-summary-card">
+                <small>Operator</small>
+                <strong>{selectedFlightOperatorLabel ?? "Unknown"}</strong>
+                <span>Carrier or operator</span>
+              </article>
+              <article class="rail-summary-card">
+                <small>Details</small>
+                <strong>{selectedFlightDetailsFreshness}</strong>
+                <span>Last detail sync</span>
+              </article>
+            </div>
+
+            {#if selectedFlightQuickMetrics.length}
+              <div class="rail-metric-row" aria-label="Selected aircraft live metrics">
+                {#each selectedFlightQuickMetrics as metric}
+                  <span class="rail-metric-chip">
+                    <small>{metric.label}</small>
+                    <strong>{metric.value}</strong>
+                  </span>
+                {/each}
+              </div>
+            {/if}
+
+            <div class="rail-action-grid">
+              <button class:active={followAircraft} class="rail-toggle" type="button" on:click={toggleFollowAircraft}>
+                {followAircraft ? "Following" : "Follow"}
+              </button>
+              <button
+                class:active={watchlist.includes(selectedFlight.icao24)}
+                class="rail-toggle"
+                type="button"
+                on:click={toggleSelectedFlightWatchlist}
+              >
+                {watchlist.includes(selectedFlight.icao24) ? "Saved" : "Bookmark"}
+              </button>
+              <button class="rail-toggle" type="button" on:click={copyShareLink}>
+                {shareFeedback || "Share"}
+              </button>
+            </div>
           </div>
-        {:else if selectedAirport}
+        {:else}
+          <div class="rail-brand">
+            <span>
+              {#if selectedAirport}
+                Airport board
+              {:else if selectedEntityContext}
+                Search focus
+              {:else}
+                Click any aircraft
+              {/if}
+            </span>
+            <strong>
+              {#if selectedAirport}
+                {selectedAirport.iata ?? selectedAirport.icao ?? selectedAirport.entity_key}
+              {:else if selectedEntityContext}
+                {selectedEntityContext.label ?? selectedEntityContext.entity_key}
+              {:else}
+                Visible traffic
+              {/if}
+            </strong>
+            {#if selectedAirport}
+              <p class="rail-subtitle">
+                {selectedAirport.name ?? selectedAirport.label}
+                {#if selectedAirport.city || selectedAirport.country}
+                  · {[selectedAirport.city, selectedAirport.country].filter(Boolean).join(", ")}
+                {/if}
+              </p>
+            {:else if selectedEntityContext}
+              <p class="rail-subtitle">{selectedEntityContext.subtitle ?? "Selected search entity"}</p>
+            {/if}
+          </div>
+        {/if}
+        {#if !selectedFlight && selectedAirport}
           <div class="rail-actions">
             <button class="rail-toggle" type="button" on:click={addSelectedAirportAlert}>
               Alert
@@ -5370,7 +5458,7 @@
               ×
             </button>
           </div>
-        {:else if selectedEntityContext}
+        {:else if !selectedFlight && selectedEntityContext}
           <div class="rail-actions">
             <button
               class:active={isEntityBookmarked(selectedEntityContext.entity_type, selectedEntityContext.entity_key)}
@@ -5392,7 +5480,7 @@
               ×
             </button>
           </div>
-        {:else}
+        {:else if !selectedFlight}
           <div class="rail-actions">
             <span class="rail-count">{visibleTrackedCount}</span>
             {#if isMobileViewport}
@@ -6867,6 +6955,11 @@
     gap: 0.18rem;
   }
 
+  .rail-brand-flight {
+    gap: 0.72rem;
+    width: 100%;
+  }
+
   .rail-brand span {
     color: #98a4b3;
     font-size: 0.66rem;
@@ -6887,21 +6980,164 @@
     line-height: 1.4;
   }
 
-  .rail-metric-row {
+  .rail-subtitle-strong {
+    color: #d7e2ef;
+    font-size: 0.8rem;
+  }
+
+  .rail-kicker {
+    color: #8fa0b5;
+    font-size: 0.64rem;
+    font-weight: 800;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+
+  .rail-flight-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    align-items: start;
+  }
+
+  .rail-flight-copy {
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+  }
+
+  .rail-flight-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    align-items: center;
+  }
+
+  .rail-flight-title {
+    font-size: 1.35rem;
+    line-height: 1;
+    letter-spacing: -0.03em;
+  }
+
+  .rail-status-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.8rem;
+    padding: 0 0.72rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #171a1f;
+    background: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
+  }
+
+  .rail-route-banner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.65rem;
+    align-items: center;
+    padding: 0.78rem 0.82rem;
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background:
+      radial-gradient(circle at top right, rgba(245, 185, 8, 0.12), transparent 35%),
+      linear-gradient(180deg, rgba(27, 30, 35, 0.98) 0%, rgba(15, 18, 22, 0.98) 100%);
+  }
+
+  .rail-route-node {
+    display: grid;
+    gap: 0.14rem;
+    min-width: 0;
+  }
+
+  .rail-route-node small,
+  .rail-summary-card small {
+    color: rgba(171, 186, 201, 0.68);
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+
+  .rail-route-node strong {
+    color: #f5f9fd;
+    font-size: 1rem;
+    line-height: 1.1;
+  }
+
+  .rail-route-node span,
+  .rail-summary-card span {
+    color: #9fabb9;
+    font-size: 0.72rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .rail-route-arrow {
+    color: #ffd34f;
+    font-size: 1.2rem;
+    font-weight: 900;
+  }
+
+  .rail-chip-row {
     display: flex;
     flex-wrap: wrap;
     gap: 0.42rem;
-    margin-top: 0.58rem;
+  }
+
+  .rail-info-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.7rem;
+    padding: 0 0.62rem;
+    border-radius: 999px;
+    color: #d7e1ec;
+    font-size: 0.67rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .rail-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.45rem;
+  }
+
+  .rail-summary-card {
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.62rem 0.7rem;
+    border-radius: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .rail-summary-card strong {
+    color: #eff4fa;
+    font-size: 0.88rem;
+    line-height: 1.2;
+  }
+
+  .rail-metric-row {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.42rem;
   }
 
   .rail-metric-chip {
-    display: inline-grid;
+    display: grid;
     gap: 0.14rem;
-    min-width: 4.55rem;
-    padding: 0.46rem 0.58rem 0.5rem;
-    border-radius: 12px;
+    padding: 0.6rem 0.66rem 0.64rem;
+    border-radius: 14px;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.05);
+    background:
+      linear-gradient(180deg, rgba(31, 34, 39, 0.98) 0%, rgba(19, 21, 25, 0.98) 100%);
   }
 
   .rail-metric-chip small {
@@ -6914,7 +7150,7 @@
 
   .rail-metric-chip strong {
     color: #eff4fa;
-    font-size: 0.78rem;
+    font-size: 0.9rem;
     line-height: 1.2;
   }
 
@@ -6938,13 +7174,20 @@
     gap: 0.38rem;
   }
 
+  .rail-action-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.42rem;
+  }
+
   .rail-toggle {
     border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 999px;
+    border-radius: 14px;
+    min-height: 2.45rem;
     padding: 0.42rem 0.7rem;
     font: inherit;
     font-size: 0.72rem;
-    font-weight: 700;
+    font-weight: 800;
     color: #d4dde7;
     background: rgba(255, 255, 255, 0.04);
     cursor: pointer;
@@ -6969,6 +7212,17 @@
     color: #c8d0db;
     background: transparent;
     cursor: pointer;
+  }
+
+  .rail-close-hero {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: 999px;
+    color: #d2dbe6;
+    background: rgba(255, 255, 255, 0.05);
   }
 
   .panel-dismiss {
@@ -7404,6 +7658,21 @@
     .center-bar {
       width: min(32rem, calc(100vw - 1.5rem));
     }
+
+    .rail-route-banner {
+      grid-template-columns: 1fr;
+    }
+
+    .rail-route-arrow {
+      justify-self: start;
+      transform: rotate(90deg);
+    }
+
+    .rail-summary-grid,
+    .rail-metric-row,
+    .rail-action-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   @media (max-width: 720px) {
@@ -7441,9 +7710,34 @@
     .workflow-metrics,
     .inspector-tab-row,
     .workflow-header,
-    .route-desk-row {
+    .route-desk-row,
+    .rail-summary-grid,
+    .rail-metric-row,
+    .rail-action-grid {
       grid-template-columns: 1fr;
       display: grid;
+    }
+
+    .rail-flight-head {
+      gap: 0.55rem;
+    }
+
+    .rail-flight-title {
+      font-size: 1.18rem;
+    }
+
+    .rail-status-pill {
+      min-height: 1.65rem;
+      padding-inline: 0.6rem;
+    }
+
+    .rail-route-banner {
+      padding: 0.72rem 0.74rem;
+    }
+
+    .rail-info-chip {
+      min-height: 1.58rem;
+      font-size: 0.64rem;
     }
 
     .bottom-dock {

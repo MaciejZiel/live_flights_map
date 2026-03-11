@@ -8552,14 +8552,20 @@
     }
 
     .radar-left-panel {
-      top: 8.2rem;
+      top: auto;
       right: 0.75rem;
       bottom: 0.75rem;
       left: 0.75rem;
       width: auto;
-      transform: translateY(110%);
-      transition: transform 180ms ease;
+      max-height: min(74vh, 38rem);
+      padding: 0.72rem 0.72rem 0.78rem;
+      border-radius: 24px;
+      transform: translateY(calc(100% + 1.2rem));
+      transition: transform 200ms ease;
       z-index: 1290;
+      box-shadow:
+        0 -18px 40px rgba(0, 0, 0, 0.38),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
     .radar-left-panel.open {
@@ -8582,14 +8588,20 @@
     }
 
     .radar-right-panel {
-      top: 8.2rem;
+      top: auto;
       right: 0.75rem;
       bottom: 0.75rem;
       left: 0.75rem;
       width: auto;
-      transform: translateY(110%);
-      transition: transform 180ms ease;
+      max-height: min(78vh, 42rem);
+      padding: 0.72rem 0.72rem 0.78rem;
+      border-radius: 24px;
+      transform: translateY(calc(100% + 1.2rem));
+      transition: transform 200ms ease;
       z-index: 1300;
+      box-shadow:
+        0 -18px 42px rgba(0, 0, 0, 0.42),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
     }
 
     .active-state-bar {
@@ -8610,6 +8622,11 @@
 
     .radar-right-panel.open {
       transform: translateY(0);
+    }
+
+    .panel-stack,
+    .inspector-scroll {
+      max-height: calc(min(78vh, 42rem) - 4.6rem);
     }
 
     .sidebar-backdrop {
@@ -8672,6 +8689,17 @@
     .active-state-chip-list {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .radar-left-panel,
+    .radar-right-panel {
+      max-height: min(80vh, 42rem);
+      border-radius: 22px;
+    }
+
+    .panel-stack,
+    .inspector-scroll {
+      max-height: calc(min(80vh, 42rem) - 4.3rem);
     }
   }
 

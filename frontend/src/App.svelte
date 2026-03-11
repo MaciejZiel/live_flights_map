@@ -2458,6 +2458,72 @@
     });
   }
 
+  function addAlertForFlightTarget(flight) {
+    if (!flight) {
+      return;
+    }
+
+    if (flight.callsign) {
+      addAlertRule({
+        type: "callsign",
+        query: flight.callsign,
+      });
+      return;
+    }
+
+    if (flight.registration) {
+      addAlertRule({
+        type: "registration",
+        query: flight.registration,
+      });
+      return;
+    }
+
+    addAlertRule({
+      type: "icao24",
+      query: flight.icao24,
+    });
+  }
+
+  function openAirportFlightOnMap(flight) {
+    if (!flight) {
+      return;
+    }
+
+    openFlightInspector(flight, {
+      focusMap: true,
+      zoom: 8.4,
+      exitReplay: true,
+      inspectorTab: "details",
+    });
+  }
+
+  function openAirportFlightDetails(flight) {
+    if (!flight) {
+      return;
+    }
+
+    openFlightInspector(flight, {
+      focusMap: false,
+      exitReplay: true,
+      inspectorTab: "details",
+    });
+  }
+
+  function trackAirportFlight(flight) {
+    if (!flight) {
+      return;
+    }
+
+    openFlightInspector(flight, {
+      focusMap: true,
+      zoom: 8.4,
+      exitReplay: true,
+      inspectorTab: "tracking",
+    });
+    followAircraft = true;
+  }
+
   function addEntityContextAlert() {
     if (!selectedEntityContext) {
       return;
@@ -6451,6 +6517,9 @@
             bookmarked={selectedAirportBookmarked}
             shareFeedback={shareFeedback}
             onSelectFlight={selectWatchedFlight}
+            onOpenFlight={openAirportFlightDetails}
+            onTrackFlight={trackAirportFlight}
+            onAddFlightAlert={addAlertForFlightTarget}
             onRetry={() => loadSelectedAirportDashboard(selectedAirport)}
             onToggleWeather={() => {
               weatherLayerEnabled = !weatherLayerEnabled;

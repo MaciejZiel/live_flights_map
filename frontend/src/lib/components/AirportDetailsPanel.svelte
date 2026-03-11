@@ -13,6 +13,9 @@
   export let bookmarked = false;
   export let shareFeedback = "";
   export let onSelectFlight = () => {};
+  export let onOpenFlight = () => {};
+  export let onTrackFlight = () => {};
+  export let onAddFlightAlert = () => {};
   export let onRetry = () => {};
   export let onToggleWeather = () => {};
   export let onToggleBookmark = () => {};
@@ -204,16 +207,24 @@
         {#if nearby.length}
           <div class="movement-list">
             {#each nearby.slice(0, 6) as flight}
-              <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
-                <span class="movement-main">
-                  <strong>{formatFlightTitle(flight)}</strong>
-                  <small>{formatMovementCopy(flight, "overview")}</small>
-                </span>
-                <span class="movement-meta">
-                  <strong>{formatAltitude(flight.altitude)}</strong>
-                  <small>{formatSpeed(flight.velocity)}</small>
-                </span>
-              </button>
+              <article class="movement-card">
+                <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
+                  <span class="movement-main">
+                    <strong>{formatFlightTitle(flight)}</strong>
+                    <small>{formatMovementCopy(flight, "overview")}</small>
+                  </span>
+                  <span class="movement-meta">
+                    <strong>{formatAltitude(flight.altitude)}</strong>
+                    <small>{formatSpeed(flight.velocity)}</small>
+                  </span>
+                </button>
+                <div class="movement-actions">
+                  <button class="movement-action" type="button" on:click={() => onSelectFlight(flight)}>Map</button>
+                  <button class="movement-action" type="button" on:click={() => onOpenFlight(flight)}>Open</button>
+                  <button class="movement-action" type="button" on:click={() => onTrackFlight(flight)}>Track</button>
+                  <button class="movement-action" type="button" on:click={() => onAddFlightAlert(flight)}>Alert</button>
+                </div>
+              </article>
             {/each}
           </div>
         {:else if status === "loading" || status === "refreshing"}
@@ -276,16 +287,24 @@
         {#if nearby.length}
           <div class="movement-list">
             {#each nearby as flight}
-              <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
-                <span class="movement-main">
-                  <strong>{formatFlightTitle(flight)}</strong>
-                  <small>{formatMovementCopy(flight, "overview")}</small>
-                </span>
-                <span class="movement-meta">
-                  <strong>{formatAltitude(flight.altitude)}</strong>
-                  <small>{formatSpeed(flight.velocity)}</small>
-                </span>
-              </button>
+              <article class="movement-card">
+                <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
+                  <span class="movement-main">
+                    <strong>{formatFlightTitle(flight)}</strong>
+                    <small>{formatMovementCopy(flight, "overview")}</small>
+                  </span>
+                  <span class="movement-meta">
+                    <strong>{formatAltitude(flight.altitude)}</strong>
+                    <small>{formatSpeed(flight.velocity)}</small>
+                  </span>
+                </button>
+                <div class="movement-actions">
+                  <button class="movement-action" type="button" on:click={() => onSelectFlight(flight)}>Map</button>
+                  <button class="movement-action" type="button" on:click={() => onOpenFlight(flight)}>Open</button>
+                  <button class="movement-action" type="button" on:click={() => onTrackFlight(flight)}>Track</button>
+                  <button class="movement-action" type="button" on:click={() => onAddFlightAlert(flight)}>Alert</button>
+                </div>
+              </article>
             {/each}
           </div>
         {:else}
@@ -345,16 +364,24 @@
         {#if arrivals.length}
           <div class="movement-list">
             {#each arrivals as flight}
-              <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
-                <span class="movement-main">
-                  <strong>{formatFlightTitle(flight)}</strong>
-                  <small>{formatMovementCopy(flight, "arrival")}</small>
-                </span>
-                <span class="movement-meta">
-                  <strong>{flight.type_code ?? "Type n/a"}</strong>
-                  <small>{formatRelativeTime(flight.fetched_at)}</small>
-                </span>
-              </button>
+              <article class="movement-card">
+                <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
+                  <span class="movement-main">
+                    <strong>{formatFlightTitle(flight)}</strong>
+                    <small>{formatMovementCopy(flight, "arrival")}</small>
+                  </span>
+                  <span class="movement-meta">
+                    <strong>{flight.type_code ?? "Type n/a"}</strong>
+                    <small>{formatRelativeTime(flight.fetched_at)}</small>
+                  </span>
+                </button>
+                <div class="movement-actions">
+                  <button class="movement-action" type="button" on:click={() => onSelectFlight(flight)}>Map</button>
+                  <button class="movement-action" type="button" on:click={() => onOpenFlight(flight)}>Open</button>
+                  <button class="movement-action" type="button" on:click={() => onTrackFlight(flight)}>Track</button>
+                  <button class="movement-action" type="button" on:click={() => onAddFlightAlert(flight)}>Alert</button>
+                </div>
+              </article>
             {/each}
           </div>
         {:else}
@@ -371,16 +398,24 @@
         {#if departures.length}
           <div class="movement-list">
             {#each departures as flight}
-              <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
-                <span class="movement-main">
-                  <strong>{formatFlightTitle(flight)}</strong>
-                  <small>{formatMovementCopy(flight, "departure")}</small>
-                </span>
-                <span class="movement-meta">
-                  <strong>{flight.type_code ?? "Type n/a"}</strong>
-                  <small>{formatRelativeTime(flight.fetched_at)}</small>
-                </span>
-              </button>
+              <article class="movement-card">
+                <button class="movement-row" type="button" on:click={() => onSelectFlight(flight)}>
+                  <span class="movement-main">
+                    <strong>{formatFlightTitle(flight)}</strong>
+                    <small>{formatMovementCopy(flight, "departure")}</small>
+                  </span>
+                  <span class="movement-meta">
+                    <strong>{flight.type_code ?? "Type n/a"}</strong>
+                    <small>{formatRelativeTime(flight.fetched_at)}</small>
+                  </span>
+                </button>
+                <div class="movement-actions">
+                  <button class="movement-action" type="button" on:click={() => onSelectFlight(flight)}>Map</button>
+                  <button class="movement-action" type="button" on:click={() => onOpenFlight(flight)}>Open</button>
+                  <button class="movement-action" type="button" on:click={() => onTrackFlight(flight)}>Track</button>
+                  <button class="movement-action" type="button" on:click={() => onAddFlightAlert(flight)}>Alert</button>
+                </div>
+              </article>
             {/each}
           </div>
         {:else}
@@ -471,6 +506,7 @@
   .airport-flow-button,
   .airport-tab-row button,
   .movement-row,
+  .movement-action,
   .movement-pill,
   .airport-banner button {
     font: inherit;
@@ -517,6 +553,28 @@
     color: #ffd6d6;
     background: rgba(122, 35, 35, 0.3);
     border: 1px solid rgba(194, 66, 66, 0.22);
+  }
+
+  .movement-card {
+    display: grid;
+    gap: 0.42rem;
+  }
+
+  .movement-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+    padding-left: 0.08rem;
+  }
+
+  .movement-action {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    padding: 0.34rem 0.6rem;
+    font-size: 0.68rem;
+    font-weight: 800;
+    color: rgba(223, 232, 241, 0.88);
+    background: rgba(255, 255, 255, 0.04);
   }
 
   .airport-stat-grid,

@@ -146,6 +146,7 @@
   let followAircraft = false;
   let embedMode = false;
   let mapStyle = "standard";
+  let simpleModeEnabled = true;
   let aircraftClusteringEnabled = false;
   let weatherLayerEnabled = false;
   let showAirportMarkers = true;
@@ -307,6 +308,7 @@
         ...savedPreferences.filters,
       };
       mapStyle = savedPreferences.mapStyle ?? mapStyle;
+      simpleModeEnabled = savedPreferences.simpleModeEnabled ?? simpleModeEnabled;
       mapViewport = savedPreferences.mapViewport ?? mapViewport;
       filterPresets = savedPreferences.filterPresets ?? filterPresets;
       sortBy = savedPreferences.sortBy ?? sortBy;
@@ -3135,6 +3137,27 @@
     theme = nextTheme;
   }
 
+  function setSimpleMode(enabled) {
+    simpleModeEnabled = enabled;
+
+    if (enabled) {
+      desktopUtilityExpanded = false;
+      desktopTrafficBoardOpen = false;
+      if (isMobileViewport) {
+        mobileUtilityOpen = false;
+      }
+      return;
+    }
+
+    if (!isMobileViewport) {
+      desktopUtilityExpanded = true;
+    }
+  }
+
+  function toggleShellMode() {
+    setSimpleMode(!simpleModeEnabled);
+  }
+
   function cycleMapStyle() {
     const mapStyles = ["aviation", "terrain", "satellite", "light", "standard", "dark"];
     const currentIndex = mapStyles.indexOf(mapStyle);
@@ -4310,6 +4333,7 @@
     !showAirportMarkers ? "Airports hidden" : null,
   ].filter(Boolean);
   $: statusLabel = getStatusLabel(state);
+  $: shellModeLabel = simpleModeEnabled ? "Simple" : "Advanced";
   $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
   $: confidenceLabel = getConfidenceLabel(state);
   $: transportLabel = state.transport === "sse" ? "Stream" : "Polling";
@@ -4605,6 +4629,7 @@
     saveUserPreferences({
       filters,
       mapStyle,
+      simpleModeEnabled,
       mapViewport,
       filterPresets,
       sortBy,
@@ -4633,6 +4658,7 @@
   $: if (preferencesReady) {
     filters;
     mapStyle;
+    simpleModeEnabled;
     mapViewport;
     filterPresets;
     sortBy;
@@ -4763,8 +4789,17 @@
 
             <div class="center-actions">
               {#if isMobileViewport}
-                <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileUtility}>
-                  Tools
+                <button
+                  class="overlay-card topbar-icon topbar-action-chip"
+                  type="button"
+                  on:click={() => {
+                    if (simpleModeEnabled) {
+                      setSimpleMode(false);
+                    }
+                    toggleMobileUtility();
+                  }}
+                >
+                  {simpleModeEnabled ? "Advanced" : "Tools"}
                 </button>
                 <button class="overlay-card topbar-icon topbar-action-chip" type="button" on:click={toggleMobileSidebar}>
                   {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
@@ -4772,34 +4807,52 @@
               {:else}
                 <div class="topbar-live-pill" aria-label="Live radar summary">
                   <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
-                  <strong>{activeReplaySnapshot ? "Replay" : freshnessLabel}</strong>
+                  <strong>{shellModeLabel}</strong>
                   <small>{activeReplaySnapshot ? "Archive frame" : feedLabel}</small>
                 </div>
-                <button
-                  class:active={desktopTrafficBoardOpen && !selectedFlight && !selectedAirport && !selectedEntityContext}
-                  class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
-                  type="button"
-                  on:click={toggleTrafficBoard}
-                >
-                  <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
-                  <span class="topbar-action-label">
-                    {selectedFlight || selectedAirport || selectedEntityContext
-                      ? "Traffic"
-                      : desktopTrafficBoardOpen
-                        ? "Hide"
-                        : "Traffic"}
-                  </span>
-                  <strong>{formatCompactCount(visibleTrackedCount)}</strong>
-                </button>
-                <button
-                  class:active={desktopUtilityExpanded}
-                  class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
-                  type="button"
-                  on:click={() => toggleUtilityWorkspace()}
-                >
-                  <span class="topbar-action-label">Workspace</span>
-                  <strong>{workspaceQuickCount}</strong>
-                </button>
+                {#if simpleModeEnabled}
+                  <button
+                    class="overlay-card topbar-icon topbar-action-chip topbar-action-summary topbar-shell-toggle"
+                    type="button"
+                    on:click={() => setSimpleMode(false)}
+                  >
+                    <span class="topbar-action-label">Advanced</span>
+                    <strong>{workspaceQuickCount + activeFilterCount}</strong>
+                  </button>
+                {:else}
+                  <button
+                    class:active={desktopTrafficBoardOpen && !selectedFlight && !selectedAirport && !selectedEntityContext}
+                    class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
+                    type="button"
+                    on:click={toggleTrafficBoard}
+                  >
+                    <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
+                    <span class="topbar-action-label">
+                      {selectedFlight || selectedAirport || selectedEntityContext
+                        ? "Traffic"
+                        : desktopTrafficBoardOpen
+                          ? "Hide"
+                          : "Traffic"}
+                    </span>
+                    <strong>{formatCompactCount(visibleTrackedCount)}</strong>
+                  </button>
+                  <button
+                    class:active={desktopUtilityExpanded}
+                    class="overlay-card topbar-icon topbar-action-chip topbar-action-summary"
+                    type="button"
+                    on:click={() => toggleUtilityWorkspace()}
+                  >
+                    <span class="topbar-action-label">Workspace</span>
+                    <strong>{workspaceQuickCount}</strong>
+                  </button>
+                  <button
+                    class="overlay-card topbar-icon topbar-action-chip"
+                    type="button"
+                    on:click={() => setSimpleMode(true)}
+                  >
+                    Simple
+                  </button>
+                {/if}
               {/if}
             </div>
           </div>
@@ -4861,7 +4914,7 @@
       {/if}
     </div>
 
-    {#if !embedMode}
+    {#if !embedMode && (isMobileViewport || !simpleModeEnabled)}
     <aside class:open={mobileUtilityOpen} class:compact={!isMobileViewport && !desktopUtilityExpanded} class="overlay-card radar-left-panel">
       {#if isMobileViewport}
         <span class="mobile-drawer-handle" aria-hidden="true"></span>
@@ -6473,7 +6526,7 @@
           <span class="dock-label">Embed</span>
         </button>
       </section>
-    {:else}
+    {:else if !simpleModeEnabled}
     <nav aria-label="Quick map controls" class="overlay-card bottom-dock">
       <button class="dock-button" type="button" on:click={() => triggerViewPreset("poland")}>
         <span class="dock-glyph dock-glyph-scope" aria-hidden="true"></span>

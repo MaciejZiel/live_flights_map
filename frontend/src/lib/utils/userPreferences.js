@@ -156,6 +156,7 @@ export function normalizeUserPreferences(value) {
   const sanitized = {
     filters: sanitizeFilters(value.filters),
     mapStyle: sanitizeOption(sanitizeString(value.mapStyle, "standard"), MAP_STYLE_OPTIONS, "standard"),
+    simpleModeEnabled: sanitizeBoolean(value.simpleModeEnabled, true),
     mapViewport: sanitizeViewport(value.mapViewport),
     filterPresets: Array.isArray(value.filterPresets) ? value.filterPresets : [],
     sortBy: sanitizeOption(sanitizeString(value.sortBy, "altitude_desc"), SORT_OPTIONS, "altitude_desc"),

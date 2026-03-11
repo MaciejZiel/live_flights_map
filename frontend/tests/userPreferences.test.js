@@ -6,6 +6,7 @@ import { normalizeUserPreferences } from "../src/lib/utils/userPreferences.js";
 test("normalizeUserPreferences keeps new frontend filter fields", () => {
   const normalized = normalizeUserPreferences({
     mapStyle: "terrain",
+    simpleModeEnabled: false,
     aircraftClusteringEnabled: true,
     filters: {
       route: "WAW-JFK",
@@ -29,6 +30,7 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
   });
 
   assert.equal(normalized.mapStyle, "terrain");
+  assert.equal(normalized.simpleModeEnabled, false);
   assert.equal(normalized.aircraftClusteringEnabled, true);
   assert.deepEqual(normalized.filters, {
     query: "",
@@ -66,12 +68,14 @@ test("normalizeUserPreferences falls back for invalid airport flow and non-objec
   assert.equal(normalizeUserPreferences(null), null);
 
   const normalized = normalizeUserPreferences({
+    simpleModeEnabled: "nope",
     filters: {
       airportFlow: "sideways",
       route: 123,
     },
   });
 
+  assert.equal(normalized.simpleModeEnabled, true);
   assert.equal(normalized.filters.airportFlow, "all");
   assert.equal(normalized.filters.route, "");
 });

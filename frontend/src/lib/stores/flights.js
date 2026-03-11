@@ -20,6 +20,7 @@ const initialState = {
   stale: false,
   reason: "live",
   transport: USE_SSE ? "sse" : "polling",
+  meta: {},
 };
 
 function isPlainObject(value) {
@@ -117,6 +118,7 @@ function createFlightsStore() {
       stale: true,
       reason: "local_cache",
       transport: USE_SSE ? "sse" : "polling",
+      meta: storedSnapshot.meta ?? {},
     });
   }
 
@@ -134,6 +136,7 @@ function createFlightsStore() {
       stale: payload.meta?.stale ?? false,
       reason: payload.meta?.reason ?? "live",
       transport,
+      meta: payload.meta ?? {},
     });
   }
 
@@ -162,6 +165,7 @@ function createFlightsStore() {
         source: state.flights.length ? "cache" : state.source,
         reason: state.flights.length ? "local_cache" : "error",
         transport,
+        meta: state.meta ?? {},
       }));
     }
   }

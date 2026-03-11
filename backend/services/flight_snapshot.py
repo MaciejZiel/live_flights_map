@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
 from time import monotonic
@@ -14,6 +15,7 @@ from .provider_base import FlightProvider, FlightProviderError, FlightProviderRa
 class SnapshotCacheEntry:
     payload: dict[str, object]
     expires_at: float
+    provider_name: str | None = None
 
 
 class FlightSnapshotService:
@@ -48,10 +50,16 @@ class FlightSnapshotService:
                     source="cache",
                     stale=False,
                     reason="cache_hit",
-                    extra_meta={"provider_cooldowns": self._active_cooldowns(now)},
+                    extra_meta=self._build_runtime_meta(
+                        now,
+                        provider_name=cache_entry.provider_name,
+                    ),
                 )
 
-        payload, fallback_reason, fallback_warning, last_error, diagnostics = self._fetch_from_providers(bbox, now)
+        payload, provider_name, fallback_reason, fallback_warning, last_error, diagnostics = self._fetch_from_providers(
+            bbox,
+            now,
+        )
         if payload is None:
             if cache_entry:
                 return self._build_stale_response(
@@ -66,6 +74,7 @@ class FlightSnapshotService:
             self._cache[cache_key] = SnapshotCacheEntry(
                 payload=payload,
                 expires_at=monotonic() + self.cache_ttl,
+                provider_name=provider_name,
             )
             self._persist_cache_to_disk()
 
@@ -88,7 +97,14 @@ class FlightSnapshotService:
         self,
         bbox: dict[str, float],
         now: float,
-    ) -> tuple[dict[str, object] | None, str | None, str | None, FlightProviderError | None, dict[str, object]]:
+    ) -> tuple[
+        dict[str, object] | None,
+        str | None,
+        str | None,
+        str | None,
+        FlightProviderError | None,
+        dict[str, object],
+    ]:
         saw_cooldown = False
         saw_rate_limit = False
         last_error: FlightProviderError | None = None
@@ -113,33 +129,38 @@ class FlightSnapshotService:
 
             with self._lock:
                 self._cooldown_until.pop(provider.name, None)
-            return payload, None, None, None, {
-                "provider_cooldowns": self._active_cooldowns(monotonic()),
-            }
+            provider_name = self._get_provider_label(provider)
+            return payload, provider_name, None, None, None, self._build_runtime_meta(
+                monotonic(),
+                provider_name=provider_name,
+            )
 
         if saw_rate_limit:
             return (
                 None,
+                None,
                 "rate_limit",
                 "Upstream provider rate limit exceeded. Showing the last cached snapshot.",
                 last_error,
-                {"provider_cooldowns": self._active_cooldowns(monotonic())},
+                self._build_runtime_meta(monotonic()),
             )
         if saw_cooldown:
             return (
                 None,
+                None,
                 "cooldown",
                 "Using cached snapshot while upstream providers cool down.",
                 last_error,
-                {"provider_cooldowns": self._active_cooldowns(monotonic())},
+                self._build_runtime_meta(monotonic()),
             )
 
         return (
             None,
+            None,
             "upstream_error",
             None if last_error is None else str(last_error),
             last_error,
-            {"provider_cooldowns": self._active_cooldowns(monotonic())},
+            self._build_runtime_meta(monotonic()),
         )
 
     @staticmethod
@@ -191,6 +212,7 @@ class FlightSnapshotService:
             self._cache[cache_key] = SnapshotCacheEntry(
                 payload=payload,
                 expires_at=0,
+                provider_name=entry.get("provider_name"),
             )
 
     def _persist_cache_to_disk(self) -> None:
@@ -201,6 +223,7 @@ class FlightSnapshotService:
             {
                 "bbox_key": list(cache_key),
                 "payload": cache_entry.payload,
+                "provider_name": cache_entry.provider_name,
             }
             for cache_key, cache_entry in self._cache.items()
         ]
@@ -226,10 +249,22 @@ class FlightSnapshotService:
             "stale": stale,
             "reason": reason,
             "warning": warning,
+            **FlightSnapshotService._build_quality_meta(payload),
         }
         if isinstance(extra_meta, dict):
             response_payload["meta"].update(extra_meta)
         return response_payload
+
+    def _build_runtime_meta(
+        self,
+        now: float,
+        provider_name: str | None = None,
+    ) -> dict[str, object]:
+        return {
+            "provider_used": provider_name,
+            "providers_configured": [self._get_provider_label(provider) for provider in self.providers],
+            "provider_cooldowns": self._active_cooldowns(now),
+        }
 
     def _active_cooldowns(self, now: float) -> dict[str, int]:
         return {
@@ -237,3 +272,190 @@ class FlightSnapshotService:
             for provider_name, cooldown_until in self._cooldown_until.items()
             if cooldown_until > now
         }
+
+    @staticmethod
+    def _build_quality_meta(payload: dict[str, object]) -> dict[str, object]:
+        flights = [
+            flight
+            for flight in payload.get("flights") or []
+            if isinstance(flight, dict)
+        ]
+        total = max(int(payload.get("count") or 0), len(flights))
+        airspace_scope = FlightSnapshotService._classify_airspace_scope(payload.get("bbox"))
+
+        if total <= 0:
+            return {
+                "airspace_scope": airspace_scope,
+                "quality": {
+                    "band": "empty",
+                    "score": 0,
+                    "summary": "No aircraft are currently visible in this airspace window.",
+                    "identity": {
+                        "registration_pct": 0,
+                        "type_pct": 0,
+                        "callsign_pct": 0,
+                        "operator_pct": 0,
+                    },
+                    "traffic": {
+                        "airborne": 0,
+                        "ground": 0,
+                        "fresh_contact_pct": 0,
+                    },
+                },
+            }
+
+        snapshot_timestamp = FlightSnapshotService._resolve_snapshot_timestamp(payload.get("fetched_at"))
+        registration_count = sum(1 for flight in flights if FlightSnapshotService._has_text(flight.get("registration")))
+        type_count = sum(1 for flight in flights if FlightSnapshotService._has_text(flight.get("type_code")))
+        callsign_count = sum(1 for flight in flights if FlightSnapshotService._has_text(flight.get("callsign")))
+        operator_count = sum(
+            1
+            for flight in flights
+            if FlightSnapshotService._derive_operator_code(flight.get("callsign"))
+        )
+        airborne_count = sum(1 for flight in flights if not bool(flight.get("on_ground")))
+        ground_count = max(0, total - airborne_count)
+        fresh_contact_count = sum(
+            1
+            for flight in flights
+            if FlightSnapshotService._is_recent_contact(flight.get("last_contact"), snapshot_timestamp)
+        )
+
+        registration_pct = FlightSnapshotService._calculate_pct(registration_count, total)
+        type_pct = FlightSnapshotService._calculate_pct(type_count, total)
+        callsign_pct = FlightSnapshotService._calculate_pct(callsign_count, total)
+        operator_pct = FlightSnapshotService._calculate_pct(operator_count, total)
+        fresh_contact_pct = FlightSnapshotService._calculate_pct(fresh_contact_count, total)
+        quality_score = round(
+            registration_pct * 0.25
+            + type_pct * 0.2
+            + callsign_pct * 0.15
+            + operator_pct * 0.15
+            + fresh_contact_pct * 0.25
+        )
+        quality_band = FlightSnapshotService._classify_quality_band(quality_score)
+
+        return {
+            "airspace_scope": airspace_scope,
+            "quality": {
+                "band": quality_band,
+                "score": quality_score,
+                "summary": FlightSnapshotService._summarize_quality(
+                    quality_band=quality_band,
+                    registration_pct=registration_pct,
+                    type_pct=type_pct,
+                    fresh_contact_pct=fresh_contact_pct,
+                ),
+                "identity": {
+                    "registration_pct": registration_pct,
+                    "type_pct": type_pct,
+                    "callsign_pct": callsign_pct,
+                    "operator_pct": operator_pct,
+                },
+                "traffic": {
+                    "airborne": airborne_count,
+                    "ground": ground_count,
+                    "fresh_contact_pct": fresh_contact_pct,
+                },
+            },
+        }
+
+    @staticmethod
+    def _get_provider_label(provider: FlightProvider) -> str:
+        label = getattr(provider, "name", None) or getattr(provider, "label", None)
+        if label:
+            return str(label)
+        return type(provider).__name__
+
+    @staticmethod
+    def _calculate_pct(count: int, total: int) -> int:
+        if total <= 0:
+            return 0
+        return round((count / total) * 100)
+
+    @staticmethod
+    def _has_text(value: object) -> bool:
+        if value is None:
+            return False
+        return bool(str(value).strip())
+
+    @staticmethod
+    def _derive_operator_code(callsign: object) -> str | None:
+        cleaned = str(callsign or "").strip().upper()
+        if len(cleaned) < 3 or not cleaned[:3].isalpha():
+            return None
+        return cleaned[:3]
+
+    @staticmethod
+    def _resolve_snapshot_timestamp(value: object) -> float | None:
+        if not value:
+            return None
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+
+    @staticmethod
+    def _is_recent_contact(last_contact: object, snapshot_timestamp: float | None) -> bool:
+        if snapshot_timestamp is None:
+            return False
+        try:
+            contact_timestamp = float(last_contact)
+        except (TypeError, ValueError):
+            return False
+        return snapshot_timestamp - contact_timestamp <= 30
+
+    @staticmethod
+    def _classify_quality_band(score: int) -> str:
+        if score >= 85:
+            return "strong"
+        if score >= 70:
+            return "good"
+        if score >= 55:
+            return "mixed"
+        return "limited"
+
+    @staticmethod
+    def _summarize_quality(
+        *,
+        quality_band: str,
+        registration_pct: int,
+        type_pct: int,
+        fresh_contact_pct: int,
+    ) -> str:
+        lead = {
+            "strong": "Strong live coverage",
+            "good": "Good live coverage",
+            "mixed": "Mixed live coverage",
+            "limited": "Thin live coverage",
+        }.get(quality_band, "Live coverage")
+
+        if registration_pct < 50:
+            detail = "many aircraft still miss registrations"
+        elif fresh_contact_pct < 65:
+            detail = "positions are arriving with weaker freshness"
+        elif type_pct < 75:
+            detail = "type coverage is still patchy"
+        else:
+            detail = "identity data is well populated"
+
+        return f"{lead}; {detail}."
+
+    @staticmethod
+    def _classify_airspace_scope(bbox: object) -> str:
+        if not isinstance(bbox, dict):
+            return "focused"
+
+        try:
+            lat_span = abs(float(bbox.get("lamax")) - float(bbox.get("lamin")))
+            lon_span = abs(float(bbox.get("lomax")) - float(bbox.get("lomin")))
+        except (TypeError, ValueError):
+            return "focused"
+
+        if lat_span >= 70 or lon_span >= 120:
+            return "global"
+        if lat_span >= 35 or lon_span >= 60:
+            return "continental"
+        if lat_span >= 12 or lon_span >= 18:
+            return "regional"
+        return "focused"

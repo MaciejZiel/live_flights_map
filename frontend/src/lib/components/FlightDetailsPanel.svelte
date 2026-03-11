@@ -21,7 +21,10 @@
   export let liveStatus = "Live";
   export let snapshotFreshness = "waiting";
   export let snapshotConfidence = "High";
+  export let snapshotQualitySummary = "Live coverage summary pending.";
   export let snapshotTransport = "Polling";
+  export let snapshotFeedLabel = "Live feed";
+  export let snapshotFeedSummary = "Polling live snapshots";
   export let detailFreshness = "waiting";
   export let isReplayActive = false;
   export let shareFeedback = "";
@@ -229,6 +232,7 @@
   $: photoUrl = resolvePhotoUrl(photo);
   $: hasPhoto = Boolean(photoUrl);
   $: routeProgress = calculateRouteProgress(route, flight);
+  $: detailQuality = details?.meta?.detail_quality ?? null;
   $: heroSubtitle =
     routeVerbose ??
     ([identity.registration, identity.typeCode].filter(Boolean).join(" · ") ||
@@ -307,6 +311,13 @@
         ? `${routeStops.length} stop${routeStops.length > 1 ? "s" : ""}`
         : "direct route"
       : "route pending";
+  $: detailQualitySummary =
+    detailQuality?.summary ??
+    (detailsStatus === "success"
+      ? "Details ready."
+      : detailsStatus === "error"
+        ? "Fallback live data active."
+        : "Resolving aircraft metadata.");
   $: dataQualitySummary = detailWarning
     ? "Guarded"
     : detailsStatus === "loading" || detailsStatus === "refreshing"
@@ -490,19 +501,19 @@
                 <small>{routeStatusText}</small>
               </article>
               <article class="quality-card">
-                <span>Snapshot age</span>
-                <strong>{snapshotFreshness}</strong>
-                <small>{snapshotConfidence} confidence</small>
+                <span>Live coverage</span>
+                <strong>{snapshotConfidence}</strong>
+                <small>{snapshotFreshness} · {snapshotQualitySummary}</small>
               </article>
               <article class="quality-card">
                 <span>Details sync</span>
                 <strong>{detailFreshness}</strong>
-                <small>{detailsStatus === "success" ? "Details ready" : detailsStatus === "error" ? "Fallback active" : "Resolving metadata"}</small>
+                <small>{detailQualitySummary}</small>
               </article>
               <article class="quality-card">
-                <span>Transport</span>
-                <strong>{snapshotTransport}</strong>
-                <small>{detailsStatus === "success" ? "Metadata synced" : "Live capture pipeline"}</small>
+                <span>Feed</span>
+                <strong>{snapshotFeedLabel}</strong>
+                <small>{snapshotFeedSummary} · {snapshotTransport}</small>
               </article>
             </div>
 

@@ -76,6 +76,7 @@
     fetchedAt: null,
     count: 0,
     bbox: null,
+    meta: {},
   };
 
   function handleFlightsStoreChange(value) {
@@ -2241,6 +2242,15 @@
       meta: {
         fetched_at: null,
         warning,
+        detail_quality: {
+          band: "live_only",
+          score: 0,
+          summary: "Live track only. Route and photo are still missing.",
+          route_state: "pending",
+          photo_state: "missing",
+          photo_source: null,
+          identity_score: 0,
+        },
       },
     };
   }
@@ -3476,6 +3486,27 @@
       return "Unavailable";
     }
 
+    const qualityBand = stateValue.meta?.quality?.band;
+    if (qualityBand === "strong") {
+      return "Strong";
+    }
+
+    if (qualityBand === "good") {
+      return "Good";
+    }
+
+    if (qualityBand === "mixed") {
+      return "Mixed";
+    }
+
+    if (qualityBand === "limited") {
+      return "Thin";
+    }
+
+    if (qualityBand === "empty") {
+      return "Empty";
+    }
+
     if (stateValue.reason === "rate_limit" || stateValue.reason === "cooldown") {
       return "Reduced";
     }
@@ -3485,6 +3516,74 @@
     }
 
     return "High";
+  }
+
+  function formatProviderName(value) {
+    const normalizedValue = String(value ?? "").trim();
+    if (!normalizedValue) {
+      return null;
+    }
+
+    const knownLabels = {
+      adsb_lol: "ADSB.lol",
+      opensky: "OpenSky",
+    };
+
+    return knownLabels[normalizedValue] ?? normalizedValue;
+  }
+
+  function getCoverageScopeLabel(stateValue) {
+    const scope = stateValue.meta?.airspace_scope ?? "focused";
+    return {
+      focused: "Focused",
+      regional: "Regional",
+      continental: "Continental",
+      global: "Global",
+    }[scope] ?? "Focused";
+  }
+
+  function getCoverageBreakdownLabel(stateValue) {
+    const identity = stateValue.meta?.quality?.identity;
+    if (!identity) {
+      return stateValue.warning ?? "Waiting for live metadata.";
+    }
+
+    return `${identity.registration_pct}% reg · ${identity.type_pct}% type`;
+  }
+
+  function getQualitySummaryLabel(stateValue) {
+    return (
+      stateValue.meta?.quality?.summary ??
+      stateValue.warning ??
+      (stateValue.status === "loading" ? "Resolving live coverage." : "Live coverage summary pending.")
+    );
+  }
+
+  function getFeedLabel(stateValue) {
+    const providerName = formatProviderName(stateValue.meta?.provider_used);
+    if (providerName) {
+      return providerName;
+    }
+
+    const configuredProviders = Array.isArray(stateValue.meta?.providers_configured)
+      ? stateValue.meta.providers_configured
+          .map((provider) => formatProviderName(provider))
+          .filter(Boolean)
+      : [];
+    if (configuredProviders.length) {
+      return configuredProviders.join(" + ");
+    }
+
+    return stateValue.transport === "sse" ? "Live stream" : "Polling";
+  }
+
+  function getFeedSummaryLabel(stateValue) {
+    const cooldownCount = Object.keys(stateValue.meta?.provider_cooldowns ?? {}).length;
+    if (cooldownCount > 0) {
+      return `${cooldownCount} source${cooldownCount > 1 ? "s" : ""} cooling down`;
+    }
+
+    return stateValue.transport === "sse" ? "Streaming live snapshots" : "Polling live snapshots";
   }
 
   function applyAirportTrafficFilter(airport, flow = "all") {
@@ -3881,6 +3980,7 @@
   $: topbarStatusBadges = [
     activeReplaySnapshot ? "Replay" : null,
     activeFilterCount ? `${activeFilterCount} filters` : null,
+    !activeReplaySnapshot && confidenceLabel !== "Strong" ? confidenceLabel : null,
     mapStyle !== "standard" ? mapStyleLabel : null,
     weatherLayerEnabled ? "Weather" : null,
     !showAirportMarkers ? "Airports hidden" : null,
@@ -3889,6 +3989,11 @@
   $: freshnessLabel = getFreshnessLabel(state.fetchedAt);
   $: confidenceLabel = getConfidenceLabel(state);
   $: transportLabel = state.transport === "sse" ? "Stream" : "Polling";
+  $: coverageScopeLabel = getCoverageScopeLabel(state);
+  $: coverageBreakdownLabel = getCoverageBreakdownLabel(state);
+  $: qualitySummaryLabel = getQualitySummaryLabel(state);
+  $: feedLabel = getFeedLabel(state);
+  $: feedSummaryLabel = getFeedSummaryLabel(state);
   $: mapCenterLabel = mapViewport?.center
     ? `${mapViewport.center[0].toFixed(2)}, ${mapViewport.center[1].toFixed(2)}`
     : "52.23, 21.01";
@@ -4010,6 +4115,11 @@
   );
   $: selectedFlightConfidence = activeReplaySnapshot ? "Archived" : confidenceLabel;
   $: selectedFlightTransportMode = activeReplaySnapshot ? "Archive" : transportLabel;
+  $: selectedFlightSnapshotSummary = activeReplaySnapshot
+    ? "Showing an archived replay frame."
+    : qualitySummaryLabel;
+  $: selectedFlightFeedLabel = activeReplaySnapshot ? "Archive replay" : feedLabel;
+  $: selectedFlightFeedSummary = activeReplaySnapshot ? "Historical playback feed" : feedSummaryLabel;
   $: selectedFlightDetailsFreshness = getFreshnessLabel(selectedFlightDetails?.meta?.fetched_at);
   $: selectedFlightTrailKey = selectedFlight?.icao24 ?? null;
   $: replayArchiveBboxKey = buildBboxKey(state.bbox);
@@ -4505,9 +4615,9 @@
                 <small>{airborneCount} airborne · {groundCount} ground</small>
               </article>
               <article>
-                <span>Confidence</span>
+                <span>Data quality</span>
                 <strong>{confidenceLabel}</strong>
-                <small>{activeReplaySnapshot ? "Replay frame" : "Live feed"}</small>
+                <small>{activeReplaySnapshot ? "Replay frame" : qualitySummaryLabel}</small>
               </article>
             </div>
 
@@ -5424,9 +5534,9 @@
                 <small>Zoom {zoomLabel}</small>
               </article>
               <article>
-                <span>Filters</span>
-                <strong>{activeFilterCount}</strong>
-                <small>{filters.dimFilteredTraffic ? "Dim unmatched" : "Hide unmatched"}</small>
+                <span>Coverage</span>
+                <strong>{coverageScopeLabel}</strong>
+                <small>{activeReplaySnapshot ? "Replay frame" : coverageBreakdownLabel}</small>
               </article>
             </div>
 
@@ -5628,7 +5738,10 @@
               liveStatus={selectedFlightRadarModeLabel}
               snapshotFreshness={selectedFlightFreshnessLabel}
               snapshotConfidence={selectedFlightConfidence}
+              snapshotQualitySummary={selectedFlightSnapshotSummary}
               snapshotTransport={selectedFlightTransportMode}
+              snapshotFeedLabel={selectedFlightFeedLabel}
+              snapshotFeedSummary={selectedFlightFeedSummary}
               detailFreshness={selectedFlightDetailsFreshness}
               isReplayActive={Boolean(activeReplaySnapshot)}
               shareFeedback={shareFeedback}

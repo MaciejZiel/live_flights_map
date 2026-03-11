@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Iterable
 from typing import Any
 
@@ -7,8 +8,15 @@ from .provider_base import FlightProviderError
 
 
 class AircraftPhotoService:
-    def __init__(self, providers: Iterable[object]) -> None:
+    def __init__(
+        self,
+        providers: Iterable[object],
+        cache_service=None,
+        cache_ttl_seconds: float = 86400,
+    ) -> None:
         self.providers = list(providers)
+        self.cache_service = cache_service
+        self.cache_ttl_seconds = max(float(cache_ttl_seconds or 0), 300.0)
 
     def fetch_photo(
         self,
@@ -31,6 +39,17 @@ class AircraftPhotoService:
             airline_code=airline_code,
             airline_name=airline_name,
         )
+        cache_key = self._build_cache_key(
+            registration=registration,
+            type_code=type_code,
+            operator_code=operator_code,
+            airline_code=airline_code,
+            airline_name=airline_name,
+        )
+        if self.cache_service is not None:
+            cached = self.cache_service.get_lookup(cache_key)
+            if isinstance(cached, dict) and cached.get("thumbnail_url"):
+                return cached
 
         for provider in self.providers:
             for candidate_registration in exact_registration_variants:
@@ -42,6 +61,7 @@ class AircraftPhotoService:
 
                 if photo:
                     photo.setdefault("match_type", "registration")
+                    self._store_cached_photo(cache_key, photo)
                     return photo
 
         for provider in self.providers:
@@ -65,6 +85,7 @@ class AircraftPhotoService:
 
                 if photo:
                     photo.setdefault("match_type", "registration")
+                    self._store_cached_photo(cache_key, photo)
                     return photo
 
         for provider in self.providers:
@@ -88,12 +109,42 @@ class AircraftPhotoService:
 
                 if photo:
                     photo["match_type"] = "representative"
+                    self._store_cached_photo(cache_key, photo)
                     return photo
 
         if warnings:
             raise FlightProviderError(" ".join(warnings))
 
         return None
+
+    def _store_cached_photo(self, cache_key: str, photo: dict[str, object]) -> None:
+        if self.cache_service is None or not isinstance(photo, dict):
+            return
+        self.cache_service.store_lookup(
+            cache_key,
+            photo,
+            ttl_seconds=self.cache_ttl_seconds,
+        )
+
+    @staticmethod
+    def _build_cache_key(
+        *,
+        registration: str | None,
+        type_code: str | None,
+        operator_code: str | None,
+        airline_code: str | None,
+        airline_name: str | None,
+    ) -> str:
+        return json.dumps(
+            {
+                "registration": AircraftPhotoService._normalize_text(registration, uppercase=True),
+                "type_code": AircraftPhotoService._normalize_text(type_code, uppercase=True),
+                "operator_code": AircraftPhotoService._normalize_text(operator_code, uppercase=True),
+                "airline_code": AircraftPhotoService._normalize_text(airline_code, uppercase=True),
+                "airline_name": AircraftPhotoService._normalize_text(airline_name),
+            },
+            sort_keys=True,
+        )
 
     @staticmethod
     def _build_registration_variants(registration: str | None) -> list[str]:

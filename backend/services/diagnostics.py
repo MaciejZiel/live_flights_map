@@ -8,16 +8,24 @@ from time import monotonic
 
 
 class DiagnosticsService:
-    def __init__(self, snapshot_service, archive_service, workspace_service) -> None:
+    def __init__(
+        self,
+        snapshot_service,
+        archive_service,
+        workspace_service,
+        aircraft_photo_cache_service=None,
+    ) -> None:
         self.snapshot_service = snapshot_service
         self.archive_service = archive_service
         self.workspace_service = workspace_service
+        self.aircraft_photo_cache_service = aircraft_photo_cache_service
 
     def build_healthcheck(self) -> dict[str, object]:
         warnings = []
         live_snapshot = self._build_snapshot_diagnostics()
         archive = self._summarize_archive()
         workspace = self._summarize_workspace()
+        aircraft_photos = self._summarize_aircraft_photos()
 
         if live_snapshot["active_cooldowns"]:
             warnings.append("Some live data providers are cooling down.")
@@ -25,6 +33,8 @@ class DiagnosticsService:
             warnings.append("Flight archive database is unavailable.")
         if not workspace["available"]:
             warnings.append("Workspace database is unavailable.")
+        if aircraft_photos and not aircraft_photos["available"]:
+            warnings.append("Aircraft photo cache is unavailable.")
 
         return {
             "status": "degraded" if warnings else "ok",
@@ -34,6 +44,7 @@ class DiagnosticsService:
                 "live_snapshot": live_snapshot,
                 "archive": archive,
                 "workspace": workspace,
+                "aircraft_photos": aircraft_photos,
             },
         }
 
@@ -87,6 +98,15 @@ class DiagnosticsService:
                 "latest_profile_update_at": "SELECT MAX(updated_at) FROM profiles",
             },
         )
+
+    def _summarize_aircraft_photos(self) -> dict[str, object]:
+        if self.aircraft_photo_cache_service is None:
+            return {
+                "available": False,
+                "file_present": False,
+                "disabled": True,
+            }
+        return self.aircraft_photo_cache_service.summarize()
 
     @staticmethod
     def _summarize_sqlite(

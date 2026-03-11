@@ -15,11 +15,13 @@ class HealthcheckRouteTests(unittest.TestCase):
             archive_path = str(Path(temp_dir) / "history.sqlite3")
             workspace_path = str(Path(temp_dir) / "workspace.sqlite3")
             cache_path = str(Path(temp_dir) / "snapshot-cache.json")
+            photo_cache_path = str(Path(temp_dir) / "photo-cache.sqlite3")
             with patch.multiple(
                 Config,
                 FLIGHT_ARCHIVE_PATH=archive_path,
                 WORKSPACE_DB_PATH=workspace_path,
                 OPENSKY_CACHE_PATH=cache_path,
+                AIRCRAFT_PHOTO_CACHE_PATH=photo_cache_path,
                 FLIGHT_DATA_PROVIDERS=("adsb_lol",),
             ):
                 app = create_app()
@@ -39,6 +41,8 @@ class HealthcheckRouteTests(unittest.TestCase):
                 )
                 self.assertTrue(payload["services"]["archive"]["file_present"])
                 self.assertTrue(payload["services"]["workspace"]["file_present"])
+                self.assertIn("aircraft_photos", payload["services"])
+                self.assertTrue(payload["services"]["aircraft_photos"]["file_present"])
 
 
 if __name__ == "__main__":

@@ -108,6 +108,16 @@ class Config:
         ).split(",")
         if host.strip()
     )
+    AIRCRAFT_PHOTO_CACHE_PATH = os.getenv(
+        "AIRCRAFT_PHOTO_CACHE_PATH",
+        os.path.join(gettempdir(), "live-flights-map-aircraft-photo-cache.sqlite3"),
+    )
+    AIRCRAFT_PHOTO_LOOKUP_CACHE_TTL = float(
+        os.getenv("AIRCRAFT_PHOTO_LOOKUP_CACHE_TTL", "86400")
+    )
+    AIRCRAFT_PHOTO_ASSET_CACHE_TTL = float(
+        os.getenv("AIRCRAFT_PHOTO_ASSET_CACHE_TTL", "86400")
+    )
     OPENSKY_CACHE_TTL = float(os.getenv("OPENSKY_CACHE_TTL", "25"))
     OPENSKY_COOLDOWN_SECONDS = float(os.getenv("OPENSKY_COOLDOWN_SECONDS", "75"))
     OPENSKY_CACHE_PATH = os.getenv(

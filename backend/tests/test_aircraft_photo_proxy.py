@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from backend import create_app
 from backend.config import Config
+from backend.services.aircraft_photo_cache import AircraftPhotoCacheService
 from backend.services.aircraft_photo_proxy import (
     AircraftPhotoAsset,
     AircraftPhotoProxyError,
@@ -24,6 +25,34 @@ class AircraftPhotoProxyServiceTests(unittest.TestCase):
         with self.assertRaises(AircraftPhotoProxyError):
             service.fetch_asset("https://example.com/photo.jpg")
 
+    def test_reuses_cached_asset_without_second_network_request(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_service = AircraftPhotoCacheService(
+                str(Path(temp_dir) / "photo-cache.sqlite3")
+            )
+            service = AircraftPhotoProxyService(
+                timeout=10,
+                allowed_hosts=("planespotting.be", "upload.wikimedia.org"),
+                cache_service=cache_service,
+                cache_ttl_seconds=3600,
+            )
+
+            class _ResponseStub:
+                content = b"image-bytes"
+                headers = {"Content-Type": "image/jpeg", "ETag": '"etag-demo"'}
+
+                @staticmethod
+                def raise_for_status() -> None:
+                    return None
+
+            with patch.object(service.session, "get", return_value=_ResponseStub()) as session_get:
+                first = service.fetch_asset("https://upload.wikimedia.org/demo.jpg")
+                second = service.fetch_asset("https://upload.wikimedia.org/demo.jpg")
+
+            self.assertEqual(first.body, b"image-bytes")
+            self.assertEqual(second.body, b"image-bytes")
+            session_get.assert_called_once()
+
 
 class AircraftPhotoProxyRouteTests(unittest.TestCase):
     def test_proxy_route_streams_image_from_backend(self) -> None:
@@ -31,11 +60,13 @@ class AircraftPhotoProxyRouteTests(unittest.TestCase):
             archive_path = str(Path(temp_dir) / "history.sqlite3")
             workspace_path = str(Path(temp_dir) / "workspace.sqlite3")
             cache_path = str(Path(temp_dir) / "snapshot-cache.json")
+            photo_cache_path = str(Path(temp_dir) / "photo-cache.sqlite3")
             with patch.multiple(
                 Config,
                 FLIGHT_ARCHIVE_PATH=archive_path,
                 WORKSPACE_DB_PATH=workspace_path,
                 OPENSKY_CACHE_PATH=cache_path,
+                AIRCRAFT_PHOTO_CACHE_PATH=photo_cache_path,
                 FLIGHT_DATA_PROVIDERS=("adsb_lol",),
             ):
                 app = create_app()
@@ -69,11 +100,13 @@ class AircraftPhotoProxyRouteTests(unittest.TestCase):
             archive_path = str(Path(temp_dir) / "history.sqlite3")
             workspace_path = str(Path(temp_dir) / "workspace.sqlite3")
             cache_path = str(Path(temp_dir) / "snapshot-cache.json")
+            photo_cache_path = str(Path(temp_dir) / "photo-cache.sqlite3")
             with patch.multiple(
                 Config,
                 FLIGHT_ARCHIVE_PATH=archive_path,
                 WORKSPACE_DB_PATH=workspace_path,
                 OPENSKY_CACHE_PATH=cache_path,
+                AIRCRAFT_PHOTO_CACHE_PATH=photo_cache_path,
                 FLIGHT_DATA_PROVIDERS=("adsb_lol",),
             ):
                 app = create_app()

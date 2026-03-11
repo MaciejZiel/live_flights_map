@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import unittest
+import tempfile
+from pathlib import Path
 
+from backend.services.aircraft_photo_cache import AircraftPhotoCacheService
 from backend.services.aircraft_photos import AircraftPhotoService
 from backend.services.openverse import OpenverseClient
 from backend.services.provider_base import FlightProviderError
@@ -233,6 +236,30 @@ class AircraftPhotoServiceTests(unittest.TestCase):
 
         self.assertEqual(photo["source"], "representative")
         self.assertEqual(photo["match_type"], "representative")
+
+    def test_reuses_cached_photo_lookup_without_requerying_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_service = AircraftPhotoCacheService(
+                str(Path(temp_dir) / "photo-cache.sqlite3")
+            )
+            provider = _ProviderStub(
+                photo={
+                    "thumbnail_url": "https://example.com/photo.jpg",
+                    "source": "cached-provider",
+                }
+            )
+            service = AircraftPhotoService(
+                [provider],
+                cache_service=cache_service,
+                cache_ttl_seconds=3600,
+            )
+
+            first_photo = service.fetch_photo("N775AN")
+            second_photo = service.fetch_photo("N775AN")
+
+            self.assertEqual(provider.calls, ["N775AN"])
+            self.assertEqual(first_photo["source"], "cached-provider")
+            self.assertEqual(second_photo["source"], "cached-provider")
 
 
 class OpenverseClientTests(unittest.TestCase):

@@ -8,6 +8,7 @@ from .config import Config
 from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
+from .services.aircraft_photo_cache import AircraftPhotoCacheService
 from .services.aircraft_photo_proxy import AircraftPhotoProxyService
 from .services.aircraft_photos import AircraftPhotoService
 from .services.airport_catalog import AirportCatalogService
@@ -40,6 +41,7 @@ class BackendRuntime:
     global_traffic_board_service: GlobalTrafficBoardService
     flight_details_service: FlightDetailsService
     aircraft_photo_proxy_service: AircraftPhotoProxyService
+    aircraft_photo_cache_service: AircraftPhotoCacheService
     entity_search_service: EntitySearchService
     airport_workflow_service: AirportWorkflowService
     airport_weather_service: AirportWeatherService
@@ -62,6 +64,9 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
     airport_catalog_service = AirportCatalogService()
     workspace_service = WorkspaceService(
         workspace_path=config.WORKSPACE_DB_PATH,
+    )
+    aircraft_photo_cache_service = AircraftPhotoCacheService(
+        cache_path=config.AIRCRAFT_PHOTO_CACHE_PATH,
     )
 
     for provider_name in config.FLIGHT_DATA_PROVIDERS:
@@ -127,13 +132,17 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
                     timeout=config.OPENVERSE_TIMEOUT,
                     max_retries=config.OPENVERSE_RETRY_COUNT,
                 ),
-            ]
+            ],
+            cache_service=aircraft_photo_cache_service,
+            cache_ttl_seconds=config.AIRCRAFT_PHOTO_LOOKUP_CACHE_TTL,
         ),
         cache_ttl=config.FLIGHT_DETAILS_CACHE_TTL,
     )
     aircraft_photo_proxy_service = AircraftPhotoProxyService(
         timeout=config.AIRCRAFT_PHOTO_PROXY_TIMEOUT,
         allowed_hosts=config.AIRCRAFT_PHOTO_PROXY_ALLOWED_HOSTS,
+        cache_service=aircraft_photo_cache_service,
+        cache_ttl_seconds=config.AIRCRAFT_PHOTO_ASSET_CACHE_TTL,
     )
     entity_search_service = EntitySearchService(
         archive_service=archive_service,
@@ -155,6 +164,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         snapshot_service=flight_snapshot_service,
         archive_service=archive_service,
         workspace_service=workspace_service,
+        aircraft_photo_cache_service=aircraft_photo_cache_service,
     )
     snapshot_collector_service = SnapshotCollectorService(
         snapshot_service=flight_snapshot_service,
@@ -177,6 +187,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         global_traffic_board_service=global_traffic_board_service,
         flight_details_service=flight_details_service,
         aircraft_photo_proxy_service=aircraft_photo_proxy_service,
+        aircraft_photo_cache_service=aircraft_photo_cache_service,
         entity_search_service=entity_search_service,
         airport_workflow_service=airport_workflow_service,
         airport_weather_service=airport_weather_service,
@@ -196,6 +207,7 @@ def bind_runtime(app: Flask, runtime: BackendRuntime) -> Flask:
     app.extensions["global_traffic_board_service"] = runtime.global_traffic_board_service
     app.extensions["flight_details_service"] = runtime.flight_details_service
     app.extensions["aircraft_photo_proxy_service"] = runtime.aircraft_photo_proxy_service
+    app.extensions["aircraft_photo_cache_service"] = runtime.aircraft_photo_cache_service
     app.extensions["entity_search_service"] = runtime.entity_search_service
     app.extensions["airport_workflow_service"] = runtime.airport_workflow_service
     app.extensions["airport_weather_service"] = runtime.airport_weather_service

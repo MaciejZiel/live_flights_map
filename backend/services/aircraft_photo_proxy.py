@@ -25,11 +25,15 @@ class AircraftPhotoProxyService:
         *,
         timeout: float,
         allowed_hosts: tuple[str, ...],
+        cache_service=None,
+        cache_ttl_seconds: float = 86400,
     ) -> None:
         self.timeout = timeout
         self.allowed_hosts = tuple(
             host.strip().lower() for host in allowed_hosts if str(host).strip()
         )
+        self.cache_service = cache_service
+        self.cache_ttl_seconds = max(float(cache_ttl_seconds or 0), 300.0)
         self.session = requests.Session()
         self.session.headers.update(
             {
@@ -41,6 +45,14 @@ class AircraftPhotoProxyService:
     def fetch_asset(self, url: str) -> AircraftPhotoAsset:
         normalized_url = self._normalize_url(url)
         self._validate_url(normalized_url)
+        if self.cache_service is not None:
+            cached = self.cache_service.get_asset(normalized_url)
+            if isinstance(cached, dict) and isinstance(cached.get("body"), (bytes, bytearray)):
+                return AircraftPhotoAsset(
+                    body=bytes(cached["body"]),
+                    content_type=self._normalize_content_type(cached.get("content_type")),
+                    etag=self._normalize_text(cached.get("etag")),
+                )
 
         try:
             response = self.session.get(
@@ -58,11 +70,20 @@ class AircraftPhotoProxyService:
         if not content_type.startswith("image/"):
             raise AircraftPhotoProxyError("The aircraft photo source did not return an image.")
 
-        return AircraftPhotoAsset(
+        asset = AircraftPhotoAsset(
             body=response.content,
             content_type=content_type,
             etag=self._normalize_text(response.headers.get("ETag")),
         )
+        if self.cache_service is not None:
+            self.cache_service.store_asset(
+                normalized_url,
+                body=asset.body,
+                content_type=asset.content_type,
+                etag=asset.etag,
+                ttl_seconds=self.cache_ttl_seconds,
+            )
+        return asset
 
     def _validate_url(self, url: str) -> None:
         parsed = urlparse(url)

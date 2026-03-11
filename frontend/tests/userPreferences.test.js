@@ -22,6 +22,14 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
     replayPlaybackSpeed: 1.5,
     recentSearches: ["reg: SP-LVG", "airport: WAW"],
     savedSearches: ["route: WAW-JFK"],
+    recentlyViewedFlights: [
+      {
+        icao24: "48af19",
+        callsign: "LOT285",
+        registration: "SP-LVQ",
+        altitude: 11020,
+      },
+    ],
     alertDelivery: {
       browserNotificationsEnabled: true,
       browserPermission: "granted",
@@ -59,6 +67,21 @@ test("normalizeUserPreferences keeps new frontend filter fields", () => {
   assert.equal(normalized.replayPlaybackSpeed, 1.5);
   assert.deepEqual(normalized.recentSearches, ["reg: SP-LVG", "airport: WAW"]);
   assert.deepEqual(normalized.savedSearches, ["route: WAW-JFK"]);
+  assert.deepEqual(normalized.recentlyViewedFlights, [
+    {
+      icao24: "48af19",
+      callsign: "LOT285",
+      registration: "SP-LVQ",
+      type_code: "",
+      route_label: "",
+      origin_country: "",
+      altitude: 11020,
+      velocity: null,
+      last_contact: null,
+      latitude: null,
+      longitude: null,
+    },
+  ]);
   assert.deepEqual(normalized.alertDelivery, {
     browserNotificationsEnabled: true,
     browserPermission: "granted",
@@ -75,6 +98,7 @@ test("normalizeUserPreferences falls back for invalid airport flow and non-objec
     simpleModeEnabled: "nope",
     recentSearches: ["airport: WAW", 123, "route: EHAM-KJFK"],
     savedSearches: ["reg: SP-LVG", null],
+    recentlyViewedFlights: [{ icao24: "ABC123" }, { foo: "bar" }],
     filters: {
       airportFlow: "sideways",
       route: 123,
@@ -84,6 +108,21 @@ test("normalizeUserPreferences falls back for invalid airport flow and non-objec
   assert.equal(normalized.simpleModeEnabled, true);
   assert.deepEqual(normalized.recentSearches, ["airport: WAW", "route: EHAM-KJFK"]);
   assert.deepEqual(normalized.savedSearches, ["reg: SP-LVG"]);
+  assert.deepEqual(normalized.recentlyViewedFlights, [
+    {
+      icao24: "abc123",
+      callsign: "",
+      registration: "",
+      type_code: "",
+      route_label: "",
+      origin_country: "",
+      altitude: null,
+      velocity: null,
+      last_contact: null,
+      latitude: null,
+      longitude: null,
+    },
+  ]);
   assert.equal(normalized.filters.airportFlow, "all");
   assert.equal(normalized.filters.route, "");
 });

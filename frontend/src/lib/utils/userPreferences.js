@@ -148,6 +148,30 @@ function sanitizeFilters(value) {
   };
 }
 
+function sanitizeRecentFlights(value) {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .filter((entry) => isPlainObject(entry) && typeof entry.icao24 === "string")
+    .map((entry) => ({
+      icao24: sanitizeString(entry.icao24).trim().toLowerCase(),
+      callsign: sanitizeString(entry.callsign),
+      registration: sanitizeString(entry.registration),
+      type_code: sanitizeString(entry.type_code),
+      route_label: sanitizeString(entry.route_label),
+      origin_country: sanitizeString(entry.origin_country),
+      altitude: sanitizeFiniteNumber(entry.altitude),
+      velocity: sanitizeFiniteNumber(entry.velocity),
+      last_contact: sanitizeFiniteNumber(entry.last_contact),
+      latitude: sanitizeFiniteNumber(entry.latitude),
+      longitude: sanitizeFiniteNumber(entry.longitude),
+    }))
+    .filter((entry) => entry.icao24)
+    .slice(0, 8);
+}
+
 export function normalizeUserPreferences(value) {
   if (!isPlainObject(value)) {
     return null;
@@ -206,6 +230,7 @@ export function normalizeUserPreferences(value) {
         : 1,
     recentSearches: sanitizeStringArray(value.recentSearches).slice(0, 8),
     savedSearches: sanitizeStringArray(value.savedSearches).slice(0, 8),
+    recentlyViewedFlights: sanitizeRecentFlights(value.recentlyViewedFlights),
   };
 
   return sanitized;

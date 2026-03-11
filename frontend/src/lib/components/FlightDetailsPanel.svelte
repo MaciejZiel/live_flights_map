@@ -25,6 +25,9 @@
   export let trailPointCount = 0;
   export let trailWindowHours = 6;
   export let bookmarked = false;
+  export let canNavigateBack = false;
+  export let canNavigateForward = false;
+  export let comparisonFlight = null;
   export let snapshotFreshness = "waiting";
   export let snapshotConfidence = "High";
   export let snapshotQualitySummary = "Live coverage summary pending.";
@@ -38,6 +41,8 @@
   export let onToggleTrail = () => {};
   export let onFitTrail = () => {};
   export let onSetTrailWindow = () => {};
+  export let onNavigateBack = () => {};
+  export let onNavigateForward = () => {};
   export let onToggleBookmark = () => {};
   export let onOpenAirport = () => {};
   export let onRetryDetails = () => {};
@@ -351,6 +356,11 @@
       tone: freshnessMeta.tone,
     },
   ];
+  $: comparisonLabel =
+    comparisonFlight?.callsign ??
+    comparisonFlight?.registration ??
+    comparisonFlight?.icao24?.toUpperCase() ??
+    null;
 </script>
 
 <section class="panel details-panel" data-testid="flight-details-panel">
@@ -488,6 +498,36 @@
             <small>{trailPointCount} points loaded</small>
           </div>
         </div>
+
+        <div class="history-toolbar">
+          <button class="action-button secondary" type="button" disabled={!canNavigateBack} on:click={onNavigateBack}>
+            Back
+          </button>
+          <button class="action-button secondary" type="button" disabled={!canNavigateForward} on:click={onNavigateForward}>
+            Forward
+          </button>
+          {#if comparisonLabel}
+            <div class="history-compare-pill">
+              <span>Previous</span>
+              <strong>{comparisonLabel}</strong>
+            </div>
+          {/if}
+        </div>
+
+        {#if comparisonFlight}
+          <div class="history-compare-grid">
+            <article>
+              <span>Current</span>
+              <strong>{identity.callsign}</strong>
+              <small>{formatAltitude(flight.altitude)} · {formatSpeed(flight.velocity)}</small>
+            </article>
+            <article>
+              <span>Previous</span>
+              <strong>{comparisonLabel}</strong>
+              <small>{formatAltitude(comparisonFlight.altitude)} · {formatSpeed(comparisonFlight.velocity)}</small>
+            </article>
+          </div>
+        {/if}
 
         <div class="identity-actions">
           <button class:active={bookmarked} class="action-button secondary" type="button" on:click={onToggleBookmark}>
@@ -1262,6 +1302,50 @@
     gap: 0.5rem;
   }
 
+  .history-toolbar {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 1.2fr);
+    gap: 0.48rem;
+    align-items: center;
+  }
+
+  .history-compare-pill,
+  .history-compare-grid article {
+    display: grid;
+    gap: 0.14rem;
+    padding: 0.68rem 0.74rem;
+    border-radius: 13px;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .history-compare-pill span,
+  .history-compare-grid article span {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: rgba(186, 198, 210, 0.68);
+  }
+
+  .history-compare-pill strong,
+  .history-compare-grid article strong {
+    color: #f4f7fb;
+    font-size: 0.82rem;
+    line-height: 1.15;
+  }
+
+  .history-compare-grid article small {
+    color: rgba(196, 208, 220, 0.74);
+    font-size: 0.7rem;
+  }
+
+  .history-compare-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.48rem;
+  }
+
   .map-control-row {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1598,6 +1682,8 @@
     .hero-metric-grid,
     .hero-quality-strip,
     .map-control-row,
+    .history-toolbar,
+    .history-compare-grid,
     .route-strip,
     .airport-desk-grid,
     .identity-actions,

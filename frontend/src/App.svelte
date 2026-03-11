@@ -279,6 +279,9 @@
   let savedSearches = [];
   let pendingSearchSelection = null;
   let selectedFlightSnapshot = null;
+  let selectionHistory = [];
+  let selectionHistoryIndex = -1;
+  let recentlyViewedFlights = [];
   let globalTrafficBoard = {
     status: "idle",
     flights: [],
@@ -353,6 +356,7 @@
       replayPlaybackSpeed = savedPreferences.replayPlaybackSpeed ?? replayPlaybackSpeed;
       recentSearches = savedPreferences.recentSearches ?? recentSearches;
       savedSearches = savedPreferences.savedSearches ?? savedSearches;
+      recentlyViewedFlights = savedPreferences.recentlyViewedFlights ?? recentlyViewedFlights;
     }
 
     applySharedStateFromUrl();
@@ -787,6 +791,7 @@
       replayPlaybackSpeed,
       recentSearches,
       savedSearches,
+      recentlyViewedFlights,
     };
   }
 
@@ -837,6 +842,7 @@
       normalizedWorkspaceState.replayPlaybackSpeed ?? replayPlaybackSpeed;
     recentSearches = normalizedWorkspaceState.recentSearches ?? recentSearches;
     savedSearches = normalizedWorkspaceState.savedSearches ?? savedSearches;
+    recentlyViewedFlights = normalizedWorkspaceState.recentlyViewedFlights ?? recentlyViewedFlights;
   }
 
   async function loadWorkspaceProfile(profileId, options = {}) {
@@ -1087,6 +1093,48 @@
     );
   }
 
+  function buildRecentFlightEntry(flight) {
+    const snapshot = buildSelectedFlightSnapshot(flight);
+    if (!snapshot) {
+      return null;
+    }
+
+    return {
+      icao24: snapshot.icao24,
+      callsign: snapshot.callsign ?? snapshot.registration ?? snapshot.icao24.toUpperCase(),
+      registration: snapshot.registration ?? null,
+      type_code: snapshot.type_code ?? null,
+      route_label: snapshot.route_label ?? null,
+      origin_country: snapshot.origin_country ?? null,
+      altitude: snapshot.altitude ?? null,
+      velocity: snapshot.velocity ?? null,
+      last_contact: snapshot.last_contact ?? null,
+      latitude: snapshot.latitude ?? null,
+      longitude: snapshot.longitude ?? null,
+    };
+  }
+
+  function rememberViewedFlight(snapshot) {
+    const recentEntry = buildRecentFlightEntry(snapshot);
+    if (recentEntry) {
+      recentlyViewedFlights = [
+        recentEntry,
+        ...recentlyViewedFlights.filter((entry) => entry.icao24 !== recentEntry.icao24),
+      ].slice(0, 8);
+    }
+
+    if (selectionHistory[selectionHistoryIndex]?.icao24 === snapshot.icao24) {
+      return;
+    }
+
+    const nextHistory = [
+      ...selectionHistory.slice(0, selectionHistoryIndex + 1).filter((entry) => entry.icao24 !== snapshot.icao24),
+      snapshot,
+    ].slice(-20);
+    selectionHistory = nextHistory;
+    selectionHistoryIndex = nextHistory.length - 1;
+  }
+
   function openFlightInspector(flight, options = {}) {
     const snapshot = buildSelectedFlightSnapshot(flight);
     if (!snapshot) {
@@ -1095,6 +1143,10 @@
 
     if (options.pendingSearchSelection !== undefined) {
       pendingSearchSelection = options.pendingSearchSelection;
+    }
+
+    if (!options.historyNavigation) {
+      rememberViewedFlight(snapshot);
     }
 
     selectedFlightSnapshot = snapshot;
@@ -1134,6 +1186,30 @@
       mobileSidebarOpen = true;
       mobileUtilityOpen = false;
     }
+  }
+
+  function navigateSelectionHistory(direction) {
+    const nextIndex = selectionHistoryIndex + direction;
+    const targetFlight = selectionHistory[nextIndex] ?? null;
+    if (!targetFlight) {
+      return;
+    }
+
+    const recentEntry = buildRecentFlightEntry(targetFlight);
+    if (recentEntry) {
+      recentlyViewedFlights = [
+        recentEntry,
+        ...recentlyViewedFlights.filter((entry) => entry.icao24 !== recentEntry.icao24),
+      ].slice(0, 8);
+    }
+
+    selectionHistoryIndex = nextIndex;
+    openFlightInspector(targetFlight, {
+      focusMap: true,
+      zoom: 8.2,
+      exitReplay: false,
+      historyNavigation: true,
+    });
   }
 
   function clearSelectedFlight(options = {}) {
@@ -4717,6 +4793,14 @@
     ? selectedFlightLiveCandidate ??
       (selectedFlightSnapshot?.icao24 === selectedIcao24 ? selectedFlightSnapshot : null)
     : null;
+  $: canNavigateFlightHistoryBackward = selectionHistoryIndex > 0;
+  $: canNavigateFlightHistoryForward =
+    selectionHistoryIndex >= 0 && selectionHistoryIndex < selectionHistory.length - 1;
+  $: previousSelectedFlightEntry =
+    selectionHistoryIndex > 0 ? selectionHistory[selectionHistoryIndex - 1] ?? null : null;
+  $: recentlyViewedOtherFlights = recentlyViewedFlights
+    .filter((flight) => flight.icao24 !== selectedIcao24)
+    .slice(0, 5);
   $: selectedAirport = selectedAirportCode
     ? airportFeed.airports.find((airport) => normalizeAirportKey(airport) === selectedAirportCode) ??
       (normalizeAirportKey(selectedAirportSnapshot) === selectedAirportCode ? selectedAirportSnapshot : null)
@@ -4998,6 +5082,7 @@
       replayPlaybackSpeed,
       recentSearches,
       savedSearches,
+      recentlyViewedFlights,
     });
   }
   $: if (preferencesReady) {
@@ -5028,6 +5113,7 @@
     replayPlaybackSpeed;
     recentSearches;
     savedSearches;
+    recentlyViewedFlights;
     queueWorkspaceSave();
   }
 </script>
@@ -6424,6 +6510,9 @@
               trailPointCount={selectedFlightTrail.length}
               trailWindowHours={selectedFlightTrailWindowHours}
               bookmarked={watchlist.includes(selectedFlight.icao24)}
+              canNavigateBack={canNavigateFlightHistoryBackward}
+              canNavigateForward={canNavigateFlightHistoryForward}
+              comparisonFlight={previousSelectedFlightEntry}
               snapshotFreshness={selectedFlightFreshnessLabel}
               snapshotConfidence={selectedFlightConfidence}
               snapshotQualitySummary={selectedFlightSnapshotSummary}
@@ -6437,6 +6526,8 @@
               onToggleTrail={toggleSelectedFlightTrailVisibility}
               onFitTrail={fitSelectedFlightTrailToScreen}
               onSetTrailWindow={setSelectedFlightTrailWindow}
+              onNavigateBack={() => navigateSelectionHistory(-1)}
+              onNavigateForward={() => navigateSelectionHistory(1)}
               onToggleBookmark={toggleSelectedFlightWatchlist}
               onOpenAirport={(airport) => openAirportInspector(airport, { focusMap: true, zoom: 8.8 })}
               onRetryDetails={retrySelectedFlightDetails}
@@ -6917,20 +7008,54 @@
             </section>
           </section>
         {:else}
-          <TrafficBoardPanel
-            flights={sortedFlights}
-            selectedIcao24={selectedIcao24}
-            title="Visible traffic"
-            subtitle={`${visibleTrackedCount} aircraft in view`}
-            maxRows={10}
-            featuredFlight={leadFeedFlight}
-            sortBy={sortBy}
-            onSortByChange={(value) => {
-              sortBy = value;
-            }}
-            onSelectFlight={selectWatchedFlight}
-            onJumpFlight={jumpTrafficBoardFlight}
-          />
+          <div class="inspector-empty-stack">
+            <TrafficBoardPanel
+              flights={sortedFlights}
+              selectedIcao24={selectedIcao24}
+              title="Visible traffic"
+              subtitle={`${visibleTrackedCount} aircraft in view`}
+              maxRows={10}
+              featuredFlight={leadFeedFlight}
+              sortBy={sortBy}
+              onSortByChange={(value) => {
+                sortBy = value;
+              }}
+              onSelectFlight={selectWatchedFlight}
+              onJumpFlight={jumpTrafficBoardFlight}
+            />
+
+            {#if recentlyViewedOtherFlights.length}
+              <section class="panel facts-panel">
+                <div class="facts-header">
+                  <strong>Recently viewed flights</strong>
+                  <span>{recentlyViewedOtherFlights.length}</span>
+                </div>
+
+                <div class="mini-stat-list">
+                  {#each recentlyViewedOtherFlights as flight}
+                    <div>
+                      <span>
+                        <strong>{flight.callsign ?? flight.registration ?? flight.icao24.toUpperCase()}</strong>
+                        <small>
+                          {[flight.registration ?? flight.icao24.toUpperCase(), flight.type_code, flight.route_label ?? flight.origin_country]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </small>
+                      </span>
+                      <div class="compact-entity-actions">
+                        <button class="widget-footer-button" type="button" on:click={() => selectWatchedFlight(flight)}>
+                          Open
+                        </button>
+                        <button class="widget-footer-button" type="button" on:click={() => jumpTrafficBoardFlight(flight)}>
+                          Jump
+                        </button>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </section>
+            {/if}
+          </div>
         {/if}
       </div>
     </aside>
@@ -7530,6 +7655,11 @@
 
   .panel-stack {
     padding-right: 0.08rem;
+  }
+
+  .inspector-empty-stack {
+    display: grid;
+    gap: 0.7rem;
   }
 
   .compact-utility-stack {

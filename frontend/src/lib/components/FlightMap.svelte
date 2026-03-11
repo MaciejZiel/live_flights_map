@@ -11,7 +11,10 @@
     destroyAircraftWebGlOverlay,
     drawAircraftWebGlOverlay,
   } from "../map/aircraftWebGlOverlay.js";
-  import { getAircraftRenderMode } from "../utils/mapPerformance.js";
+  import {
+    getAircraftRenderMode,
+    shouldUseGpuAircraftLayer,
+  } from "../utils/mapPerformance.js";
 
   export let flights = [];
   export let airports = [];
@@ -55,6 +58,7 @@
   let activeAircraftClusteringEnabled = null;
   let aircraftRenderMode = "detailed";
   let effectiveAircraftRenderMode = "detailed";
+  let gpuTrafficLayerEnabled = false;
   let markerFlights = [];
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
@@ -657,7 +661,7 @@
     if (!denseAircraftOverlay) {
       return;
     }
-    if (effectiveAircraftRenderMode !== "webgl") {
+    if (!gpuTrafficLayerEnabled) {
       clearAircraftWebGlOverlay(denseAircraftOverlay);
       return;
     }
@@ -671,6 +675,7 @@
       watchModeEnabled,
       active: true,
       marginPx: DENSE_CANVAS_MARGIN_PX,
+      detailMode: aircraftRenderMode,
     });
   }
 
@@ -897,11 +902,19 @@
     createAircraftLayer();
   }
 
+  $: gpuTrafficLayerEnabled = shouldUseGpuAircraftLayer({
+    aircraftCount: flights?.length ?? 0,
+    clusteringEnabled: aircraftClusteringEnabled,
+    webglSupported: Boolean(denseAircraftOverlay),
+  });
+
   $: effectiveAircraftRenderMode =
-    aircraftRenderMode === "webgl" && !denseAircraftOverlay ? "lite" : aircraftRenderMode;
+    !gpuTrafficLayerEnabled && aircraftRenderMode === "webgl" && !denseAircraftOverlay
+      ? "detailed"
+      : aircraftRenderMode;
 
   $: markerFlights =
-    effectiveAircraftRenderMode === "webgl"
+    gpuTrafficLayerEnabled
       ? (flights ?? []).filter(
           (flight) => flight?.icao24 && (flight.icao24 === selectedIcao24 || watchedIcao24s.includes(flight.icao24))
         )
@@ -979,7 +992,7 @@
   <div bind:this={container} class="map-root"></div>
   <canvas
     bind:this={denseAircraftCanvas}
-    class:active={effectiveAircraftRenderMode === "webgl"}
+    class:active={gpuTrafficLayerEnabled}
     class="dense-aircraft-canvas"
   ></canvas>
   <div class="map-tint" aria-hidden="true"></div>

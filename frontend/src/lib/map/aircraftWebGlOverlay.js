@@ -1,32 +1,37 @@
-function getPalette(flight, dimmed, watchModeEnabled) {
+function getPalette(flight, dimmed, watchModeEnabled, detailMode = "detailed") {
+  const sizeScale =
+    detailMode === "webgl" ? 0.82 : detailMode === "lite" ? 0.94 : 1.08;
+  const alphaScale =
+    detailMode === "webgl" ? 0.86 : detailMode === "lite" ? 0.94 : 1;
+
   if (dimmed) {
     return {
-      fill: [0.537, 0.576, 0.627, 0.28],
-      stroke: [0.239, 0.274, 0.314, 0.38],
-      size: 4.4,
+      fill: [0.537, 0.576, 0.627, 0.28 * alphaScale],
+      stroke: [0.239, 0.274, 0.314, 0.38 * alphaScale],
+      size: 4.4 * sizeScale,
     };
   }
 
   if (watchModeEnabled) {
     return {
-      fill: [0.604, 0.647, 0.702, 0.52],
-      stroke: [0.294, 0.333, 0.388, 0.62],
-      size: flight.on_ground ? 4.6 : 5,
+      fill: [0.604, 0.647, 0.702, 0.52 * alphaScale],
+      stroke: [0.294, 0.333, 0.388, 0.62 * alphaScale],
+      size: (flight.on_ground ? 4.6 : 5) * sizeScale,
     };
   }
 
   if (flight.on_ground) {
     return {
-      fill: [0.769, 0.518, 0.086, 0.52],
-      stroke: [0.29, 0.216, 0.024, 0.68],
-      size: 4.3,
+      fill: [0.769, 0.518, 0.086, 0.52 * alphaScale],
+      stroke: [0.29, 0.216, 0.024, 0.68 * alphaScale],
+      size: 4.3 * sizeScale,
     };
   }
 
   return {
-    fill: [0.969, 0.78, 0.086, 0.72],
-    stroke: [0.275, 0.216, 0.039, 0.78],
-    size: 5.2,
+    fill: [0.969, 0.78, 0.086, 0.72 * alphaScale],
+    stroke: [0.275, 0.216, 0.039, 0.78 * alphaScale],
+    size: 5.2 * sizeScale,
   };
 }
 
@@ -214,6 +219,7 @@ export function drawAircraftWebGlOverlay(
     watchModeEnabled = false,
     active = false,
     marginPx = 12,
+    detailMode = "detailed",
   } = {}
 ) {
   if (!overlay || !canvas || !map) {
@@ -260,7 +266,12 @@ export function drawAircraftWebGlOverlay(
       continue;
     }
 
-    const palette = getPalette(flight, dimmedIds.has(flight.icao24), watchModeEnabled);
+    const palette = getPalette(
+      flight,
+      dimmedIds.has(flight.icao24),
+      watchModeEnabled,
+      detailMode
+    );
     positions.push(point.x, point.y);
     sizes.push(palette.size);
     fills.push(...palette.fill);

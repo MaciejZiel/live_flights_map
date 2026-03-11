@@ -8,42 +8,54 @@ export function getAircraftRenderMode({
   }
 
   if (!Number.isFinite(zoom)) {
-    return aircraftCount >= 2200 ? "webgl" : aircraftCount >= 1800 ? "lite" : "detailed";
+    return aircraftCount >= 2200 ? "webgl" : aircraftCount >= 650 ? "lite" : "detailed";
   }
 
-  if (aircraftCount >= 4200) {
+  if (aircraftCount >= 3600) {
     return "webgl";
   }
 
-  if (zoom <= 4.8 && aircraftCount >= 1200) {
+  if (zoom <= 4.8 && aircraftCount >= 850) {
     return "webgl";
   }
 
-  if (zoom <= 5.8 && aircraftCount >= 2000) {
+  if (zoom <= 5.8 && aircraftCount >= 1350) {
     return "webgl";
   }
 
-  if (zoom <= 6.8 && aircraftCount >= 3000) {
+  if (zoom <= 6.8 && aircraftCount >= 2100) {
     return "webgl";
   }
 
-  if (aircraftCount >= 2800) {
+  if (aircraftCount >= 2200) {
     return "lite";
   }
 
-  if (zoom <= 4.8 && aircraftCount >= 900) {
+  if (zoom <= 4.8 && aircraftCount >= 220) {
     return "lite";
   }
 
-  if (zoom <= 5.8 && aircraftCount >= 1400) {
+  if (zoom <= 5.8 && aircraftCount >= 320) {
     return "lite";
   }
 
-  if (zoom <= 6.8 && aircraftCount >= 2200) {
+  if (zoom <= 6.8 && aircraftCount >= 420) {
+    return "lite";
+  }
+
+  if (zoom <= 8.2 && aircraftCount >= 650) {
     return "lite";
   }
 
   return "detailed";
+}
+
+export function shouldUseGpuAircraftLayer({
+  aircraftCount = 0,
+  clusteringEnabled = false,
+  webglSupported = false,
+} = {}) {
+  return Boolean(webglSupported && !clusteringEnabled && aircraftCount > 0);
 }
 
 export function shouldUseDetailedAircraftMarker(renderMode, selected = false, watched = false) {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   getAircraftRenderMode,
+  shouldUseGpuAircraftLayer,
   shouldUseDetailedAircraftMarker,
 } from "../src/lib/utils/mapPerformance.js";
 
@@ -20,7 +21,7 @@ test("keeps detailed markers when clustering is enabled", () => {
 test("switches to lite mode for dense low-zoom traffic", () => {
   assert.equal(
     getAircraftRenderMode({
-      aircraftCount: 1600,
+      aircraftCount: 320,
       zoom: 4.9,
       clusteringEnabled: false,
     }),
@@ -42,11 +43,38 @@ test("switches to webgl mode for extreme density", () => {
 test("keeps detailed markers when traffic is manageable", () => {
   assert.equal(
     getAircraftRenderMode({
-      aircraftCount: 850,
+      aircraftCount: 120,
       zoom: 7.2,
       clusteringEnabled: false,
     }),
     "detailed"
+  );
+});
+
+test("enables gpu traffic layer whenever webgl is available and clustering is off", () => {
+  assert.equal(
+    shouldUseGpuAircraftLayer({
+      aircraftCount: 240,
+      clusteringEnabled: false,
+      webglSupported: true,
+    }),
+    true
+  );
+  assert.equal(
+    shouldUseGpuAircraftLayer({
+      aircraftCount: 240,
+      clusteringEnabled: true,
+      webglSupported: true,
+    }),
+    false
+  );
+  assert.equal(
+    shouldUseGpuAircraftLayer({
+      aircraftCount: 240,
+      clusteringEnabled: false,
+      webglSupported: false,
+    }),
+    false
   );
 });
 

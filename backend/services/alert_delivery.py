@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import ipaddress
+import socket
 from urllib.parse import urlparse
 
 import requests
 
 
 class AlertDeliveryError(Exception):
+    pass
+
+
+class InvalidWebhookTargetError(AlertDeliveryError):
     pass
 
 
@@ -34,7 +40,14 @@ class AlertDeliveryService:
 
         parsed = urlparse(normalized_url)
         if parsed.scheme.lower() not in self.allowed_schemes or not parsed.netloc:
-            raise AlertDeliveryError("Webhook URL must use an allowed HTTP scheme.")
+            raise InvalidWebhookTargetError("Webhook URL must use an allowed HTTP scheme.")
+        if parsed.username or parsed.password or not parsed.hostname:
+            raise InvalidWebhookTargetError("Webhook URL must not contain credentials and must include a hostname.")
+        try:
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError as exc:
+            raise InvalidWebhookTargetError("Webhook URL contains an invalid port.") from exc
+        self._validate_public_host(parsed.hostname, port)
 
         try:
             response = self.session.post(
@@ -42,8 +55,13 @@ class AlertDeliveryService:
                 json=event,
                 timeout=self.timeout,
                 headers={"Content-Type": "application/json"},
+                allow_redirects=False,
             )
+            if 300 <= response.status_code < 400:
+                raise AlertDeliveryError("Webhook redirects are not followed.")
             response.raise_for_status()
+        except InvalidWebhookTargetError:
+            raise
         except requests.Timeout as exc:
             raise AlertDeliveryError("Webhook delivery timed out.") from exc
         except requests.HTTPError as exc:
@@ -53,3 +71,27 @@ class AlertDeliveryService:
             raise AlertDeliveryError("Unable to deliver the alert webhook.") from exc
 
         return AlertDeliveryResult(status_code=response.status_code)
+
+    @staticmethod
+    def _validate_public_host(hostname: str, port: int) -> None:
+        normalized_host = hostname.rstrip(".").lower()
+        if normalized_host == "localhost" or normalized_host.endswith((".localhost", ".local")):
+            raise InvalidWebhookTargetError("Webhook URL must resolve to a public host.")
+
+        try:
+            addresses = {ipaddress.ip_address(normalized_host)}
+        except ValueError:
+            try:
+                addresses = {
+                    ipaddress.ip_address(result[4][0])
+                    for result in socket.getaddrinfo(
+                        normalized_host,
+                        port,
+                        type=socket.SOCK_STREAM,
+                    )
+                }
+            except (OSError, ValueError) as exc:
+                raise InvalidWebhookTargetError("Webhook hostname could not be resolved.") from exc
+
+        if not addresses or any(not address.is_global for address in addresses):
+            raise InvalidWebhookTargetError("Webhook URL must resolve only to public IP addresses.")

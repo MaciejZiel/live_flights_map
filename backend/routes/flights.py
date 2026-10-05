@@ -6,7 +6,7 @@ from flask import Blueprint, Response, current_app, jsonify, request, stream_wit
 
 from backend.services.airport_weather import AirportWeatherError
 from backend.services.provider_base import FlightProviderError
-from backend.services.alert_delivery import AlertDeliveryError
+from backend.services.alert_delivery import AlertDeliveryError, InvalidWebhookTargetError
 
 api = Blueprint("api", __name__)
 
@@ -189,6 +189,8 @@ def alert_webhook_delivery():
     service = current_app.extensions["alert_delivery_service"]
     try:
         result = service.deliver_webhook(target_url, event)
+    except InvalidWebhookTargetError as exc:
+        return jsonify({"error": str(exc)}), 400
     except AlertDeliveryError as exc:
         return jsonify({"error": str(exc)}), 502
 

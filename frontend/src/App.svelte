@@ -8909,7 +8909,7 @@
   }
   @media (max-width: 720px) {
     .radar-topbar { top: max(0.5rem, env(safe-area-inset-top)); left: 0.55rem; right: 0.55rem; }
-    .center-bar { padding: 0.55rem; }
+    .center-bar { width: auto; box-sizing: border-box; padding: 0.55rem; }
     .center-bar-main { grid-template-columns: minmax(0, 1fr) auto; gap: 0.45rem; }
     .brand-inline { grid-column: 1; }
     .search-shell { grid-column: 1 / -1; grid-row: 2; }

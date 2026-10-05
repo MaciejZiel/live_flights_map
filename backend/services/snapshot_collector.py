@@ -83,11 +83,33 @@ class SnapshotCollectorService:
                 )
                 continue
 
-            sectors_synced += 1
             flights = [flight for flight in payload.get("flights") or [] if isinstance(flight, dict)]
+            sector_meta = payload.get("meta") if isinstance(payload, dict) else None
+            if isinstance(sector_meta, dict) and sector_meta.get("stale"):
+                warning = str(
+                    sector_meta.get("warning")
+                    or "Provider data is stale; waiting for a fresh snapshot."
+                )
+                warnings.append(f"{sector['key']}: {warning}")
+                sector_results.append(
+                    {
+                        "key": sector["key"],
+                        "bbox": sector["bbox"],
+                        "started_at": sector_started_at.isoformat(),
+                        "fetched_at": payload.get("fetched_at"),
+                        "status": "stale",
+                        "warning": warning,
+                        "source": sector_meta.get("source"),
+                        "provider_used": sector_meta.get("provider_used"),
+                        "flight_count": len(flights),
+                        "latest_positions_stored": 0,
+                    }
+                )
+                continue
+
+            sectors_synced += 1
             flights_collected += len(flights)
             stored_flights = flights
-            sector_meta = payload.get("meta") if isinstance(payload, dict) else None
 
             if self.traffic_intelligence_service is not None and flights:
                 try:

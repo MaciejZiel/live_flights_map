@@ -55,6 +55,42 @@ class SnapshotCollectorServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unknown snapshot collector sector"):
             SnapshotCollectorService.select_sectors(("atlantis",))
 
+    def test_stale_fallback_is_not_reported_or_stored_as_fresh(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            archive_service = FlightArchiveService(
+                archive_path=str(Path(temp_dir) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+            )
+            bbox = {"lamin": 50.0, "lamax": 54.0, "lomin": 18.0, "lomax": 22.0}
+            snapshot_service = _SnapshotServiceStub(
+                {
+                    "count": 1,
+                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "bbox": bbox,
+                    "flights": [{"icao24": "abc123", "latitude": 52.2, "longitude": 21.0}],
+                    "meta": {
+                        "source": "cache",
+                        "stale": True,
+                        "warning": "Providers are cooling down.",
+                    },
+                }
+            )
+            service = SnapshotCollectorService(
+                snapshot_service=snapshot_service,
+                archive_service=archive_service,
+                sectors=({"key": "poland_focus", "bbox": bbox},),
+            )
+
+            result = service.collect_once()
+            latest = archive_service.list_latest_flights(bbox=bbox, max_age_seconds=300)
+
+            self.assertEqual(result["sectors_synced"], 0)
+            self.assertEqual(result["latest_positions_stored"], 0)
+            self.assertEqual(result["sectors"][0]["status"], "stale")
+            self.assertIn("Providers are cooling down.", result["warnings"][0])
+            self.assertEqual(latest["count"], 0)
+
     def test_collect_once_stores_latest_positions_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             archive_service = FlightArchiveService(

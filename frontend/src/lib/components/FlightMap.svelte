@@ -117,7 +117,7 @@
     const commonOptions = {
       crossOrigin: true,
       detectRetina: true,
-      keepBuffer: 8,
+      keepBuffer: 3,
       maxZoom: 18,
       updateWhenIdle: false,
       updateWhenZooming: false,
@@ -936,8 +936,8 @@
 
     map = L.map(container, {
       zoomControl: false,
-      fadeAnimation: false,
-      markerZoomAnimation: false,
+      fadeAnimation: true,
+      markerZoomAnimation: true,
       minZoom: 2,
       preferCanvas: true,
       worldCopyJump: true,

@@ -173,6 +173,7 @@
   let viewPresetRequest = null;
   let flightFocusRequest = null;
   let now = Date.now();
+  let flightDataNow = Date.now();
   let flightHistory = new Map();
   let lastHistoryFetchKey = null;
   let filterPresets = [];
@@ -394,11 +395,15 @@
     const freshnessTimer = window.setInterval(() => {
       now = Date.now();
     }, 1000);
+    const flightRenderTimer = window.setInterval(() => {
+      flightDataNow = Date.now();
+    }, 10000);
 
     return () => {
       window.removeEventListener("keydown", handleKeyboardShortcut);
       mobileViewportQuery.removeEventListener("change", syncViewportMode);
       window.clearInterval(freshnessTimer);
+      window.clearInterval(flightRenderTimer);
       if (replayPlaybackTimer) {
         window.clearInterval(replayPlaybackTimer);
       }
@@ -4492,7 +4497,7 @@
       recentActivityLimitSeconds === null ||
       (flight.last_contact !== null &&
         flight.last_contact !== undefined &&
-        Math.max(0, Math.round((now - flight.last_contact * 1000) / 1000)) <=
+        Math.max(0, Math.round((flightDataNow - flight.last_contact * 1000) / 1000)) <=
           recentActivityLimitSeconds);
 
     return (
@@ -4527,7 +4532,7 @@
   ).map((flight) => ({
     ...flight,
     position_is_historical: Boolean(activeReplaySnapshot),
-    position_age_seconds: activeReplaySnapshot ? null : getFlightPositionAgeSeconds(flight, now),
+    position_age_seconds: activeReplaySnapshot ? null : getFlightPositionAgeSeconds(flight, flightDataNow),
   }));
   $: dimmedFlightIds = filters.dimFilteredTraffic && activeFilterCount
     ? mapFeedFlights.filter((flight) => flight.is_dimmed).map((flight) => flight.icao24)

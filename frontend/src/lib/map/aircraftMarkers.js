@@ -8,6 +8,7 @@ import {
   formatVerticalRate,
 } from "../utils/flightFormatters.js";
 import { shouldUseDetailedAircraftMarker } from "../utils/mapPerformance.js";
+import { hasFlightPositionChanged } from "../utils/aircraftPosition.js";
 import {
   formatFlightPositionAge,
   getFlightPositionAgeBand,
@@ -135,12 +136,17 @@ function easeOutCubic(progress) {
 }
 
 function animateMarkerPosition(entry, nextLatLng) {
+  if (!hasFlightPositionChanged(entry.targetLatLng, nextLatLng)) {
+    return;
+  }
+
   const startLatLng = entry.marker.getLatLng();
   const startedAt = performance.now();
 
   if (entry.animationFrame) {
     cancelAnimationFrame(entry.animationFrame);
   }
+  entry.targetLatLng = nextLatLng;
 
   const step = (timestamp) => {
     const progress = Math.min((timestamp - startedAt) / POSITION_ANIMATION_MS, 1);
@@ -305,6 +311,7 @@ function createDetailedMarkerEntry(
   const entry = {
     marker,
     flight,
+    targetLatLng: [flight.latitude, flight.longitude],
     selected,
     tooltipMode: null,
     animationFrame: null,
@@ -361,6 +368,7 @@ function createLiteMarkerEntry(layer, flight, selected, watched, watchModeEnable
   return {
     marker,
     flight,
+    targetLatLng: [flight.latitude, flight.longitude],
     selected,
     tooltipMode: null,
     animationFrame: null,

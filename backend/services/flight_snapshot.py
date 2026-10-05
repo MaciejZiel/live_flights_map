@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from copy import deepcopy
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from time import monotonic
@@ -27,6 +27,8 @@ class FlightSnapshotService:
         cache_path: str | None = None,
         archive_service=None,
         latest_cache_max_age_seconds: float = 150.0,
+        latest_cache_stale_after_seconds: float = 120.0,
+        provider_min_interval_seconds: float = 0.0,
     ) -> None:
         self.providers = providers
         self.cache_ttl = cache_ttl
@@ -37,6 +39,8 @@ class FlightSnapshotService:
         self._cache_path = Path(cache_path).expanduser() if cache_path else None
         self._archive_service = archive_service
         self.latest_cache_max_age_seconds = max(float(latest_cache_max_age_seconds or 0), 1.0)
+        self.latest_cache_stale_after_seconds = max(float(latest_cache_stale_after_seconds or 0), 1.0)
+        self.provider_min_interval_seconds = max(float(provider_min_interval_seconds or 0), 0.0)
         self._load_cache_from_disk()
 
     def get_flights(
@@ -45,6 +49,8 @@ class FlightSnapshotService:
         *,
         prefer_latest_cache: bool = True,
         update_latest_cache: bool = True,
+        provider_names: tuple[str, ...] | None = None,
+        provider_min_interval_seconds: float | None = None,
     ) -> dict[str, object]:
         cache_key = self._cache_key(bbox)
         now = monotonic()
@@ -72,6 +78,8 @@ class FlightSnapshotService:
         payload, provider_name, fallback_reason, fallback_warning, last_error, diagnostics = self._fetch_from_providers(
             bbox,
             now,
+            provider_names=provider_names,
+            provider_min_interval_seconds=provider_min_interval_seconds,
         )
         if payload is None:
             if cache_entry:
@@ -131,6 +139,9 @@ class FlightSnapshotService:
         self,
         bbox: dict[str, float],
         now: float,
+        *,
+        provider_names: tuple[str, ...] | None = None,
+        provider_min_interval_seconds: float | None = None,
     ) -> tuple[
         dict[str, object] | None,
         str | None,
@@ -143,9 +154,28 @@ class FlightSnapshotService:
         saw_rate_limit = False
         last_error: FlightProviderError | None = None
 
-        for provider in self.providers:
+        allowed_providers = set(provider_names) if provider_names is not None else None
+        providers = [
+            provider
+            for provider in self.providers
+            if allowed_providers is None or provider.name in allowed_providers
+        ]
+        for provider in providers:
             cooldown_until = self._cooldown_until.get(provider.name, 0)
-            if cooldown_until > now:
+            shared_wait = self._get_shared_provider_wait(provider.name)
+            if cooldown_until > now or shared_wait > 0:
+                saw_cooldown = True
+                continue
+
+            lease_acquired = self._acquire_shared_provider_lease(
+                provider.name,
+                min_interval_seconds=(
+                    self.provider_min_interval_seconds
+                    if provider_min_interval_seconds is None
+                    else provider_min_interval_seconds
+                ),
+            )
+            if not lease_acquired:
                 saw_cooldown = True
                 continue
 
@@ -154,15 +184,24 @@ class FlightSnapshotService:
             except FlightProviderRateLimitError as exc:
                 with self._lock:
                     self._cooldown_until[provider.name] = monotonic() + self.cooldown_seconds
+                self._finish_shared_provider_request(
+                    provider.name,
+                    cooldown_seconds=self.cooldown_seconds,
+                )
                 saw_rate_limit = True
                 last_error = exc
                 continue
             except FlightProviderError as exc:
+                self._finish_shared_provider_request(provider.name)
                 last_error = exc
                 continue
+            except Exception:
+                self._finish_shared_provider_request(provider.name)
+                raise
 
             with self._lock:
                 self._cooldown_until.pop(provider.name, None)
+            self._finish_shared_provider_request(provider.name, cooldown_seconds=0)
             provider_name = self._get_provider_label(provider)
             return payload, provider_name, None, None, None, self._build_runtime_meta(
                 monotonic(),
@@ -308,11 +347,26 @@ class FlightSnapshotService:
         if not isinstance(cache_meta, dict) or not bool(cache_meta.get("collector_ready")):
             return None
 
+        fetched_at = self._resolve_snapshot_timestamp(latest_payload.get("fetched_at"))
+        snapshot_age_seconds = (
+            float("inf")
+            if fetched_at is None
+            else max(0.0, datetime.now(timezone.utc).timestamp() - fetched_at)
+        )
+        is_stale = snapshot_age_seconds > self.latest_cache_stale_after_seconds
+        warning = None
+        if is_stale:
+            warning = (
+                "Showing the latest global snapshot; aircraft positions may have moved "
+                f"since it was captured ({round(snapshot_age_seconds / 60)} min ago)."
+            )
+
         return self._with_meta(
             latest_payload,
             source="collector_cache",
-            stale=False,
-            reason="collector_cache_hit",
+            stale=is_stale,
+            reason="collector_cache_stale" if is_stale else "collector_cache_hit",
+            warning=warning,
             extra_meta={
                 **self._build_runtime_meta(monotonic()),
                 **(cache_meta if isinstance(cache_meta, dict) else {}),
@@ -352,11 +406,62 @@ class FlightSnapshotService:
         }
 
     def _active_cooldowns(self, now: float) -> dict[str, int]:
-        return {
+        cooldowns = {
             provider_name: max(1, round(cooldown_until - now))
             for provider_name, cooldown_until in self._cooldown_until.items()
             if cooldown_until > now
         }
+        for provider in self.providers:
+            if provider.name in cooldowns:
+                continue
+            shared_wait = self._get_shared_provider_cooldown(provider.name)
+            if shared_wait > 0:
+                cooldowns[provider.name] = max(1, round(shared_wait))
+        return cooldowns
+
+    def _get_shared_provider_wait(self, provider_name: str) -> float:
+        if self._archive_service is None or not hasattr(self._archive_service, "provider_wait_seconds"):
+            return 0.0
+        try:
+            return float(self._archive_service.provider_wait_seconds(provider_name) or 0.0)
+        except Exception:
+            return 0.0
+
+    def _get_shared_provider_cooldown(self, provider_name: str) -> float:
+        if self._archive_service is None or not hasattr(self._archive_service, "provider_cooldown_seconds"):
+            return 0.0
+        try:
+            return float(self._archive_service.provider_cooldown_seconds(provider_name) or 0.0)
+        except Exception:
+            return 0.0
+
+    def _acquire_shared_provider_lease(self, provider_name: str, min_interval_seconds: float) -> bool:
+        if self._archive_service is None or not hasattr(self._archive_service, "try_acquire_provider_request"):
+            return True
+        try:
+            acquired, _wait_seconds = self._archive_service.try_acquire_provider_request(
+                provider_name,
+                lease_seconds=120.0,
+                min_interval_seconds=min_interval_seconds,
+            )
+            return bool(acquired)
+        except Exception:
+            return True
+
+    def _finish_shared_provider_request(
+        self,
+        provider_name: str,
+        cooldown_seconds: float | None = None,
+    ) -> None:
+        if self._archive_service is None or not hasattr(self._archive_service, "finish_provider_request"):
+            return
+        try:
+            self._archive_service.finish_provider_request(
+                provider_name,
+                cooldown_seconds=cooldown_seconds,
+            )
+        except Exception:
+            return
 
     @staticmethod
     def _build_quality_meta(payload: dict[str, object]) -> dict[str, object]:

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from backend.runtime import build_runtime
 
-DEFAULT_INTERVAL_SECONDS = 60.0
+DEFAULT_INTERVAL_SECONDS = 900.0
 
 
 def _run_loop(*, once: bool, interval_seconds: float) -> None:
@@ -18,7 +18,7 @@ def _run_loop(*, once: bool, interval_seconds: float) -> None:
         print(json.dumps(payload, ensure_ascii=True), flush=True)
         if once:
             return
-        time.sleep(interval_seconds)
+        time.sleep(min(interval_seconds, 60.0) if payload.get("warnings") else interval_seconds)
 
 
 def main() -> None:

@@ -9,6 +9,81 @@ from backend.services.flight_archive import FlightArchiveService
 
 
 class FlightArchiveServiceTests(unittest.TestCase):
+    def test_provider_request_lease_and_cooldown_are_shared_by_runtime_instances(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            database_path = str(Path(temp_dir) / "history.sqlite3")
+            first = FlightArchiveService(database_path, retention_hours=24, max_snapshots=100)
+            second = FlightArchiveService(database_path, retention_hours=24, max_snapshots=100)
+
+            acquired, _ = first.try_acquire_provider_request("opensky", lease_seconds=30)
+            blocked, wait_seconds = second.try_acquire_provider_request("opensky", lease_seconds=30)
+            self.assertTrue(acquired)
+            self.assertFalse(blocked)
+            self.assertGreater(wait_seconds, 0)
+
+            first.finish_provider_request("opensky", cooldown_seconds=30)
+            self.assertGreater(second.provider_cooldown_seconds("opensky"), 0)
+            blocked, _ = second.try_acquire_provider_request("opensky")
+            self.assertFalse(blocked)
+
+            first.finish_provider_request("opensky", cooldown_seconds=0)
+            acquired, _ = second.try_acquire_provider_request("opensky")
+            self.assertTrue(acquired)
+
+    def test_global_sector_cache_covers_regional_viewports(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            service = FlightArchiveService(
+                archive_path=str(Path(temp_dir) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+            )
+            world_bbox = {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0}
+            regional_bbox = {"lamin": 49.0, "lamax": 55.0, "lomin": 14.0, "lomax": 25.0}
+            now = datetime.now(timezone.utc).isoformat()
+            service.store_latest_snapshot(
+                {
+                    "fetched_at": now,
+                    "count": 1,
+                    "flights": [
+                        {
+                            "icao24": "abc123",
+                            "latitude": 52.2,
+                            "longitude": 21.0,
+                            "on_ground": False,
+                        }
+                    ],
+                },
+                sector_key="global_world",
+            )
+            service.record_collector_run(
+                {
+                    "started_at": now,
+                    "finished_at": now,
+                    "sectors_total": 1,
+                    "sectors_synced": 1,
+                    "flights_collected": 1,
+                    "latest_positions_stored": 1,
+                    "warnings": [],
+                    "sectors": [
+                        {
+                            "key": "global_world",
+                            "bbox": world_bbox,
+                            "started_at": now,
+                            "fetched_at": now,
+                            "status": "ok",
+                            "flight_count": 1,
+                            "latest_positions_stored": 1,
+                        }
+                    ],
+                }
+            )
+
+            regional = service.list_latest_flights(regional_bbox, max_age_seconds=960)
+
+            self.assertEqual(regional["count"], 1)
+            self.assertEqual(regional["cache_meta"]["sector_keys"], ["global_world"])
+            self.assertTrue(regional["cache_meta"]["collector_ready"])
+
     def test_replay_snapshots_can_be_anchored_to_specific_end_time(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             service = FlightArchiveService(

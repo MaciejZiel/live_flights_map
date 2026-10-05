@@ -8,8 +8,9 @@ x-backend-environment: &backend-environment
   WORKSPACE_DB_PATH: /data/workspace.sqlite3
   AIRCRAFT_PHOTO_CACHE_PATH: /data/aircraft-photos.sqlite3
   OPENSKY_CACHE_PATH: /data/provider-cache.json
-  LIVE_LATEST_CACHE_MAX_AGE_SECONDS: ${LIVE_LATEST_CACHE_MAX_AGE_SECONDS:-150}
-  SNAPSHOT_COLLECTOR_SECTORS: ${SNAPSHOT_COLLECTOR_SECTORS:-poland_focus}
+  LIVE_LATEST_CACHE_MAX_AGE_SECONDS: ${LIVE_LATEST_CACHE_MAX_AGE_SECONDS:-960}
+  LIVE_LATEST_CACHE_STALE_AFTER_SECONDS: ${LIVE_LATEST_CACHE_STALE_AFTER_SECONDS:-120}
+  SNAPSHOT_COLLECTOR_SECTORS: ${SNAPSHOT_COLLECTOR_SECTORS:-global_world}
   AIRPORT_CATALOG_CACHE_PATH: /data/airports.csv
   FLIGHT_ARCHIVE_RETENTION_HOURS: ${FLIGHT_ARCHIVE_RETENTION_HOURS:-24}
   FLIGHT_ARCHIVE_MAX_SNAPSHOTS: ${FLIGHT_ARCHIVE_MAX_SNAPSHOTS:-720}
@@ -61,7 +62,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: ["python", "-m", "backend.entrypoints.collector", "--interval", "60"]
+    command: ["python", "-m", "backend.entrypoints.collector", "--interval", "900"]
     environment: *backend-environment
     volumes:
       - flight-data:/data

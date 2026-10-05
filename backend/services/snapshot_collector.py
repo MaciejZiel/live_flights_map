@@ -9,6 +9,11 @@ from .provider_base import FlightProviderError
 class SnapshotCollectorService:
     DEFAULT_SECTORS = (
         {
+            "key": "global_world",
+            "bbox": {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0},
+            "provider_names": ("opensky",),
+        },
+        {
             "key": "poland_focus",
             "bbox": {"lamin": 49.0, "lamax": 55.1, "lomin": 14.0, "lomax": 24.5},
         },
@@ -30,7 +35,7 @@ class SnapshotCollectorService:
     @classmethod
     def select_sectors(cls, configured_keys: tuple[str, ...]) -> tuple[dict[str, object], ...]:
         if "*" in configured_keys:
-            return cls.DEFAULT_SECTORS
+            return (next(sector for sector in cls.DEFAULT_SECTORS if sector["key"] == "global_world"),)
 
         sectors_by_key = {str(sector["key"]): sector for sector in cls.DEFAULT_SECTORS}
         unknown_keys = sorted(set(configured_keys) - sectors_by_key.keys())
@@ -67,6 +72,7 @@ class SnapshotCollectorService:
                     sector["bbox"],
                     prefer_latest_cache=False,
                     update_latest_cache=False,
+                    provider_names=sector.get("provider_names"),
                 )
             except FlightProviderError as exc:
                 warnings.append(f"{sector['key']}: {exc}")

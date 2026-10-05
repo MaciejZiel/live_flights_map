@@ -112,6 +112,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         cache_path=config.OPENSKY_CACHE_PATH,
         archive_service=archive_service,
         latest_cache_max_age_seconds=config.LIVE_LATEST_CACHE_MAX_AGE_SECONDS,
+        latest_cache_stale_after_seconds=config.LIVE_LATEST_CACHE_STALE_AFTER_SECONDS,
     )
     global_traffic_board_service = GlobalTrafficBoardService(
         snapshot_service=flight_snapshot_service,

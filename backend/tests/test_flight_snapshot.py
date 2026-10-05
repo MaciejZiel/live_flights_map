@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime, timezone
 
 from backend.services.flight_snapshot import FlightSnapshotService
-from backend.services.provider_base import FlightProviderRateLimitError
+from backend.services.provider_base import FlightProviderError, FlightProviderRateLimitError
 
 
 class _ProviderStub:
@@ -66,6 +66,75 @@ class _ArchiveStub:
 
 
 class FlightSnapshotServiceTests(unittest.TestCase):
+    def test_provider_names_limit_the_upstream_used_for_a_snapshot(self) -> None:
+        opensky = _ProviderStub("opensky", {"count": 0, "flights": [], "fetched_at": datetime.now(timezone.utc).isoformat()})
+        adsb_lol = _ProviderStub("adsb_lol", {"count": 0, "flights": [], "fetched_at": datetime.now(timezone.utc).isoformat()})
+        service = FlightSnapshotService(
+            providers=[opensky, adsb_lol],
+            cache_ttl=0,
+            cooldown_seconds=60,
+        )
+
+        service.get_flights(
+            {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0},
+            provider_names=("opensky",),
+        )
+
+        self.assertEqual(opensky.calls, 1)
+        self.assertEqual(adsb_lol.calls, 0)
+
+    def test_shared_provider_lease_prevents_parallel_runtime_fetches(self) -> None:
+        bbox = {"lamin": 50.0, "lamax": 51.0, "lomin": 19.0, "lomax": 20.0}
+        provider = _ProviderStub("opensky", {"count": 0, "flights": [], "fetched_at": datetime.now(timezone.utc).isoformat()})
+
+        class _BusyProviderGate:
+            def provider_wait_seconds(self, _provider_name: str) -> float:
+                return 10.0
+
+            def provider_cooldown_seconds(self, _provider_name: str) -> float:
+                return 0.0
+
+        service = FlightSnapshotService(
+            providers=[provider],
+            cache_ttl=30,
+            cooldown_seconds=60,
+            archive_service=_BusyProviderGate(),
+        )
+
+        with self.assertRaisesRegex(FlightProviderError, "No upstream providers"):
+            service.get_flights(bbox)
+        self.assertEqual(provider.calls, 0)
+
+    def test_marks_old_collector_snapshot_as_stale_while_serving_it(self) -> None:
+        bbox = {"lamin": 50.0, "lamax": 51.0, "lomin": 19.0, "lomax": 20.0}
+        archive = _ArchiveStub(
+            {
+                "bbox": bbox,
+                "count": 1,
+                "fetched_at": datetime.fromtimestamp(
+                    datetime.now(timezone.utc).timestamp() - 300,
+                    timezone.utc,
+                ).isoformat(),
+                "flights": [{"icao24": "abc001", "latitude": 50.5, "longitude": 19.5}],
+                "cache_meta": {"fresh": True, "collector_ready": True},
+            }
+        )
+        service = FlightSnapshotService(
+            providers=[],
+            cache_ttl=30,
+            cooldown_seconds=60,
+            archive_service=archive,
+            latest_cache_max_age_seconds=960,
+            latest_cache_stale_after_seconds=120,
+        )
+
+        payload = service.get_flights(bbox)
+
+        self.assertEqual(payload["count"], 1)
+        self.assertTrue(payload["meta"]["stale"])
+        self.assertEqual(payload["meta"]["reason"], "collector_cache_stale")
+        self.assertIn("5 min ago", payload["meta"]["warning"])
+
     def test_adds_provider_and_quality_meta_to_live_snapshot(self) -> None:
         fetched_at = datetime.fromtimestamp(1000, timezone.utc).isoformat()
         provider = _ProviderStub(

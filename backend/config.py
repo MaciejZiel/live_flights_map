@@ -143,11 +143,14 @@ class Config:
         os.path.join(gettempdir(), "live-flights-map-opensky-cache.json"),
     )
     LIVE_LATEST_CACHE_MAX_AGE_SECONDS = float(
-        os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "150")
+        os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "960")
+    )
+    LIVE_LATEST_CACHE_STALE_AFTER_SECONDS = float(
+        os.getenv("LIVE_LATEST_CACHE_STALE_AFTER_SECONDS", "120")
     )
     SNAPSHOT_COLLECTOR_SECTORS = tuple(
         sector.strip()
-        for sector in os.getenv("SNAPSHOT_COLLECTOR_SECTORS", "poland_focus").split(",")
+        for sector in os.getenv("SNAPSHOT_COLLECTOR_SECTORS", "global_world").split(",")
         if sector.strip()
     )
     FLIGHT_DETAILS_CACHE_TTL = float(os.getenv("FLIGHT_DETAILS_CACHE_TTL", "21600"))

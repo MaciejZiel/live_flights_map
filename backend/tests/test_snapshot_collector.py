@@ -20,12 +20,14 @@ class _SnapshotServiceStub:
         *,
         prefer_latest_cache: bool = True,
         update_latest_cache: bool = True,
+        provider_names: tuple[str, ...] | None = None,
     ) -> dict[str, object]:
         self.calls.append(
             {
                 "bbox": bbox,
                 "prefer_latest_cache": prefer_latest_cache,
                 "update_latest_cache": update_latest_cache,
+                "provider_names": provider_names,
             }
         )
         return self.payload
@@ -45,11 +47,13 @@ class _TrafficIntelligenceStub:
 
 class SnapshotCollectorServiceTests(unittest.TestCase):
     def test_select_sectors_supports_regional_and_full_coverage(self) -> None:
-        poland = SnapshotCollectorService.select_sectors(("poland_focus",))
-        all_sectors = SnapshotCollectorService.select_sectors(("*",))
+        world = SnapshotCollectorService.select_sectors(("global_world",))
+        all_world = SnapshotCollectorService.select_sectors(("*",))
 
-        self.assertEqual([sector["key"] for sector in poland], ["poland_focus"])
-        self.assertEqual(all_sectors, SnapshotCollectorService.DEFAULT_SECTORS)
+        self.assertEqual([sector["key"] for sector in world], ["global_world"])
+        self.assertEqual(all_world, world)
+        self.assertEqual(world[0]["bbox"], {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0})
+        self.assertEqual(world[0]["provider_names"], ("opensky",))
 
     def test_select_sectors_rejects_unknown_sector(self) -> None:
         with self.assertRaisesRegex(ValueError, "Unknown snapshot collector sector"):

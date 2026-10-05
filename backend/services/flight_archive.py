@@ -5,6 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
+from time import time
 
 
 class FlightArchiveService:
@@ -175,6 +176,120 @@ class FlightArchiveService:
                 collector_run_rows_before - collector_run_rows_after,
             ),
         }
+
+    def try_acquire_provider_request(
+        self,
+        provider_name: str,
+        *,
+        lease_seconds: float = 120.0,
+        min_interval_seconds: float = 0.0,
+    ) -> tuple[bool, float]:
+        now = time()
+        normalized_name = str(provider_name).strip().lower()
+        if not normalized_name:
+            return True, 0.0
+
+        with self._lock:
+            connection = self._connect()
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+                connection.execute(
+                    "INSERT OR IGNORE INTO provider_runtime_state (provider_name) VALUES (?)",
+                    (normalized_name,),
+                )
+                row = connection.execute(
+                    """SELECT cooldown_until, lease_until, next_request_at
+                       FROM provider_runtime_state WHERE provider_name = ?""",
+                    (normalized_name,),
+                ).fetchone()
+                blocked_until = max(
+                    float(row["cooldown_until"] or 0),
+                    float(row["lease_until"] or 0),
+                    float(row["next_request_at"] or 0),
+                )
+                if blocked_until > now:
+                    connection.commit()
+                    return False, blocked_until - now
+
+                connection.execute(
+                    """UPDATE provider_runtime_state
+                       SET lease_until = ?, next_request_at = ?
+                       WHERE provider_name = ?""",
+                    (
+                        now + max(float(lease_seconds), 1.0),
+                        now + max(float(min_interval_seconds), 0.0),
+                        normalized_name,
+                    ),
+                )
+                connection.commit()
+                return True, 0.0
+            finally:
+                connection.close()
+
+    def finish_provider_request(
+        self,
+        provider_name: str,
+        *,
+        cooldown_seconds: float | None = None,
+    ) -> None:
+        normalized_name = str(provider_name).strip().lower()
+        if not normalized_name:
+            return
+        now = time()
+        with self._lock:
+            connection = self._connect()
+            try:
+                cooldown_until = None
+                if cooldown_seconds is not None:
+                    cooldown_until = now + max(float(cooldown_seconds), 0.0)
+                connection.execute(
+                    """INSERT INTO provider_runtime_state (
+                           provider_name, cooldown_until, lease_until, next_request_at
+                       ) VALUES (?, ?, 0, 0)
+                       ON CONFLICT(provider_name) DO UPDATE SET
+                           cooldown_until = COALESCE(?, provider_runtime_state.cooldown_until),
+                           lease_until = 0""",
+                    (normalized_name, cooldown_until or 0.0, cooldown_until),
+                )
+                connection.commit()
+            finally:
+                connection.close()
+
+    def provider_wait_seconds(self, provider_name: str) -> float:
+        normalized_name = str(provider_name).strip().lower()
+        if not normalized_name:
+            return 0.0
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                """SELECT cooldown_until, lease_until, next_request_at
+                   FROM provider_runtime_state WHERE provider_name = ?""",
+                (normalized_name,),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row is None:
+            return 0.0
+        blocked_until = max(
+            float(row["cooldown_until"] or 0),
+            float(row["lease_until"] or 0),
+            float(row["next_request_at"] or 0),
+        )
+        return max(0.0, blocked_until - time())
+
+    def provider_cooldown_seconds(self, provider_name: str) -> float:
+        normalized_name = str(provider_name).strip().lower()
+        if not normalized_name:
+            return 0.0
+        connection = self._connect()
+        try:
+            row = connection.execute(
+                "SELECT cooldown_until FROM provider_runtime_state WHERE provider_name = ?",
+                (normalized_name,),
+            ).fetchone()
+        finally:
+            connection.close()
+        return 0.0 if row is None else max(0.0, float(row["cooldown_until"] or 0) - time())
 
     def list_replay_snapshots(
         self,
@@ -980,6 +1095,13 @@ class FlightArchiveService:
                     latest_positions_stored INTEGER NOT NULL DEFAULT 0,
                     warning TEXT,
                     payload_json TEXT NOT NULL DEFAULT '{}'
+                );
+
+                CREATE TABLE IF NOT EXISTS provider_runtime_state (
+                    provider_name TEXT PRIMARY KEY,
+                    cooldown_until REAL NOT NULL DEFAULT 0,
+                    lease_until REAL NOT NULL DEFAULT 0,
+                    next_request_at REAL NOT NULL DEFAULT 0
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_snapshots_bbox_time

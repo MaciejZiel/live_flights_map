@@ -7,6 +7,17 @@ from unittest.mock import patch
 
 from backend import create_app
 from backend.config import Config
+from backend.routes.flights import _provider_names_for_bbox
+
+
+class FlightRouteProviderSelectionTests(unittest.TestCase):
+    def test_world_snapshot_uses_single_global_provider(self) -> None:
+        world_bbox = {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0}
+        self.assertEqual(_provider_names_for_bbox(world_bbox), ("opensky",))
+
+    def test_regional_snapshot_keeps_configured_provider_fallbacks(self) -> None:
+        regional_bbox = {"lamin": 49.0, "lamax": 55.0, "lomin": 14.0, "lomax": 24.0}
+        self.assertIsNone(_provider_names_for_bbox(regional_bbox))
 
 
 class HealthcheckRouteTests(unittest.TestCase):

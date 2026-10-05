@@ -4384,59 +4384,6 @@
     return sortedFlights;
   }
 
-  function getDisplayLimitForZoom(zoom, clusteringEnabled) {
-    if (!clusteringEnabled) {
-      return null;
-    }
-
-    if (!Number.isFinite(zoom)) {
-      return 1200;
-    }
-
-    if (zoom <= 4) {
-      return 1600;
-    }
-
-    if (zoom <= 5) {
-      return 2400;
-    }
-
-    if (zoom <= 6) {
-      return 3600;
-    }
-
-    if (zoom <= 7) {
-      return 5200;
-    }
-
-    return null;
-  }
-
-  function prioritizeFlightsForMap(flights, limit, selectedIcao24, watchedIcao24s) {
-    if (!limit || flights.length <= limit) {
-      return flights;
-    }
-
-    const watchedSet = new Set(watchedIcao24s);
-    const withPriority = flights
-      .map((flight, index) => ({
-        flight,
-        index,
-        priority:
-          (flight.icao24 === selectedIcao24 ? 5000 : 0) +
-          (watchedSet.has(flight.icao24) ? 2000 : 0) +
-          (flight.is_dimmed ? -4500 : 1200) +
-          (!flight.on_ground ? 600 : 0) +
-          Math.max(0, Math.round(flight.altitude ?? 0) / 100) +
-          Math.max(0, Math.round(flight.velocity ?? 0)),
-      }))
-      .sort((left, right) => right.priority - left.priority || left.index - right.index)
-      .slice(0, limit)
-      .sort((left, right) => left.index - right.index);
-
-    return withPriority.map((entry) => entry.flight);
-  }
-
   $: normalizedQuery = filters.query.trim().toLowerCase();
   $: searchQuery = filters.query.trim();
   $: minimumAltitude = Number(filters.minAltitude);
@@ -4578,13 +4525,7 @@
   $: dimmedFlightIds = filters.dimFilteredTraffic && activeFilterCount
     ? mapFeedFlights.filter((flight) => flight.is_dimmed).map((flight) => flight.icao24)
     : [];
-  $: displayLimit = getDisplayLimitForZoom(mapViewport?.zoom, aircraftClusteringEnabled);
-  $: renderedFlights = prioritizeFlightsForMap(
-    sortFlights(mapFeedFlights, sortBy, mapViewport),
-    displayLimit,
-    selectedIcao24,
-    watchlist
-  );
+  $: renderedFlights = sortFlights(mapFeedFlights, sortBy, mapViewport);
   $: watchedFlightEntries = watchlist.map((icao24) => {
     const flight = state.flights.find((candidate) => candidate.icao24 === icao24) ?? null;
     return {

@@ -46,6 +46,18 @@ def _parse_bbox():
     return bbox
 
 
+def _provider_names_for_bbox(bbox: dict[str, float]) -> tuple[str, ...] | None:
+    is_world_bbox = (
+        bbox["lamin"] <= -89.999
+        and bbox["lamax"] >= 89.999
+        and bbox["lomin"] <= -179.999
+        and bbox["lomax"] >= 179.999
+    )
+    # ADSB.lol is a point/radius API. A world-sized request would fan out into
+    # thousands of upstream calls; OpenSky supports a single global snapshot.
+    return ("opensky",) if is_world_bbox else None
+
+
 def _parse_optional_float(name: str) -> float | None:
     raw_value = request.args.get(name)
     if raw_value is None or raw_value == "":
@@ -162,7 +174,10 @@ def list_flights():
     service = current_app.extensions["flight_snapshot_service"]
 
     try:
-        flights_payload = service.get_flights(bbox=bbox)
+        flights_payload = service.get_flights(
+            bbox=bbox,
+            provider_names=_provider_names_for_bbox(bbox),
+        )
     except FlightProviderError as exc:
         return jsonify({"error": str(exc)}), 502
 
@@ -502,7 +517,10 @@ def stream_flights():
 
         while True:
             try:
-                flights_payload = service.get_flights(bbox=bbox)
+                flights_payload = service.get_flights(
+                    bbox=bbox,
+                    provider_names=_provider_names_for_bbox(bbox),
+                )
                 yield _build_sse_event("snapshot", _enrich_live_payload(flights_payload))
             except FlightProviderError as exc:
                 yield _build_sse_event("upstream_error", {"error": str(exc)})

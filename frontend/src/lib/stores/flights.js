@@ -4,9 +4,9 @@ import { buildFlightsStreamUrl, fetchFlights } from "../api/flights.js";
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 30000);
 const BBOX_PRECISION = 4;
-const BBOX_DEBOUNCE_MS = Number(import.meta.env.VITE_BBOX_DEBOUNCE_MS ?? 900);
 const USE_SSE = import.meta.env.VITE_USE_SSE === "true";
-const SNAPSHOT_STORAGE_KEY = "live-flights-map.snapshot.v3";
+const SNAPSHOT_STORAGE_KEY = "live-flights-map.snapshot.v4";
+const WORLD_BBOX = Object.freeze({ lamin: -90, lamax: 90, lomin: -180, lomax: 180 });
 
 const initialState = {
   status: "idle",
@@ -99,8 +99,7 @@ function saveStoredSnapshot(payload) {
 function createFlightsStore() {
   const { subscribe, set, update } = writable(initialState);
   let poller = null;
-  let currentBbox = null;
-  let bboxRefreshTimeout = null;
+  let viewBbox = null;
   let eventSource = null;
   let streamClosedManually = false;
   const storedSnapshot = loadStoredSnapshot();
@@ -130,7 +129,7 @@ function createFlightsStore() {
       error: null,
       fetchedAt: payload.fetched_at ?? null,
       count: payload.count ?? 0,
-      bbox: payload.bbox ?? null,
+      bbox: viewBbox ?? payload.bbox ?? null,
       source: payload.meta?.source ?? "live",
       warning: payload.meta?.warning ?? null,
       stale: payload.meta?.stale ?? false,
@@ -149,7 +148,7 @@ function createFlightsStore() {
     }));
 
     try {
-      const payload = await fetchFlights(currentBbox);
+      const payload = await fetchFlights(WORLD_BBOX);
       applyPayload(payload, transport);
     } catch (error) {
       update((state) => ({
@@ -216,7 +215,7 @@ function createFlightsStore() {
     }));
 
     streamClosedManually = false;
-    eventSource = new window.EventSource(buildFlightsStreamUrl(currentBbox));
+    eventSource = new window.EventSource(buildFlightsStreamUrl(WORLD_BBOX));
 
     eventSource.addEventListener("snapshot", (event) => {
       try {
@@ -283,38 +282,15 @@ function createFlightsStore() {
 
   function setBbox(nextBbox) {
     const normalizedBbox = normalizeBbox(nextBbox);
-    if (sameBbox(currentBbox, normalizedBbox)) {
+    if (sameBbox(viewBbox, normalizedBbox)) {
       return;
     }
 
-    currentBbox = normalizedBbox;
+    viewBbox = normalizedBbox;
     update((state) => ({
       ...state,
       bbox: normalizedBbox,
     }));
-
-    if (poller) {
-      if (bboxRefreshTimeout) {
-        window.clearTimeout(bboxRefreshTimeout);
-      }
-
-      bboxRefreshTimeout = window.setTimeout(() => {
-        bboxRefreshTimeout = null;
-        refresh("polling");
-      }, BBOX_DEBOUNCE_MS);
-      return;
-    }
-
-    if (eventSource) {
-      if (bboxRefreshTimeout) {
-        window.clearTimeout(bboxRefreshTimeout);
-      }
-
-      bboxRefreshTimeout = window.setTimeout(() => {
-        bboxRefreshTimeout = null;
-        connectStream();
-      }, BBOX_DEBOUNCE_MS);
-    }
   }
 
   function start() {
@@ -326,11 +302,6 @@ function createFlightsStore() {
   }
 
   function stop() {
-    if (bboxRefreshTimeout) {
-      window.clearTimeout(bboxRefreshTimeout);
-      bboxRefreshTimeout = null;
-    }
-
     closeStream();
     stopPolling();
   }

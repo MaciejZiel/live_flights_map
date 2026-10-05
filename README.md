@@ -4,6 +4,8 @@ Live Flights Map is a local-first aviation operations desk for exploring aircraf
 
 The app uses live public data providers. Provider coverage and rate limits vary, so the interface identifies the source and freshness of each snapshot and keeps the last available data when a provider is temporarily unavailable.
 
+![Live Flights Map showing current traffic over central Europe](docs/live-flights-map.webp)
+
 ## What you can do
 
 - Explore live aircraft positions on a Leaflet map, with map styles, airport markers, weather and density-aware aircraft rendering.

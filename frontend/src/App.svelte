@@ -461,6 +461,10 @@
       return "Upstream error";
     }
 
+    if (stateValue.stale) {
+      return "Delayed snapshot";
+    }
+
     if (stateValue.reason === "rate_limit" || stateValue.reason === "cooldown") {
       return "Rate limited";
     }
@@ -4191,7 +4195,13 @@
     }
 
     const ageSeconds = Math.max(0, Math.round((now - new Date(value).getTime()) / 1000));
-    return `${ageSeconds}s old`;
+    if (ageSeconds < 60) {
+      return `${ageSeconds}s ago`;
+    }
+    if (ageSeconds < 3600) {
+      return `${Math.floor(ageSeconds / 60)}m ago`;
+    }
+    return `${Math.floor(ageSeconds / 3600)}h ago`;
   }
 
   function getConfidenceLabel(stateValue) {
@@ -4272,6 +4282,10 @@
   }
 
   function getFeedSummaryLabel(stateValue) {
+    if (stateValue.stale) {
+      return stateValue.warning ?? `Snapshot from ${getFreshnessLabel(stateValue.fetchedAt)}`;
+    }
+
     const cooldownCount = Object.keys(stateValue.meta?.provider_cooldowns ?? {}).length;
     if (cooldownCount > 0) {
       return `${cooldownCount} source${cooldownCount > 1 ? "s" : ""} cooling down`;
@@ -4592,6 +4606,8 @@
   $: visibleLeaderboardFlights = sortFlights(filteredFlights, "speed_desc", mapViewport).slice(0, 6);
   $: airborneCount = filteredFlights.filter((flight) => !flight.on_ground).length;
   $: groundCount = Math.max(0, filteredFlights.length - airborneCount);
+  $: snapshotAirborneCount = replayFlights.filter((flight) => !flight.on_ground).length;
+  $: snapshotGroundCount = Math.max(0, replayFlights.length - snapshotAirborneCount);
   $: averageSpeedKmh = filteredFlights.length
     ? Math.round(
         filteredFlights.reduce((total, flight) => total + (flight.velocity ?? 0) * 3.6, 0) /
@@ -5245,6 +5261,20 @@
               {/if}
             </div>
 
+            {#if isMobileViewport}
+              <div
+                class="mobile-feed-summary"
+                class:delayed={state.stale && !activeReplaySnapshot}
+                aria-label={`${activeReplaySnapshot ? "Archive frame" : statusLabel}: ${visibleTrackedCount} positions, ${snapshotAirborneCount} airborne, ${snapshotGroundCount} ground, ${freshnessLabel}`}
+              >
+                <span class:online={["success", "refreshing"].includes(state.status) && !state.stale} class:delayed={state.stale && !activeReplaySnapshot} class="traffic-dot"></span>
+                <strong>{formatCompactCount(visibleTrackedCount)}</strong>
+                <span>{snapshotAirborneCount} airborne</span>
+                <span>{snapshotGroundCount} ground</span>
+                <span class="mobile-feed-age">{activeReplaySnapshot ? "Replay" : `${statusLabel} · ${freshnessLabel}`}</span>
+              </div>
+            {/if}
+
             <div class="center-actions">
               {#if isMobileViewport}
                 <button
@@ -5263,10 +5293,24 @@
                   {selectedFlight || selectedAirport || selectedEntityContext ? "Inspector" : "Traffic"}
                 </button>
               {:else}
-                <div class="topbar-live-pill" aria-label="Live radar summary">
-                  <span class:online={["success", "refreshing"].includes(state.status)} class="traffic-dot"></span>
-                  <strong>{shellModeLabel}</strong>
-                  <small>{activeReplaySnapshot ? "Archive frame" : feedLabel}</small>
+                <div
+                  class="topbar-live-pill"
+                  class:delayed={state.stale && !activeReplaySnapshot}
+                  aria-label={`${activeReplaySnapshot ? "Archive frame" : statusLabel}: ${visibleTrackedCount} positions, ${snapshotAirborneCount} airborne, ${snapshotGroundCount} ground, ${freshnessLabel}`}
+                  title={`${activeReplaySnapshot ? "Archive frame" : feedSummaryLabel} · ${snapshotAirborneCount} airborne · ${snapshotGroundCount} on ground`}
+                >
+                  <span
+                    class:online={["success", "refreshing"].includes(state.status) && !state.stale}
+                    class:delayed={state.stale && !activeReplaySnapshot}
+                    class="traffic-dot"
+                  ></span>
+                  <div class="topbar-live-copy">
+                    <strong>{activeReplaySnapshot ? "Replay" : `${formatCompactCount(visibleTrackedCount)} positions`}</strong>
+                    <small>{activeReplaySnapshot ? "Archive frame" : `${snapshotAirborneCount} airborne · ${snapshotGroundCount} ground`}</small>
+                    <small class:delayed={state.stale && !activeReplaySnapshot}>
+                      {activeReplaySnapshot ? "Historical playback" : `${statusLabel} · ${freshnessLabel}`}
+                    </small>
+                  </div>
                 </div>
                 {#if simpleModeEnabled}
                   <button
@@ -5441,7 +5485,7 @@
               <article>
                 <span>Traffic</span>
                 <strong>{visibleTrackedCount}</strong>
-                <small>{airborneCount} airborne now</small>
+                <small>{snapshotAirborneCount} airborne · {snapshotGroundCount} on ground</small>
               </article>
               <article>
                 <span>Freshness</span>
@@ -7194,6 +7238,10 @@
     gap: 0.38rem;
   }
 
+  .mobile-feed-summary {
+    display: none;
+  }
+
   .brand-copy strong {
     display: block;
     margin: 0;
@@ -7330,6 +7378,15 @@
     border: 1px solid rgba(255, 255, 255, 0.06);
   }
 
+  .topbar-live-pill.delayed {
+    border-color: rgba(238, 173, 86, 0.32);
+    background: rgba(58, 39, 21, 0.52);
+  }
+
+  .topbar-live-copy {
+    min-width: 0;
+  }
+
   .topbar-live-pill strong {
     display: block;
     font-size: 0.75rem;
@@ -7343,6 +7400,11 @@
     margin-top: 0.1rem;
     font-size: 0.66rem;
     color: rgba(189, 201, 214, 0.72);
+    white-space: nowrap;
+  }
+
+  .topbar-live-pill small.delayed {
+    color: #edbd7f;
   }
 
   .filter-token-list,
@@ -7426,6 +7488,10 @@
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.28);
     flex: 0 0 auto;
+  }
+
+  .traffic-dot.delayed {
+    background: #e6a24f;
   }
 
   .traffic-dot.online {
@@ -8916,6 +8982,21 @@
     .center-bar-main { grid-template-columns: minmax(0, 1fr) auto; gap: 0.45rem; }
     .brand-inline { grid-column: 1; }
     .search-shell { grid-column: 1 / -1; grid-row: 2; }
+    .mobile-feed-summary {
+      grid-column: 1 / -1;
+      grid-row: 3;
+      display: flex;
+      align-items: center;
+      gap: 0.38rem;
+      min-width: 0;
+      color: rgba(205, 216, 222, 0.78);
+      font-size: 0.66rem;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .mobile-feed-summary strong { color: #f3f6fb; font-size: 0.7rem; }
+    .mobile-feed-summary.delayed { color: #edbd7f; }
+    .mobile-feed-age { margin-left: auto; }
     .center-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; }
     .topbar-live-pill { min-height: 2.3rem; padding: 0.32rem 0.5rem; }
     .topbar-live-pill small { display: none; }

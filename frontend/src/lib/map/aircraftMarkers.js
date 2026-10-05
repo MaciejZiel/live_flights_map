@@ -8,6 +8,11 @@ import {
   formatVerticalRate,
 } from "../utils/flightFormatters.js";
 import { shouldUseDetailedAircraftMarker } from "../utils/mapPerformance.js";
+import {
+  formatFlightPositionAge,
+  getFlightPositionAgeBand,
+  getFlightPositionOpacity,
+} from "../utils/flightFreshness.js";
 
 const POSITION_ANIMATION_MS = 1400;
 
@@ -29,7 +34,7 @@ function buildTooltipContent(flight) {
     <div class="aircraft-hover-card">
       <strong>${escapeHtml(getMarkerLabel(flight))}</strong>
       <span>${escapeHtml(flight.registration ?? flight.icao24?.toUpperCase() ?? "Unknown")}</span>
-      <small>${escapeHtml(flight.origin_country ?? "Unknown")} · ${escapeHtml(formatFlightStatus(flight))}</small>
+      <small>${escapeHtml(flight.origin_country ?? "Unknown")} · ${escapeHtml(formatFlightStatus(flight))} · ${escapeHtml(formatFlightPositionAge(flight.position_age_seconds, flight.position_is_historical))}</small>
       <div class="aircraft-hover-metrics">
         <span>${escapeHtml(formatAltitude(flight.altitude))}</span>
         <span>${escapeHtml(formatSpeed(flight.velocity))}</span>
@@ -49,6 +54,7 @@ function buildSelectedTooltipContent(flight) {
       <div class="aircraft-popup-meta">
         <span>${escapeHtml(flight.registration ?? flight.icao24?.toUpperCase() ?? "Unknown")}</span>
         <span>${escapeHtml(flight.origin_country ?? "Unknown")}</span>
+        <span>${escapeHtml(formatFlightPositionAge(flight.position_age_seconds, flight.position_is_historical))}</span>
       </div>
       <div class="aircraft-popup-grid">
         <div>
@@ -155,7 +161,7 @@ function animateMarkerPosition(entry, nextLatLng) {
   entry.animationFrame = requestAnimationFrame(step);
 }
 
-function getVisualPalette(selected, watched, watchModeEnabled, dimmed) {
+function getVisualPalette(selected, watched, watchModeEnabled, dimmed, positionAgeSeconds = null) {
   const fillColor = selected
     ? "#86d2ff"
     : watched
@@ -166,7 +172,8 @@ function getVisualPalette(selected, watched, watchModeEnabled, dimmed) {
           ? "#9aa5b3"
           : "#f7c716";
   const strokeColor = selected ? "#eff9ff" : watched ? "#ecfff4" : dimmed ? "#3d4650" : "#46370a";
-  const opacity = dimmed ? 0.32 : watchModeEnabled && !watched && !selected ? 0.45 : 1;
+  const opacity = (dimmed ? 0.32 : watchModeEnabled && !watched && !selected ? 0.45 : 1) *
+    getFlightPositionOpacity(positionAgeSeconds);
 
   return {
     fillColor,
@@ -182,13 +189,14 @@ function setMarkerDataset(marker, icao24) {
   }
 }
 
-function getDetailedVisualKey(track, selected, watched, watchModeEnabled, dimmed) {
+function getDetailedVisualKey(track, selected, watched, watchModeEnabled, dimmed, positionAgeSeconds = null) {
   return [
     Math.round(track ?? 0),
     selected ? 1 : 0,
     watched ? 1 : 0,
     watchModeEnabled ? 1 : 0,
     dimmed ? 1 : 0,
+    getFlightPositionAgeBand(positionAgeSeconds),
   ].join(":");
 }
 
@@ -197,7 +205,8 @@ function getLiteStyle(flight, selected, watched, watchModeEnabled, dimmed) {
     selected,
     watched,
     watchModeEnabled,
-    dimmed
+    dimmed,
+    flight.position_age_seconds
   );
   const airborne = !flight.on_ground;
 
@@ -207,7 +216,7 @@ function getLiteStyle(flight, selected, watched, watchModeEnabled, dimmed) {
     color: strokeColor,
     opacity: Math.min(0.9, opacity),
     fillColor,
-    fillOpacity: airborne ? Math.max(0.58, opacity * 0.86) : Math.max(0.42, opacity * 0.74),
+    fillOpacity: airborne ? opacity * 0.86 : opacity * 0.74,
   };
 }
 
@@ -218,6 +227,7 @@ function getLiteVisualKey(flight, selected, watched, watchModeEnabled, dimmed) {
     watchModeEnabled ? 1 : 0,
     dimmed ? 1 : 0,
     flight.on_ground ? 1 : 0,
+    getFlightPositionAgeBand(flight.position_age_seconds),
   ].join(":");
 }
 
@@ -226,13 +236,15 @@ export function createAircraftIcon(
   selected = false,
   watched = false,
   watchModeEnabled = false,
-  dimmed = false
+  dimmed = false,
+  positionAgeSeconds = null
 ) {
   const { fillColor, strokeColor, opacity } = getVisualPalette(
     selected,
     watched,
     watchModeEnabled,
-    dimmed
+    dimmed,
+    positionAgeSeconds
   );
   const shellClassNames = [
     "aircraft-icon-shell",
@@ -284,7 +296,8 @@ function createDetailedMarkerEntry(
       selected,
       watched,
       watchModeEnabled,
-      dimmed
+      dimmed,
+      flight.position_age_seconds
     ),
     keyboard: false,
   });
@@ -301,7 +314,8 @@ function createDetailedMarkerEntry(
       selected,
       watched,
       watchModeEnabled,
-      dimmed
+      dimmed,
+      flight.position_age_seconds
     ),
   };
 
@@ -426,7 +440,8 @@ function updateDetailedMarkerEntry(entry, flight, selected, watched, watchModeEn
     selected,
     watched,
     watchModeEnabled,
-    dimmed
+    dimmed,
+    flight.position_age_seconds
   );
 
   entry.flight = flight;
@@ -439,7 +454,8 @@ function updateDetailedMarkerEntry(entry, flight, selected, watched, watchModeEn
         selected,
         watched,
         watchModeEnabled,
-        dimmed
+        dimmed,
+        flight.position_age_seconds
       )
     );
     entry.visualKey = visualKey;

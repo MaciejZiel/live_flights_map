@@ -1,8 +1,11 @@
+import { getFlightPositionOpacity } from "../utils/flightFreshness.js";
+
 function getPalette(flight, dimmed, watchModeEnabled, detailMode = "detailed") {
   const sizeScale =
     detailMode === "webgl" ? 0.82 : detailMode === "lite" ? 0.94 : 1.08;
   const alphaScale =
-    detailMode === "webgl" ? 0.86 : detailMode === "lite" ? 0.94 : 1;
+    (detailMode === "webgl" ? 0.86 : detailMode === "lite" ? 0.94 : 1) *
+    getFlightPositionOpacity(flight.position_age_seconds);
 
   if (dimmed) {
     return {

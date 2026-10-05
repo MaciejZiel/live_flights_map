@@ -43,6 +43,7 @@
     formatVerticalRate,
   } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
+  import { getFlightPositionAgeSeconds } from "./lib/utils/flightFreshness.js";
   import { normalizeMapViewport } from "./lib/utils/mapViewport.js";
   import {
     classifyTrafficCategory,
@@ -4511,7 +4512,7 @@
   });
   $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
   $: filteredFlightIds = new Set(filteredFlights.map((flight) => flight.icao24));
-  $: mapFeedFlights =
+  $: mapFeedFlights = (
     filters.dimFilteredTraffic && activeFilterCount
       ? replayFlights.map((flight) =>
           filteredFlightIds.has(flight.icao24)
@@ -4521,7 +4522,12 @@
                 is_dimmed: true,
               }
         )
-      : filteredFlights;
+      : filteredFlights
+  ).map((flight) => ({
+    ...flight,
+    position_is_historical: Boolean(activeReplaySnapshot),
+    position_age_seconds: activeReplaySnapshot ? null : getFlightPositionAgeSeconds(flight, now),
+  }));
   $: dimmedFlightIds = filters.dimFilteredTraffic && activeFilterCount
     ? mapFeedFlights.filter((flight) => flight.is_dimmed).map((flight) => flight.icao24)
     : [];

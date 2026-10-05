@@ -15,6 +15,7 @@
     getAircraftRenderMode,
     shouldUseGpuAircraftLayer,
   } from "../utils/mapPerformance.js";
+  import { buildGreatCircleSegments } from "../utils/geodesic.js";
 
   export let flights = [];
   export let airports = [];
@@ -66,7 +67,6 @@
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
   let lastFocusRequestId = null;
-  let lastRouteFocusKey = null;
   let currentZoom = initialViewport?.zoom ?? 7.1;
   const TRAIL_PANE_NAME = "selected-flight-trail-pane";
   const viewPresets = {
@@ -79,8 +79,8 @@
       [71.0, 35.0],
     ],
     world: [
-      [-60.0, -170.0],
-      [78.0, 170.0],
+      [-72.0, -178.0],
+      [84.0, 178.0],
     ],
   };
   const DENSE_CANVAS_MARGIN_PX = 12;
@@ -116,7 +116,11 @@
     const currentAirac = getCurrentAiracId();
     const commonOptions = {
       crossOrigin: true,
+      detectRetina: true,
+      keepBuffer: 8,
       maxZoom: 18,
+      updateWhenIdle: false,
+      updateWhenZooming: false,
     };
 
     if (style === "satellite") {
@@ -405,9 +409,20 @@
       return;
     }
 
-    const latLngs = trailPoints.map((point) => [point.latitude, point.longitude]);
-    const recentTrailLatLngs = latLngs.slice(-Math.min(16, latLngs.length));
-    const breadcrumbStep = Math.max(1, Math.floor(latLngs.length / 22));
+    const trailSegments = buildGreatCircleSegments(
+      trailPoints.map((point) => [point.latitude, point.longitude]),
+      { stepKm: 45, maxPoints: 48 }
+    );
+    if (!trailSegments.length) {
+      return;
+    }
+
+    const recentPoints = trailPoints.slice(-Math.min(16, trailPoints.length));
+    const recentSegments = buildGreatCircleSegments(
+      recentPoints.map((point) => [point.latitude, point.longitude]),
+      { stepKm: 45, maxPoints: 32 }
+    );
+    const breadcrumbStep = Math.max(1, Math.floor(trailPoints.length / 22));
     const breadcrumbMarkers = trailPoints
       .filter((_, index) => index !== 0 && index !== trailPoints.length - 1 && index % breadcrumbStep === 0)
       .map((point, index, markers) => {
@@ -424,12 +439,13 @@
           fillOpacity: 1,
         });
       });
-
     const startPoint = trailPoints[0];
     const latestPoint = trailPoints[trailPoints.length - 1];
+    const trailLines = (segments, options) =>
+      segments.map((segment) => L.polyline(segment, options));
 
     trailLayer = L.layerGroup([
-      L.polyline(latLngs, {
+      ...trailLines(trailSegments, {
         pane: TRAIL_PANE_NAME,
         renderer: trailRenderer,
         color: "rgba(8, 24, 36, 0.44)",
@@ -439,7 +455,7 @@
         lineJoin: "round",
         smoothFactor: 1.2,
       }),
-      L.polyline(latLngs, {
+      ...trailLines(trailSegments, {
         pane: TRAIL_PANE_NAME,
         renderer: trailRenderer,
         color: "#62d8ff",
@@ -449,7 +465,7 @@
         lineJoin: "round",
         smoothFactor: 1.2,
       }),
-      L.polyline(recentTrailLatLngs, {
+      ...trailLines(recentSegments, {
         pane: TRAIL_PANE_NAME,
         renderer: trailRenderer,
         color: "#effcff",
@@ -611,16 +627,22 @@
     if (routeLatLngs.length < 2) {
       return;
     }
+    const routeSegments = buildGreatCircleSegments(routeLatLngs);
+    if (!routeSegments.length) {
+      return;
+    }
 
     const routePoints = [
-      L.polyline(routeLatLngs, {
-        renderer: overlayVectorRenderer,
-        color: "#ffd34f",
-        weight: 4,
-        opacity: 0.94,
-        dashArray: "10 8",
-        lineCap: "round",
-      }),
+      ...routeSegments.map((segment) =>
+        L.polyline(segment, {
+          renderer: overlayVectorRenderer,
+          color: "#4bb7f5",
+          weight: 4,
+          opacity: 0.94,
+          dashArray: "10 8",
+          lineCap: "round",
+        })
+      ),
       ...routeAirports.map((airport, index) => {
         const marker = L.circleMarker([airport.latitude, airport.longitude], {
           renderer: overlayVectorRenderer,
@@ -659,15 +681,38 @@
 
   function createAirportIcon(airport, selected) {
     const airportCode = airport?.iata ?? airport?.icao ?? airport?.entity_key ?? "?";
+    const showLabel = selected || currentZoom >= 7;
+    const importance = Number(airport?.importance ?? 0);
+    const visualClass =
+      importance >= 10 ? "airport-hub" : importance >= 7 ? "airport-major" : "airport-regional";
+
     return L.divIcon({
-      className: `airport-marker-shell${selected ? " is-selected" : ""}`,
-      iconSize: [selected ? 42 : 34, selected ? 42 : 34],
-      iconAnchor: [17, 17],
+      className: `airport-marker-shell ${visualClass}${selected ? " is-selected" : ""}${
+        showLabel ? " is-labeled" : " is-compact"
+      }`,
+      iconSize: showLabel ? [selected ? 44 : 38, selected ? 44 : 38] : [18, 18],
+      iconAnchor: showLabel ? [19, 19] : [9, 9],
       html: `
         <div class="airport-marker">
-          <span class="airport-marker-core">${airportCode}</span>
+          ${
+            showLabel
+              ? `<span class="airport-marker-core">${airportCode}</span>`
+              : '<span class="airport-marker-dot"></span>'
+          }
         </div>
       `,
+    });
+  }
+
+  function buildAirportClusterIcon(cluster) {
+    const childCount = cluster.getChildCount();
+    const sizeClass =
+      childCount >= 120 ? "cluster-large" : childCount >= 36 ? "cluster-medium" : "cluster-small";
+
+    return L.divIcon({
+      html: `<span>${childCount}</span>`,
+      className: `airport-cluster ${sizeClass}`,
+      iconSize: [34, 34],
     });
   }
 
@@ -724,6 +769,32 @@
     }
 
     activeAircraftClusteringEnabled = aircraftClusteringEnabled;
+  }
+
+  function createAirportLayer() {
+    if (!map) {
+      return;
+    }
+
+    if (airportLayer) {
+      airportLayer.off?.("clusterclick", handleClusterClick);
+      airportLayer.clearLayers?.();
+      map.removeLayer(airportLayer);
+    }
+
+    airportRegistry.clear();
+    airportLayer = L.markerClusterGroup({
+      chunkedLoading: true,
+      chunkDelay: 18,
+      chunkInterval: 80,
+      disableClusteringAtZoom: 9,
+      maxClusterRadius: 44,
+      removeOutsideVisibleBounds: true,
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      iconCreateFunction: buildAirportClusterIcon,
+    }).addTo(map);
+    airportLayer.on("clusterclick", handleClusterClick);
   }
 
   function drawDenseAircraftOverlay() {
@@ -847,49 +918,19 @@
     }).addTo(map);
   }
 
-  function focusSelectedRoute() {
-    if (!map || !selectedIcao24 || followAircraft) {
-      return;
-    }
-
-    const routeLatLngs = getSelectedRouteLatLngs();
-    if (routeLatLngs.length < 2) {
-      return;
-    }
-
-    const routeKey = `${selectedIcao24}:${routeLatLngs
-      .map(([latitude, longitude]) => `${latitude.toFixed(3)},${longitude.toFixed(3)}`)
-      .join("|")}`;
-    if (routeKey === lastRouteFocusKey) {
-      return;
-    }
-
-    lastRouteFocusKey = routeKey;
-    const bounds = L.latLngBounds(routeLatLngs);
-    const selectedFlight = flights.find((flight) => flight.icao24 === selectedIcao24);
-    if (selectedFlight) {
-      bounds.extend([selectedFlight.latitude, selectedFlight.longitude]);
-    }
-
-    const narrowViewport = window.matchMedia("(max-width: 960px)").matches;
-
-    map.fitBounds(bounds, {
-      paddingTopLeft: narrowViewport ? [56, 56] : [300, 110],
-      paddingBottomRight: narrowViewport ? [56, 56] : [360, 120],
-      maxZoom: 6.8,
-      animate: true,
-      duration: 0.8,
-    });
-  }
-
   onMount(() => {
     const initialCenter = initialViewport?.center ?? [52.2297, 21.0122];
     const initialZoom = initialViewport?.zoom ?? 7.1;
 
     map = L.map(container, {
       zoomControl: false,
-      minZoom: 4,
+      fadeAnimation: false,
+      markerZoomAnimation: false,
+      minZoom: 2,
       preferCanvas: true,
+      worldCopyJump: true,
+      zoomAnimation: true,
+      zoomSnap: 0.25,
     }).setView(initialCenter, initialZoom);
     currentZoom = map.getZoom();
 
@@ -909,7 +950,7 @@
 
     createAircraftLayer();
     denseAircraftOverlay = createAircraftWebGlOverlay(denseAircraftCanvas);
-    airportLayer = L.layerGroup().addTo(map);
+    createAirportLayer();
     syncAircraftMarkers(
       aircraftLayer,
       markerRegistry,
@@ -968,6 +1009,7 @@
       routeLayer = null;
       selectionLayer = null;
       overlayVectorRenderer = null;
+      airportLayer?.off?.("clusterclick", handleClusterClick);
       airportLayer = null;
       weatherLayer = null;
       if (weatherRefreshTimer) {
@@ -1041,6 +1083,7 @@
 
   $: if (map && airportLayer) {
     airports;
+    currentZoom;
     selectedAirportKey;
     showAirportMarkers;
     syncAirportLayer();
@@ -1096,11 +1139,6 @@
     selectedRouteAirports;
     selectedIcao24;
     syncRouteLayer();
-    focusSelectedRoute();
-  }
-
-  $: if (!selectedIcao24) {
-    lastRouteFocusKey = null;
   }
   $: if (map) {
     flights;
@@ -1555,6 +1593,37 @@
     display: none;
   }
 
+  :global(.airport-cluster) {
+    display: grid;
+    place-items: center;
+    border-radius: 999px;
+    color: #f8fbff;
+    font-size: 0.68rem;
+    font-weight: 900;
+    background:
+      radial-gradient(circle at 32% 28%, rgba(255, 255, 255, 0.2), transparent 34%),
+      linear-gradient(180deg, rgba(24, 31, 36, 0.98) 0%, rgba(9, 12, 16, 0.98) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 10px 18px rgba(0, 0, 0, 0.24),
+      0 0 0 5px rgba(75, 183, 245, 0.08);
+  }
+
+  :global(.airport-cluster.cluster-medium) {
+    transform: scale(1.08);
+  }
+
+  :global(.airport-cluster.cluster-large) {
+    transform: scale(1.18);
+    box-shadow:
+      0 12px 22px rgba(0, 0, 0, 0.28),
+      0 0 0 6px rgba(75, 183, 245, 0.12);
+  }
+
+  :global(.airport-cluster span) {
+    transform: translateY(1px);
+  }
+
   :global(.airport-marker-shell) {
     background: transparent;
     border: 0;
@@ -1564,37 +1633,65 @@
     position: relative;
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
+    width: 18px;
+    height: 18px;
   }
 
   :global(.airport-marker::before) {
     content: "";
     position: absolute;
     inset: 0;
-    border-radius: 14px 14px 14px 4px;
-    background: linear-gradient(180deg, rgba(18, 20, 25, 0.96) 0%, rgba(8, 10, 14, 0.98) 100%);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transform: rotate(45deg);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.22);
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(16, 22, 28, 0.98) 0%, rgba(6, 9, 13, 0.98) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.22);
   }
 
   :global(.airport-marker-core) {
     position: relative;
     z-index: 1;
-    transform: translateY(-1px);
-    font-size: 0.58rem;
+    font-size: 0.56rem;
     font-weight: 900;
     letter-spacing: 0.08em;
-    color: #f7d36a;
+    color: #f8fbff;
+  }
+
+  :global(.airport-marker-dot) {
+    position: relative;
+    z-index: 1;
+    width: 5px;
+    height: 5px;
+    border-radius: 999px;
+    background: currentColor;
+  }
+
+  :global(.airport-marker-shell.is-labeled .airport-marker) {
+    width: 38px;
+    height: 38px;
+  }
+
+  :global(.airport-marker-shell.is-labeled .airport-marker::before) {
+    border-radius: 16px;
+  }
+
+  :global(.airport-marker-shell.airport-hub .airport-marker) {
+    color: #ffd34f;
+  }
+
+  :global(.airport-marker-shell.airport-major .airport-marker) {
+    color: #86d2ff;
+  }
+
+  :global(.airport-marker-shell.airport-regional .airport-marker) {
+    color: #98f0c1;
   }
 
   :global(.airport-marker-shell.is-selected .airport-marker::before) {
-    background: linear-gradient(180deg, rgba(55, 49, 19, 0.98) 0%, rgba(18, 16, 11, 0.98) 100%);
-    border-color: rgba(255, 211, 79, 0.4);
+    background: linear-gradient(180deg, rgba(42, 52, 23, 0.98) 0%, rgba(12, 18, 10, 0.98) 100%);
+    border-color: rgba(125, 240, 177, 0.55);
     box-shadow:
       0 14px 26px rgba(0, 0, 0, 0.26),
-      0 0 0 7px rgba(245, 185, 8, 0.12);
+      0 0 0 7px rgba(125, 240, 177, 0.14);
   }
 
   :global(.leaflet-tooltip.airport-tooltip) {

@@ -41,6 +41,16 @@ class _PhotoClientStub:
         return None
 
 
+class _MetadataClientStub:
+    def __init__(self, payload: dict[str, object] | None = None) -> None:
+        self.payload = payload
+        self.calls = 0
+
+    def lookup_aircraft(self, icao24: str) -> dict[str, object] | None:
+        self.calls += 1
+        return self.payload
+
+
 class FlightDetailsServiceTests(unittest.TestCase):
     def test_reuses_cached_payload_when_photo_is_already_present(self) -> None:
         route_client = _RouteClientStub()
@@ -163,6 +173,57 @@ class FlightDetailsServiceTests(unittest.TestCase):
         )
         self.assertEqual(payload["meta"]["detail_quality"]["photo_source"], "Wikimedia Commons")
         self.assertIn("representative aircraft photo", payload["meta"]["detail_quality"]["summary"].lower())
+
+    def test_uses_metadata_lookup_to_fill_registration_and_type_for_photo_search(self) -> None:
+        route_client = _RouteClientStub(
+            {
+                "airline_code": "LH",
+                "airline_name": "Lufthansa",
+                "flight_number": "2WN",
+                "plausible": True,
+                "origin": {"iata": "MUC"},
+                "destination": {"iata": "ARN"},
+            }
+        )
+        photo_client = _PhotoClientStub(
+            [
+                {
+                    "thumbnail_url": "https://example.com/d-aini.jpg",
+                    "source": "planespotting.be",
+                }
+            ]
+        )
+        metadata_client = _MetadataClientStub(
+            {
+                "icao24": "3c65c9",
+                "callsign": "DLH2WN",
+                "registration": "D-AINI",
+                "type_code": "A20N",
+            }
+        )
+        service = FlightDetailsService(
+            route_client=route_client,
+            photo_client=photo_client,
+            cache_ttl=3600,
+            metadata_client=metadata_client,
+        )
+
+        payload = service.get_details(
+            icao24="3c65c9",
+            callsign="DLH2WN",
+            registration=None,
+            type_code=None,
+            latitude=53.8259,
+            longitude=14.8159,
+            origin_country="Germany",
+        )
+
+        self.assertEqual(metadata_client.calls, 1)
+        self.assertEqual(photo_client.calls, 1)
+        self.assertEqual(payload["aircraft"]["registration"], "D-AINI")
+        self.assertEqual(payload["aircraft"]["type_code"], "A20N")
+        self.assertEqual(payload["photo"]["thumbnail_url"], "https://example.com/d-aini.jpg")
+        self.assertEqual(payload["meta"]["detail_quality"]["photo_state"], "exact")
 
 
 if __name__ == "__main__":

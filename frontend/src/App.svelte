@@ -2941,8 +2941,16 @@
     };
 
     try {
+      const zoom = Number.isFinite(mapViewport?.zoom) ? Number(mapViewport.zoom) : 7;
       const payload = await fetchAirports(bbox, {
-        limit: mapViewport?.zoom >= 7 ? 32 : mapViewport?.zoom >= 5 ? 18 : 10,
+        limit:
+          zoom >= 9
+            ? 1500
+            : zoom >= 7
+              ? 1000
+              : zoom >= 5
+                ? 600
+                : 300,
       });
       if (requestId !== airportFeedRequestId) {
         return;
@@ -5019,13 +5027,18 @@
   $: if (buildBboxKey(state.bbox) && typeof window !== "undefined") {
     state.bbox;
     mapViewport.zoom;
+    showAirportMarkers;
     if (airportFeedDebounceTimer) {
       window.clearTimeout(airportFeedDebounceTimer);
     }
-    airportFeedDebounceTimer = window.setTimeout(() => {
+    if (!showAirportMarkers) {
       airportFeedDebounceTimer = null;
-      refreshAirports(state.bbox);
-    }, 260);
+    } else {
+      airportFeedDebounceTimer = window.setTimeout(() => {
+        airportFeedDebounceTimer = null;
+        refreshAirports(state.bbox);
+      }, 260);
+    }
   }
   $: {
     replayPlaybackActive;

@@ -44,7 +44,7 @@ class ADSBLolClient:
         for center_latitude, center_longitude, radius_nm in search_areas:
             response = self._request_snapshot(center_latitude, center_longitude, radius_nm)
             payload = response.json()
-            now_timestamp = self._as_float(payload.get("now"))
+            now_timestamp = self._normalize_now_timestamp(payload.get("now"))
             aircraft = payload.get("ac") or []
 
             for aircraft_state in aircraft:
@@ -71,6 +71,25 @@ class ADSBLolClient:
             "count": len(flights),
             "flights": flights,
         }
+
+    def lookup_aircraft(self, icao24: str) -> dict[str, object] | None:
+        normalized_icao24 = self._as_str(icao24)
+        if not normalized_icao24:
+            return None
+
+        response = self._request_aircraft(normalized_icao24)
+        payload = response.json()
+        now_timestamp = self._normalize_now_timestamp(payload.get("now"))
+        aircraft = payload.get("ac") or []
+
+        for aircraft_state in aircraft:
+            if not isinstance(aircraft_state, dict):
+                continue
+            normalized = self._normalize_aircraft(aircraft_state, now_timestamp)
+            if normalized and normalized.get("icao24") == normalized_icao24:
+                return normalized
+
+        return None
 
     def _request_snapshot(
         self,
@@ -102,6 +121,32 @@ class ADSBLolClient:
                 raise ADSBLolError("Unable to fetch data from ADSB.lol.") from exc
 
         raise ADSBLolError("Unable to fetch data from ADSB.lol.")
+
+    def _request_aircraft(self, icao24: str) -> requests.Response:
+        endpoint = f"{self.base_url}/v2/hex/{icao24}"
+
+        for attempt in range(self.max_retries + 1):
+            try:
+                response = self.session.get(endpoint, timeout=self.timeout)
+                response.raise_for_status()
+                return response
+            except requests.Timeout as exc:
+                if attempt < self.max_retries:
+                    continue
+                raise ADSBLolError("ADSB.lol aircraft lookup timed out.") from exc
+            except requests.HTTPError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if status_code == 429:
+                    raise ADSBLolRateLimitError("ADSB.lol aircraft lookup rate limited.") from exc
+                raise ADSBLolError(f"ADSB.lol aircraft lookup returned HTTP {status_code}.") from exc
+            except requests.ConnectionError as exc:
+                if attempt < self.max_retries:
+                    continue
+                raise ADSBLolError("Could not reach ADSB.lol from the current environment.") from exc
+            except requests.RequestException as exc:
+                raise ADSBLolError("Unable to fetch aircraft data from ADSB.lol.") from exc
+
+        raise ADSBLolError("Unable to fetch aircraft data from ADSB.lol.")
 
     def _build_search_areas(self, bbox: dict[str, float]) -> list[tuple[float, float, int]]:
         pending_bboxes = [bbox]
@@ -321,3 +366,12 @@ class ADSBLolClient:
             return float(value)
         except (TypeError, ValueError):
             return None
+
+    @classmethod
+    def _normalize_now_timestamp(cls, value: object) -> float | None:
+        timestamp = cls._as_float(value)
+        if timestamp is None:
+            return None
+        if timestamp > 100_000_000_000:
+            return timestamp / 1000.0
+        return timestamp

@@ -44,6 +44,18 @@ class Config:
     AIRPORT_WEATHER_CACHE_TTL = float(
         os.getenv("AIRPORT_WEATHER_CACHE_TTL", "600")
     )
+    AIRPORT_CATALOG_URL = os.getenv(
+        "AIRPORT_CATALOG_URL",
+        "https://davidmegginson.github.io/ourairports-data/airports.csv",
+    )
+    AIRPORT_CATALOG_CACHE_PATH = os.getenv(
+        "AIRPORT_CATALOG_CACHE_PATH",
+        os.path.join(gettempdir(), "live-flights-map-airports.csv"),
+    )
+    AIRPORT_CATALOG_CACHE_TTL = float(
+        os.getenv("AIRPORT_CATALOG_CACHE_TTL", "86400")
+    )
+    AIRPORT_CATALOG_TIMEOUT = float(os.getenv("AIRPORT_CATALOG_TIMEOUT", "20"))
 
     OPENSKY_BASE_URL = os.getenv(
         "OPENSKY_BASE_URL",

@@ -4,6 +4,8 @@ from math import cos, radians
 
 from .provider_base import FlightProviderError
 
+MAX_AIRPORT_RESULTS = 1500
+
 
 class AirportWorkflowService:
     def __init__(
@@ -17,13 +19,14 @@ class AirportWorkflowService:
         self.snapshot_service = snapshot_service
 
     def list_airports(self, bbox: dict[str, float], limit: int) -> dict[str, object]:
+        result_limit = min(max(int(limit), 1), MAX_AIRPORT_RESULTS)
         catalog_airports = self.airport_catalog_service.list_airports_in_bbox(
             bbox=bbox,
-            limit=max(limit, 1),
+            limit=result_limit,
         )
         known_airports = self.traffic_intelligence_service.list_known_airports_in_bbox(
             bbox=bbox,
-            limit=max(limit * 2, limit),
+            limit=result_limit * 2,
         )
 
         merged = {}
@@ -36,10 +39,11 @@ class AirportWorkflowService:
                 "entity_type": "airport",
             }
 
-        airports = list(merged.values())[: max(limit, 1)]
+        airports = list(merged.values())[:result_limit]
         return {
             "count": len(airports),
             "airports": airports,
+            "catalog": self.airport_catalog_service.get_catalog_status(),
         }
 
     def get_airport_dashboard(

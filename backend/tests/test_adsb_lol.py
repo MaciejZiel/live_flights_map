@@ -40,6 +40,22 @@ class _TiledADSBLolClient(ADSBLolClient):
         return _ResponseStub(self._payloads.pop(0))
 
 
+class _HexADSBLolClient(ADSBLolClient):
+    def __init__(self, payload: dict[str, object]) -> None:
+        super().__init__(
+            base_url="https://example.invalid",
+            timeout=1,
+            max_retries=0,
+            radius_limit_nm=250,
+        )
+        self._payload = payload
+        self.requested_icao24: list[str] = []
+
+    def _request_aircraft(self, icao24: str) -> _ResponseStub:
+        self.requested_icao24.append(icao24)
+        return _ResponseStub(self._payload)
+
+
 class ADSBLolClientTests(unittest.TestCase):
     def test_large_bbox_is_split_into_multiple_search_areas(self) -> None:
         client = ADSBLolClient(
@@ -131,6 +147,37 @@ class ADSBLolClientTests(unittest.TestCase):
         self.assertEqual({flight["icao24"] for flight in payload["flights"]}, {"abc123", "def456"})
         merged = next(flight for flight in payload["flights"] if flight["icao24"] == "abc123")
         self.assertEqual(merged["registration"], "SP-LVQ")
+
+    def test_lookup_aircraft_returns_identity_fields_from_hex_endpoint(self) -> None:
+        client = _HexADSBLolClient(
+            {
+                "now": 1_773_329_907_501,
+                "ac": [
+                    {
+                        "hex": "3c65c9",
+                        "flight": "DLH2WN  ",
+                        "r": "D-AINI",
+                        "t": "A20N",
+                        "lat": 54.117023,
+                        "lon": 15.030993,
+                        "alt_baro": 36950,
+                        "gs": 430.9,
+                        "track": 19.95,
+                        "seen": 0,
+                    }
+                ],
+            }
+        )
+
+        payload = client.lookup_aircraft("3c65c9")
+
+        self.assertEqual(client.requested_icao24, ["3c65c9"])
+        self.assertIsNotNone(payload)
+        self.assertEqual(payload["icao24"], "3c65c9")
+        self.assertEqual(payload["callsign"], "DLH2WN")
+        self.assertEqual(payload["registration"], "D-AINI")
+        self.assertEqual(payload["type_code"], "A20N")
+        self.assertEqual(payload["last_contact"], 1_773_329_907)
 
 
 if __name__ == "__main__":

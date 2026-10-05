@@ -21,10 +21,12 @@ class FlightDetailsService:
         route_client,
         photo_client,
         cache_ttl: float,
+        metadata_client=None,
     ) -> None:
         self.route_client = route_client
         self.photo_client = photo_client
         self.cache_ttl = cache_ttl
+        self.metadata_client = metadata_client
         self._cache: dict[tuple[str, str | None, str | None], DetailCacheEntry] = {}
         self._lock = Lock()
 
@@ -56,6 +58,30 @@ class FlightDetailsService:
                 return deepcopy(cached.payload)
 
         warnings = []
+        metadata = None
+
+        if self.metadata_client is not None and self._needs_metadata_lookup(
+            callsign=normalized_callsign,
+            registration=normalized_registration,
+            type_code=normalized_type_code,
+        ):
+            try:
+                metadata = self.metadata_client.lookup_aircraft(normalized_icao24)
+            except FlightProviderError as exc:
+                warnings.append(str(exc))
+
+        normalized_callsign = normalized_callsign or self._normalize_text(
+            metadata.get("callsign") if isinstance(metadata, dict) else None,
+            uppercase=True,
+        )
+        normalized_registration = normalized_registration or self._normalize_text(
+            metadata.get("registration") if isinstance(metadata, dict) else None,
+            uppercase=True,
+        )
+        normalized_type_code = normalized_type_code or self._normalize_text(
+            metadata.get("type_code") if isinstance(metadata, dict) else None,
+            uppercase=True,
+        )
 
         try:
             route = self.route_client.lookup_route(
@@ -116,6 +142,15 @@ class FlightDetailsService:
             )
 
         return deepcopy(payload)
+
+    @staticmethod
+    def _needs_metadata_lookup(
+        *,
+        callsign: str | None,
+        registration: str | None,
+        type_code: str | None,
+    ) -> bool:
+        return not (callsign and registration and type_code)
 
     @staticmethod
     def _should_use_cached_entry(

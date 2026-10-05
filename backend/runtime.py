@@ -55,6 +55,7 @@ class BackendRuntime:
 def build_runtime(config: object | None = None) -> BackendRuntime:
     config = config or Config()
     providers = []
+    adsb_lol_client = None
     archive_service = FlightArchiveService(
         archive_path=config.FLIGHT_ARCHIVE_PATH,
         retention_hours=config.FLIGHT_ARCHIVE_RETENTION_HOURS,
@@ -63,7 +64,12 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
     traffic_intelligence_service = TrafficIntelligenceService(
         archive_path=config.FLIGHT_ARCHIVE_PATH,
     )
-    airport_catalog_service = AirportCatalogService()
+    airport_catalog_service = AirportCatalogService(
+        catalog_url=config.AIRPORT_CATALOG_URL,
+        cache_path=config.AIRPORT_CATALOG_CACHE_PATH,
+        cache_ttl=config.AIRPORT_CATALOG_CACHE_TTL,
+        timeout=config.AIRPORT_CATALOG_TIMEOUT,
+    )
     workspace_service = WorkspaceService(
         workspace_path=config.WORKSPACE_DB_PATH,
     )
@@ -85,13 +91,15 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
             continue
 
         if provider_name == "adsb_lol":
-            providers.append(
-                ADSBLolClient(
+            if adsb_lol_client is None:
+                adsb_lol_client = ADSBLolClient(
                     base_url=config.ADSB_LOL_BASE_URL,
                     timeout=config.ADSB_LOL_TIMEOUT,
                     max_retries=config.ADSB_LOL_RETRY_COUNT,
                     radius_limit_nm=config.ADSB_LOL_RADIUS_LIMIT_NM,
                 )
+            providers.append(
+                adsb_lol_client
             )
             continue
 
@@ -139,6 +147,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
             cache_ttl_seconds=config.AIRCRAFT_PHOTO_LOOKUP_CACHE_TTL,
         ),
         cache_ttl=config.FLIGHT_DETAILS_CACHE_TTL,
+        metadata_client=adsb_lol_client,
     )
     aircraft_photo_proxy_service = AircraftPhotoProxyService(
         timeout=config.AIRCRAFT_PHOTO_PROXY_TIMEOUT,

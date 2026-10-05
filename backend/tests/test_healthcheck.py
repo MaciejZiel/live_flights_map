@@ -5,9 +5,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from flask import Flask
+
 from backend import create_app
 from backend.config import Config
-from backend.routes.flights import _provider_names_for_bbox
+from backend.routes.flights import _provider_names_for_bbox, _snapshot_etag, _snapshot_response
 
 
 class FlightRouteProviderSelectionTests(unittest.TestCase):
@@ -18,6 +20,19 @@ class FlightRouteProviderSelectionTests(unittest.TestCase):
     def test_regional_snapshot_keeps_configured_provider_fallbacks(self) -> None:
         regional_bbox = {"lamin": 49.0, "lamax": 55.0, "lomin": 14.0, "lomax": 24.0}
         self.assertIsNone(_provider_names_for_bbox(regional_bbox))
+
+    def test_snapshot_etag_ignores_runtime_cooldown_countdown(self) -> None:
+        payload = {"fetched_at": "2026-01-01T00:00:00Z", "flights": [], "meta": {"provider_cooldowns": {"opensky": 20}}}
+        changed_cooldown = {**payload, "meta": {"provider_cooldowns": {"opensky": 19}}}
+        self.assertEqual(_snapshot_etag(payload), _snapshot_etag(changed_cooldown))
+
+    def test_snapshot_response_returns_not_modified_for_matching_etag(self) -> None:
+        app = Flask(__name__)
+        payload = {"fetched_at": "2026-01-01T00:00:00Z", "flights": []}
+        etag = _snapshot_etag(payload)
+        with app.test_request_context(headers={"If-None-Match": f'"{etag}"'}):
+            response = _snapshot_response(payload)
+        self.assertEqual(response.status_code, 304)
 
 
 class HealthcheckRouteTests(unittest.TestCase):

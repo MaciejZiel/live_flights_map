@@ -38,6 +38,7 @@ function sanitizeStoredSnapshot(payload) {
     count: Number.isFinite(payload.count) ? payload.count : 0,
     bbox: isPlainObject(payload.bbox) ? payload.bbox : null,
     meta: isPlainObject(payload.meta) ? payload.meta : {},
+    etag: typeof payload.etag === "string" ? payload.etag : null,
   };
 }
 
@@ -103,6 +104,7 @@ function createFlightsStore() {
   let eventSource = null;
   let streamClosedManually = false;
   const storedSnapshot = loadStoredSnapshot();
+  let snapshotEtag = storedSnapshot?.etag ?? null;
 
   if (storedSnapshot?.flights?.length) {
     set({
@@ -121,8 +123,11 @@ function createFlightsStore() {
     });
   }
 
-  function applyPayload(payload, transport) {
-    saveStoredSnapshot(payload);
+  function applyPayload(payload, transport, etag = null) {
+    if (transport === "polling") {
+      snapshotEtag = etag;
+    }
+    saveStoredSnapshot({ ...payload, etag: snapshotEtag });
     set({
       status: "success",
       flights: payload.flights ?? [],
@@ -148,8 +153,17 @@ function createFlightsStore() {
     }));
 
     try {
-      const payload = await fetchFlights(WORLD_BBOX);
-      applyPayload(payload, transport);
+      const result = await fetchFlights(WORLD_BBOX, { etag: snapshotEtag });
+      if (result.notModified) {
+        update((state) => ({
+          ...state,
+          status: "success",
+          error: null,
+          transport,
+        }));
+        return;
+      }
+      applyPayload(result.payload, transport, result.etag);
     } catch (error) {
       update((state) => ({
         ...state,

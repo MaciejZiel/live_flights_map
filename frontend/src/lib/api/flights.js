@@ -90,9 +90,17 @@ async function parseApiResponse(response, fallbackMessage) {
   return payload;
 }
 
-export async function fetchFlights(bbox) {
-  const response = await fetch(buildFlightsUrl(bbox));
-  return parseApiResponse(response, "Failed to load flight positions.");
+export async function fetchFlights(bbox, options = {}) {
+  const headers = options.etag ? { "If-None-Match": options.etag } : undefined;
+  const response = await fetch(buildFlightsUrl(bbox), { headers });
+  if (response.status === 304) {
+    return { notModified: true, etag: options.etag ?? null };
+  }
+  return {
+    notModified: false,
+    payload: await parseApiResponse(response, "Failed to load flight positions."),
+    etag: response.headers.get("ETag"),
+  };
 }
 
 export async function fetchFlightDetails(flight) {

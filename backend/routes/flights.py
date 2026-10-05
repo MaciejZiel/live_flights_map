@@ -1,4 +1,5 @@
 import json
+import hashlib
 from datetime import datetime, timezone
 from time import sleep
 
@@ -13,6 +14,31 @@ api = Blueprint("api", __name__)
 
 def _build_sse_event(event_name: str, payload: dict[str, object]) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _snapshot_etag(payload: dict[str, object]) -> str:
+    stable_payload = dict(payload)
+    meta = payload.get("meta")
+    if isinstance(meta, dict):
+        stable_payload["meta"] = {
+            key: value
+            for key, value in meta.items()
+            if key not in {"provider_cooldowns", "provider_quotas"}
+        }
+    canonical_payload = json.dumps(
+        stable_payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return hashlib.sha256(canonical_payload).hexdigest()
+
+
+def _snapshot_response(payload: dict[str, object]) -> Response:
+    response = jsonify(payload)
+    response.set_etag(_snapshot_etag(payload))
+    response.headers["Cache-Control"] = "private, max-age=0, must-revalidate"
+    return response.make_conditional(request)
 
 
 def _parse_bbox():
@@ -181,7 +207,7 @@ def list_flights():
     except FlightProviderError as exc:
         return jsonify({"error": str(exc)}), 502
 
-    return jsonify(_enrich_live_payload(flights_payload))
+    return _snapshot_response(_enrich_live_payload(flights_payload))
 
 
 @api.get("/health")
@@ -513,6 +539,7 @@ def stream_flights():
 
     @stream_with_context
     def generate():
+        last_etag = None
         yield "retry: 5000\n\n"
 
         while True:
@@ -521,7 +548,11 @@ def stream_flights():
                     bbox=bbox,
                     provider_names=_provider_names_for_bbox(bbox),
                 )
-                yield _build_sse_event("snapshot", _enrich_live_payload(flights_payload))
+                enriched_payload = _enrich_live_payload(flights_payload)
+                next_etag = _snapshot_etag(enriched_payload)
+                if next_etag != last_etag:
+                    yield _build_sse_event("snapshot", enriched_payload)
+                    last_etag = next_etag
             except FlightProviderError as exc:
                 yield _build_sse_event("upstream_error", {"error": str(exc)})
 

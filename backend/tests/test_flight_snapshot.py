@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timezone
 
 from backend.services.flight_snapshot import FlightSnapshotService
+from backend.services.provider_base import FlightProviderRateLimitError
 
 
 class _ProviderStub:
@@ -15,6 +16,17 @@ class _ProviderStub:
     def fetch_flights(self, bbox: dict[str, float]) -> dict[str, object]:
         self.calls += 1
         return self.payload
+
+
+class _RateLimitedProviderStub:
+    name = "opensky"
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def fetch_flights(self, bbox: dict[str, float]) -> dict[str, object]:
+        self.calls += 1
+        raise FlightProviderRateLimitError("provider rate limit exceeded")
 
 
 class _ArchiveStub:
@@ -267,6 +279,47 @@ class FlightSnapshotServiceTests(unittest.TestCase):
 
         self.assertEqual(provider.calls, 1)
         self.assertEqual(payload["meta"]["source"], "live")
+
+    def test_uses_recent_archive_positions_when_providers_are_rate_limited(self) -> None:
+        bbox = {"lamin": 50.0, "lamax": 54.0, "lomin": 18.0, "lomax": 22.0}
+        provider = _RateLimitedProviderStub()
+        archived_flight = {
+            "icao24": "abc123",
+            "callsign": "LOT123",
+            "latitude": 52.2,
+            "longitude": 21.0,
+            "on_ground": False,
+        }
+        archive_service = _ArchiveStub(
+            latest_payload={
+                "bbox": bbox,
+                "count": 1,
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "flights": [archived_flight],
+                "cache_meta": {
+                    "fresh": True,
+                    "collector_ready": False,
+                    "collector_coverage_status": "uncovered",
+                },
+            }
+        )
+        service = FlightSnapshotService(
+            providers=[provider],
+            cache_ttl=30,
+            cooldown_seconds=60,
+            archive_service=archive_service,
+            latest_cache_max_age_seconds=150,
+        )
+
+        payload = service.get_flights(bbox)
+
+        self.assertEqual(provider.calls, 1)
+        self.assertEqual(payload["flights"], [archived_flight])
+        self.assertEqual(payload["meta"]["source"], "cache")
+        self.assertEqual(payload["meta"]["fallback_source"], "recent_archive_positions")
+        self.assertEqual(payload["meta"]["reason"], "rate_limit")
+        self.assertTrue(payload["meta"]["stale"])
+        self.assertIn("recently observed", payload["meta"]["warning"])
 
 
 if __name__ == "__main__":

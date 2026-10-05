@@ -81,6 +81,22 @@ class FlightSnapshotService:
                     warning=fallback_warning or "Upstream providers failed. Showing the last cached snapshot.",
                     extra_meta=diagnostics,
                 )
+
+            archived_payload = self._get_recent_archive_fallback(bbox)
+            if archived_payload is not None:
+                return self._build_stale_response(
+                    archived_payload,
+                    reason=fallback_reason or "upstream_error",
+                    warning=(
+                        "Live providers are temporarily unavailable. "
+                        "Showing recently observed aircraft from the archive."
+                    ),
+                    extra_meta={
+                        **diagnostics,
+                        "fallback_source": "recent_archive_positions",
+                    },
+                )
+
             raise last_error or FlightProviderError("No upstream providers are currently available.")
 
         with self._lock:
@@ -302,6 +318,27 @@ class FlightSnapshotService:
                 **(cache_meta if isinstance(cache_meta, dict) else {}),
             },
         )
+
+    def _get_recent_archive_fallback(self, bbox: dict[str, float]) -> dict[str, object] | None:
+        if self._archive_service is None or not hasattr(self._archive_service, "list_latest_flights"):
+            return None
+
+        try:
+            latest_payload = self._archive_service.list_latest_flights(
+                bbox=bbox,
+                max_age_seconds=self.latest_cache_max_age_seconds,
+            )
+        except Exception:
+            return None
+
+        if not isinstance(latest_payload, dict) or not latest_payload.get("flights"):
+            return None
+
+        cache_meta = latest_payload.get("cache_meta")
+        if not isinstance(cache_meta, dict) or not cache_meta.get("fresh"):
+            return None
+
+        return latest_payload
 
     def _build_runtime_meta(
         self,

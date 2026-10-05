@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
+from time import monotonic
 
 from backend.services.flight_snapshot import FlightSnapshotService
 from backend.services.provider_base import FlightProviderError, FlightProviderRateLimitError
@@ -27,6 +28,12 @@ class _RateLimitedProviderStub:
     def fetch_flights(self, bbox: dict[str, float]) -> dict[str, object]:
         self.calls += 1
         raise FlightProviderRateLimitError("provider rate limit exceeded")
+
+
+class _RetryAfterProviderStub(_RateLimitedProviderStub):
+    def fetch_flights(self, bbox: dict[str, float]) -> dict[str, object]:
+        self.calls += 1
+        raise FlightProviderRateLimitError("provider rate limit exceeded", retry_after_seconds=1800)
 
 
 class _ArchiveStub:
@@ -66,6 +73,21 @@ class _ArchiveStub:
 
 
 class FlightSnapshotServiceTests(unittest.TestCase):
+    def test_provider_retry_after_is_used_for_cooldown(self) -> None:
+        provider = _RetryAfterProviderStub()
+        service = FlightSnapshotService(
+            providers=[provider],
+            cache_ttl=30,
+            cooldown_seconds=75,
+            archive_service=_ArchiveStub(),
+        )
+
+        with self.assertRaises(FlightProviderRateLimitError):
+            service.get_flights({"lamin": 50.0, "lamax": 51.0, "lomin": 19.0, "lomax": 20.0})
+
+        self.assertEqual(provider.calls, 1)
+        self.assertGreaterEqual(service._active_cooldowns(monotonic())["opensky"], 1799)
+
     def test_provider_names_limit_the_upstream_used_for_a_snapshot(self) -> None:
         opensky = _ProviderStub("opensky", {"count": 0, "flights": [], "fetched_at": datetime.now(timezone.utc).isoformat()})
         adsb_lol = _ProviderStub("adsb_lol", {"count": 0, "flights": [], "fetched_at": datetime.now(timezone.utc).isoformat()})

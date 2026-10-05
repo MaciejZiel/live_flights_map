@@ -83,6 +83,7 @@ class SnapshotCollectorService:
                         "started_at": sector_started_at.isoformat(),
                         "status": "error",
                         "warning": str(exc),
+                        "retry_after_seconds": int(getattr(exc, "retry_after_seconds", 0) or 0),
                         "flight_count": 0,
                         "latest_positions_stored": 0,
                     }
@@ -97,6 +98,11 @@ class SnapshotCollectorService:
                     or "Provider data is stale; waiting for a fresh snapshot."
                 )
                 warnings.append(f"{sector['key']}: {warning}")
+                cooldowns = sector_meta.get("provider_cooldowns") or {}
+                retry_after_seconds = max(
+                    (int(value) for value in cooldowns.values()),
+                    default=0,
+                ) if isinstance(cooldowns, dict) else 0
                 sector_results.append(
                     {
                         "key": sector["key"],
@@ -105,6 +111,7 @@ class SnapshotCollectorService:
                         "fetched_at": payload.get("fetched_at"),
                         "status": "stale",
                         "warning": warning,
+                        "retry_after_seconds": retry_after_seconds,
                         "source": sector_meta.get("source"),
                         "provider_used": sector_meta.get("provider_used"),
                         "flight_count": len(flights),

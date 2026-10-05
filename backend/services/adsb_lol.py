@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 
 import requests
 
-from .provider_base import FlightProviderError, FlightProviderRateLimitError
+from .provider_base import (
+    FlightProviderError,
+    FlightProviderRateLimitError,
+    parse_retry_after_seconds,
+)
 
 KNOTS_TO_METERS_PER_SECOND = 0.514444
 FEET_TO_METERS = 0.3048
@@ -111,7 +115,11 @@ class ADSBLolClient:
             except requests.HTTPError as exc:
                 status_code = exc.response.status_code if exc.response is not None else None
                 if status_code == 429:
-                    raise ADSBLolRateLimitError("ADSB.lol rate limit exceeded.") from exc
+                    headers = exc.response.headers if exc.response is not None else {}
+                    raise ADSBLolRateLimitError(
+                        "ADSB.lol rate limit exceeded.",
+                        retry_after_seconds=parse_retry_after_seconds(headers),
+                    ) from exc
                 raise ADSBLolError(f"ADSB.lol returned HTTP {status_code}.") from exc
             except requests.ConnectionError as exc:
                 if attempt < self.max_retries:

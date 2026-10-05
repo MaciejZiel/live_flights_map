@@ -49,7 +49,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-The snapshot collector requests one global OpenSky snapshot every 15 minutes and stores it in the shared cache. Positions older than two minutes are marked as delayed in the API and UI. The global request is intentionally limited to OpenSky rather than fanning out into dozens of regional ADSB requests. To add an extra cached region, set `SNAPSHOT_COLLECTOR_SECTORS=global_world,poland_focus`. The persisted alert sweeper remains opt-in:
+The snapshot collector requests one global OpenSky snapshot every 20 minutes and stores it in the shared cache. Positions older than two minutes are marked as delayed in the API and UI. The global request is intentionally limited to OpenSky rather than fanning out into dozens of regional ADSB requests. To add an extra cached region, set `SNAPSHOT_COLLECTOR_SECTORS=global_world,poland_focus`. Provider cooldowns honor upstream `Retry-After` values. The persisted alert sweeper remains opt-in:
 
 ```bash
 docker compose --profile workers up --build -d alert-worker

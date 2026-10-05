@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 
 import requests
 
-from .provider_base import FlightProviderError, FlightProviderRateLimitError
+from .provider_base import (
+    FlightProviderError,
+    FlightProviderRateLimitError,
+    parse_retry_after_seconds,
+)
 
 
 class OpenSkyError(FlightProviderError):
@@ -85,7 +89,11 @@ class OpenSkyClient:
                 elif status_code == 403:
                     message = "OpenSky denied access for this request."
                 elif status_code == 429:
-                    raise OpenSkyRateLimitError("OpenSky rate limit exceeded.") from exc
+                    headers = exc.response.headers if exc.response is not None else {}
+                    raise OpenSkyRateLimitError(
+                        "OpenSky rate limit exceeded.",
+                        retry_after_seconds=parse_retry_after_seconds(headers),
+                    ) from exc
                 else:
                     message = f"OpenSky returned HTTP {status_code}."
                 raise OpenSkyError(message) from exc

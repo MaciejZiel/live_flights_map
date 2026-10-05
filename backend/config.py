@@ -143,7 +143,7 @@ class Config:
         os.path.join(gettempdir(), "live-flights-map-opensky-cache.json"),
     )
     LIVE_LATEST_CACHE_MAX_AGE_SECONDS = float(
-        os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "960")
+        os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "1260")
     )
     LIVE_LATEST_CACHE_STALE_AFTER_SECONDS = float(
         os.getenv("LIVE_LATEST_CACHE_STALE_AFTER_SECONDS", "120")

@@ -182,11 +182,15 @@ class FlightSnapshotService:
             try:
                 payload = provider.fetch_flights(bbox=bbox)
             except FlightProviderRateLimitError as exc:
+                cooldown_seconds = max(
+                    self.cooldown_seconds,
+                    float(getattr(exc, "retry_after_seconds", 0) or 0),
+                )
                 with self._lock:
-                    self._cooldown_until[provider.name] = monotonic() + self.cooldown_seconds
+                    self._cooldown_until[provider.name] = monotonic() + cooldown_seconds
                 self._finish_shared_provider_request(
                     provider.name,
-                    cooldown_seconds=self.cooldown_seconds,
+                    cooldown_seconds=cooldown_seconds,
                 )
                 saw_rate_limit = True
                 last_error = exc

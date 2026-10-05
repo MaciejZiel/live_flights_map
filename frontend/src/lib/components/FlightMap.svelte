@@ -685,7 +685,7 @@
 
   function createAirportIcon(airport, selected) {
     const airportCode = airport?.iata ?? airport?.icao ?? airport?.entity_key ?? "?";
-    const showLabel = selected || currentZoom >= 7;
+    const showLabel = selected || currentZoom >= 9;
     const importance = Number(airport?.importance ?? 0);
     const visualClass =
       importance >= 10 ? "airport-hub" : importance >= 7 ? "airport-major" : "airport-regional";
@@ -1682,6 +1682,25 @@
 
   :global(.airport-marker-shell.airport-regional .airport-marker) {
     color: #98f0c1;
+  }
+
+  :global(.airport-marker-shell.is-compact .airport-marker) {
+    width: 10px;
+    height: 10px;
+  }
+
+  :global(.airport-marker-shell.is-compact .airport-marker::before) {
+    background: #9aadb2;
+    border: 1px solid rgba(8, 18, 22, 0.88);
+    box-shadow: none;
+  }
+
+  :global(.airport-marker-shell.airport-hub.is-compact .airport-marker::before) {
+    background: #e6b94f;
+  }
+
+  :global(.airport-marker-shell.is-compact .airport-marker-dot) {
+    display: none;
   }
 
   :global(.airport-marker-shell.is-selected .airport-marker::before) {

@@ -134,18 +134,21 @@
     }
 
     if (style === "dark") {
-      return L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-        ...commonOptions,
-        subdomains: "abcd",
-        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
-      });
+      return L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        {
+          ...commonOptions,
+          attribution: "Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ",
+        }
+      );
     }
 
     if (style === "light") {
-      return L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         ...commonOptions,
-        subdomains: "abcd",
-        attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+        subdomains: "abc",
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
       });
     }
 
@@ -183,10 +186,11 @@
       return L.layerGroup([aviationBase, aviationOverlay]);
     }
 
-    return L.tileLayer("https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png", {
+    return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       ...commonOptions,
-      subdomains: "abcd",
-      attribution: "&copy; OpenStreetMap contributors &copy; CARTO",
+      subdomains: "abc",
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
     });
   }
 
@@ -1209,22 +1213,16 @@
   }
 
   .map-tint {
-    background:
-      linear-gradient(180deg, rgba(66, 98, 70, 0.26) 0%, rgba(26, 40, 29, 0.44) 100%),
-      radial-gradient(circle at center, rgba(112, 146, 104, 0.12), transparent 58%);
-    mix-blend-mode: multiply;
+    background: rgba(6, 14, 18, 0.08);
+    mix-blend-mode: normal;
   }
 
   .map-shell.map-style-standard .map-tint {
-    background:
-      linear-gradient(180deg, rgba(72, 108, 76, 0.3) 0%, rgba(30, 46, 32, 0.5) 100%),
-      radial-gradient(circle at center, rgba(125, 156, 118, 0.15), transparent 58%);
+    background: rgba(6, 14, 18, 0.1);
   }
 
   .map-shell.map-style-dark .map-tint {
-    background:
-      linear-gradient(180deg, rgba(26, 38, 28, 0.22) 0%, rgba(11, 16, 13, 0.34) 100%),
-      radial-gradient(circle at center, rgba(57, 88, 58, 0.12), transparent 58%);
+    background: rgba(4, 11, 15, 0.04);
   }
 
   .map-shell.map-style-light .map-tint {
@@ -1255,11 +1253,11 @@
   }
 
   .map-shell.map-style-standard :global(.leaflet-tile-pane) {
-    filter: saturate(0.92) brightness(0.84) contrast(0.96) sepia(0.12) hue-rotate(-16deg);
+    filter: saturate(0.72) brightness(0.78) contrast(1.04);
   }
 
   .map-shell.map-style-dark :global(.leaflet-tile-pane) {
-    filter: saturate(0.86) brightness(0.92) contrast(1.02);
+    filter: saturate(0.78) brightness(1.06) contrast(1.05);
   }
 
   .map-shell.map-style-light :global(.leaflet-tile-pane) {

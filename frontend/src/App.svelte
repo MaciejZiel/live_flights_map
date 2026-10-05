@@ -43,6 +43,7 @@
     formatVerticalRate,
   } from "./lib/utils/flightFormatters.js";
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
+  import { normalizeMapViewport } from "./lib/utils/mapViewport.js";
   import {
     classifyTrafficCategory,
     TRAFFIC_CATEGORY_OPTIONS,
@@ -324,7 +325,7 @@
       };
       mapStyle = savedPreferences.mapStyle ?? mapStyle;
       simpleModeEnabled = savedPreferences.simpleModeEnabled ?? simpleModeEnabled;
-      mapViewport = savedPreferences.mapViewport ?? mapViewport;
+      mapViewport = normalizeMapViewport(savedPreferences.mapViewport) ?? mapViewport;
       filterPresets = savedPreferences.filterPresets ?? filterPresets;
       sortBy = savedPreferences.sortBy ?? sortBy;
       theme = savedPreferences.theme ?? theme;
@@ -806,7 +807,7 @@
       ...(normalizedWorkspaceState.filters ?? {}),
     };
     mapStyle = normalizedWorkspaceState.mapStyle ?? mapStyle;
-    mapViewport = normalizedWorkspaceState.mapViewport ?? mapViewport;
+    mapViewport = normalizeMapViewport(normalizedWorkspaceState.mapViewport) ?? mapViewport;
     filterPresets = normalizedWorkspaceState.filterPresets ?? filterPresets;
     sortBy = normalizedWorkspaceState.sortBy ?? sortBy;
     theme = normalizedWorkspaceState.theme ?? theme;
@@ -1564,6 +1565,7 @@
   }
 
   function focusShortcutsWorkspace() {
+    setSimpleMode(false);
     openUtilityWorkspace("tools");
     workspaceSetupDrawerOpen = true;
 
@@ -1753,11 +1755,9 @@
     const sharedReplayWindow = Number(params.get("replayWindow"));
     const sharedEmbedMode = params.get("embed");
 
-    if (Number.isFinite(latitude) && Number.isFinite(longitude) && Number.isFinite(zoom)) {
-      mapViewport = {
-        center: [latitude, longitude],
-        zoom,
-      };
+    const sharedViewport = normalizeMapViewport({ center: [latitude, longitude], zoom });
+    if (sharedViewport) {
+      mapViewport = sharedViewport;
     }
 
     if (sharedQuery !== null) {
@@ -4126,6 +4126,12 @@
       return;
     }
 
+    if (event.key === "?" || (event.key === "/" && event.shiftKey)) {
+      event.preventDefault();
+      focusShortcutsWorkspace();
+      return;
+    }
+
     if (event.key === "/") {
       event.preventDefault();
       focusSearchField();
@@ -4143,12 +4149,6 @@
     }
 
     if (isTypingField) {
-      return;
-    }
-
-    if (event.key === "?" || (event.key === "/" && event.shiftKey)) {
-      event.preventDefault();
-      focusShortcutsWorkspace();
       return;
     }
 
@@ -8850,5 +8850,71 @@
     .active-state-chip-list {
       grid-template-columns: minmax(0, 1fr);
     }
+  }
+  /* Aviation operations desk visual system */
+  .app-shell { color: #e8eef1; font-family: "IBM Plex Sans", "Segoe UI", sans-serif; }
+  .radar-stage { background: #081216; }
+  .overlay-card {
+    border: 1px solid rgba(167, 190, 199, 0.2);
+    border-radius: 12px;
+    background: rgba(10, 22, 27, 0.97);
+    box-shadow: 0 14px 38px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(10px);
+  }
+  .radar-topbar { top: 1rem; }
+  .center-bar { width: min(76rem, calc(100vw - 2rem)); min-width: 0; padding: 0.56rem 0.7rem; }
+  .center-bar-main { grid-template-columns: auto minmax(15rem, 1fr) auto; gap: 0.9rem; }
+  .brand-copy strong { color: #f1f4f4; font-size: 0.9rem; letter-spacing: 0.12em; }
+  .brand-copy strong span { color: #e6b94f; }
+  .brand-copy span, .topbar-live-pill small { color: #83969d; }
+  .search-field {
+    min-height: 2.6rem; padding: 0.52rem 0.76rem; border: 1px solid #293d45;
+    border-radius: 8px; background: #0a171c; box-shadow: none;
+  }
+  .search-field:focus-within { border-color: #ad8a3e; box-shadow: 0 0 0 2px rgba(230, 185, 79, 0.16); }
+  .search-icon, .search-field input { color: #dce6e8; }
+  .search-field input::placeholder { color: #71858c; }
+  .topbar-live-pill { min-height: 2.6rem; border: 1px solid #293d45; border-radius: 8px; background: #0d1b20; }
+  .topbar-live-pill strong { color: #e5ecee; letter-spacing: 0.08em; }
+  .topbar-icon { border-color: #31434a; border-radius: 8px; color: #dfe8e9; background: #132229; }
+  .topbar-icon:hover, .dock-button:hover, .widget-footer-button:hover { background: #203139; border-color: #52656b; }
+  .topbar-action-chip.active, .filter-chip.active, .filter-token strong, .active-state-reset {
+    color: #152026; background: #e6b94f; border-color: #e6b94f;
+  }
+  .radar-left-panel, .radar-right-panel {
+    border: 1px solid #293b43; border-radius: 12px; background: rgba(10, 21, 26, 0.98);
+    box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36); backdrop-filter: blur(10px);
+  }
+  .radar-left-panel { top: 5.9rem; left: 1rem; bottom: 1rem; width: min(20rem, calc(100vw - 27rem)); padding: 0.8rem; }
+  .radar-right-panel { top: 5.9rem; right: 1rem; bottom: 1rem; width: min(22rem, calc(100vw - 27rem)); padding: 0.8rem; }
+  .utility-header { padding: 0.2rem 0.15rem 0.72rem; border-bottom: 1px solid #293b43; }
+  .utility-heading span, .workflow-eyebrow { color: #8a9ca2; letter-spacing: 0.14em; }
+  .utility-heading strong { color: #edf2f2; letter-spacing: -0.02em; }
+  .utility-tabs { padding: 0.2rem; border: 1px solid #293b43; border-radius: 8px; background: #0c191e; }
+  .utility-tab { border-radius: 6px; color: #93a5ab; }
+  .utility-tab.active { color: #eaf0f0; background: #1d3037; box-shadow: inset 0 -2px #e6b94f; }
+  .bottom-dock { bottom: 1rem; padding: 0.35rem; border-radius: 10px; }
+  .dock-button { min-width: 5rem; min-height: 2.8rem; border-radius: 7px; color: #b9c8cc; }
+  .dock-label { color: inherit; font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; }
+  .active-state-bar { top: 5rem; border: 1px solid #293b43; border-radius: 10px; background: rgba(10, 21, 26, 0.97); }
+  :global(.panel) { border-color: #293b43; border-radius: 10px; background: #101d23; box-shadow: none; backdrop-filter: none; }
+  :global(.leaflet-control-zoom) { overflow: hidden; border: 1px solid rgba(167, 190, 199, 0.25); border-radius: 8px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.32); }
+  :global(.leaflet-control-zoom a) { color: #dce7e9; background: #101d23; }
+  @media (max-width: 1200px) { .center-bar { width: min(76rem, calc(100vw - 2rem)); } }
+  @media (max-width: 960px) {
+    .center-bar { width: 100%; }
+    .radar-left-panel { top: auto; bottom: 0.75rem; left: 0.75rem; width: auto; border-radius: 14px; }
+    .radar-right-panel { top: auto; bottom: 0.75rem; right: 0.75rem; width: auto; border-radius: 14px; }
+    .bottom-dock { bottom: 0.7rem; width: calc(100vw - 1.4rem); border-radius: 10px; }
+  }
+  @media (max-width: 720px) {
+    .radar-topbar { top: max(0.5rem, env(safe-area-inset-top)); left: 0.55rem; right: 0.55rem; }
+    .center-bar { padding: 0.55rem; }
+    .center-bar-main { grid-template-columns: minmax(0, 1fr) auto; gap: 0.45rem; }
+    .brand-inline { grid-column: 1; }
+    .search-shell { grid-column: 1 / -1; grid-row: 2; }
+    .center-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; }
+    .topbar-live-pill { min-height: 2.3rem; padding: 0.32rem 0.5rem; }
+    .topbar-live-pill small { display: none; }
   }
 </style>

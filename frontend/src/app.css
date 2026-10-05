@@ -1,44 +1,36 @@
 :root {
-  font-family:
-    "Barlow Semi Condensed",
-    "IBM Plex Sans",
-    "Segoe UI",
-    sans-serif;
-  --color-text: #eef2f7;
-  --color-muted: #b3becd;
-  --color-subtle: #8e99a8;
-  --surface-bg: rgba(31, 34, 39, 0.94);
-  --surface-strong-bg: rgba(24, 27, 31, 0.96);
-  --surface-input-bg: rgba(255, 255, 255, 0.05);
-  --surface-border: rgba(255, 255, 255, 0.08);
-  --shadow-strong: 0 24px 56px rgba(0, 0, 0, 0.34);
-  --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.28);
-  --button-primary-bg: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-  --button-primary-text: #171a1f;
-  --button-secondary-bg: rgba(255, 255, 255, 0.06);
-  --button-secondary-text: #f5f8fc;
-  --button-danger-bg: rgba(118, 41, 41, 0.24);
-  --button-danger-text: #ffd6d6;
-  --status-neutral-bg: rgba(255, 255, 255, 0.08);
-  --status-neutral-text: #e5ebf3;
-  --status-online-bg: rgba(78, 189, 120, 0.18);
-  --status-online-text: #9ce3b3;
-  --banner-error-bg: rgba(120, 33, 33, 0.85);
-  --banner-error-text: #ffd9d9;
-  --banner-warning-bg: rgba(115, 76, 18, 0.85);
-  --banner-warning-text: #ffe1a3;
-  --chip-bg: rgba(245, 185, 8, 0.14);
-  --kbd-bg: rgba(255, 255, 255, 0.06);
-  --kbd-border: rgba(255, 255, 255, 0.08);
-  --map-ui-bg: rgba(31, 34, 39, 0.94);
-  --map-ui-bg-hover: rgba(46, 49, 56, 0.98);
-  --map-background: #6d8470;
-  --page-background:
-    radial-gradient(circle at top, rgba(245, 185, 8, 0.14), transparent 26%),
-    linear-gradient(180deg, #1d2227 0%, #0f1216 100%);
-  --fullscreen-background:
-    radial-gradient(circle at top, rgba(245, 185, 8, 0.12), transparent 26%),
-    linear-gradient(180deg, #15191d 0%, #090b0e 100%);
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  --color-text: #e8eef1;
+  --color-muted: #a7b6bd;
+  --color-subtle: #71838c;
+  --surface-bg: #111d23;
+  --surface-strong-bg: #0b151a;
+  --surface-input-bg: #0b161b;
+  --surface-border: #293b44;
+  --shadow-strong: 0 18px 44px rgba(0, 0, 0, 0.3);
+  --shadow-soft: 0 10px 26px rgba(0, 0, 0, 0.22);
+  --button-primary-bg: #e6b94f;
+  --button-primary-text: #10181c;
+  --button-secondary-bg: #17262d;
+  --button-secondary-text: #e8eef1;
+  --button-danger-bg: #392225;
+  --button-danger-text: #ffd3d5;
+  --status-neutral-bg: #1b2a31;
+  --status-neutral-text: #d7e0e3;
+  --status-online-bg: #153329;
+  --status-online-text: #a3e0bd;
+  --banner-error-bg: #49282a;
+  --banner-error-text: #ffd9da;
+  --banner-warning-bg: #44371e;
+  --banner-warning-text: #f8dda0;
+  --chip-bg: #302b20;
+  --kbd-bg: #1b2a31;
+  --kbd-border: #34464f;
+  --map-ui-bg: #101b20;
+  --map-ui-bg-hover: #1b2a31;
+  --map-background: #10191d;
+  --page-background: #081216;
+  --fullscreen-background: #081216;
 }
 
 body {
@@ -47,47 +39,20 @@ body {
   min-height: 100vh;
   color: var(--color-text);
   background: var(--page-background);
-  transition:
-    background 180ms ease,
-    color 180ms ease;
+  transition: color 180ms ease;
 }
 
 body.theme-dark {
-  --color-text: #eef2f7;
-  --color-muted: #b3becd;
-  --color-subtle: #8e99a8;
-  --surface-bg: rgba(25, 28, 33, 0.94);
-  --surface-strong-bg: rgba(18, 20, 24, 0.98);
-  --surface-input-bg: rgba(255, 255, 255, 0.05);
-  --surface-border: rgba(255, 255, 255, 0.08);
-  --shadow-strong: 0 26px 60px rgba(0, 0, 0, 0.38);
-  --shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.3);
-  --button-primary-bg: linear-gradient(180deg, #ffd34f 0%, #f5b908 100%);
-  --button-primary-text: #171a1f;
-  --button-secondary-bg: rgba(255, 255, 255, 0.06);
-  --button-secondary-text: #f5f8fc;
-  --button-danger-bg: rgba(118, 41, 41, 0.24);
-  --button-danger-text: #ffd6d6;
-  --status-neutral-bg: rgba(255, 255, 255, 0.08);
-  --status-neutral-text: #f0f4f8;
-  --status-online-bg: rgba(78, 189, 120, 0.18);
-  --status-online-text: #9ce3b3;
-  --banner-error-bg: rgba(120, 33, 33, 0.85);
-  --banner-error-text: #ffd9d9;
-  --banner-warning-bg: rgba(115, 76, 18, 0.85);
-  --banner-warning-text: #ffe1a3;
-  --chip-bg: rgba(245, 185, 8, 0.14);
-  --kbd-bg: rgba(255, 255, 255, 0.06);
-  --kbd-border: rgba(255, 255, 255, 0.08);
-  --map-ui-bg: rgba(31, 34, 39, 0.94);
-  --map-ui-bg-hover: rgba(46, 49, 56, 0.98);
-  --map-background: #617862;
-  --page-background:
-    radial-gradient(circle at top, rgba(245, 185, 8, 0.14), transparent 26%),
-    linear-gradient(180deg, #1b1f23 0%, #0d1013 100%);
-  --fullscreen-background:
-    radial-gradient(circle at top, rgba(245, 185, 8, 0.12), transparent 26%),
-    linear-gradient(180deg, #111418 0%, #06080a 100%);
+  --color-text: #e8eef1;
+  --color-muted: #a7b6bd;
+  --color-subtle: #71838c;
+  --surface-bg: #111d23;
+  --surface-strong-bg: #0b151a;
+  --surface-input-bg: #0b161b;
+  --surface-border: #293b44;
+  --map-background: #10191d;
+  --page-background: #081216;
+  --fullscreen-background: #081216;
 }
 
 #app {
@@ -112,10 +77,9 @@ textarea {
 
 :global(.panel) {
   border: 1px solid var(--surface-border);
-  border-radius: 22px;
+  border-radius: 12px;
   padding: 1rem;
-  background:
-    linear-gradient(180deg, rgba(43, 46, 52, 0.94) 0%, rgba(25, 28, 33, 0.94) 100%);
+  background: var(--surface-bg);
   box-shadow: var(--shadow-strong);
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(10px);
 }

@@ -5202,7 +5202,7 @@
                   name="q"
                   data-testid="global-search-input"
                   type="text"
-                  placeholder="Search aircraft, flights, airports, airlines, routes, locations"
+                  placeholder="Search flights, aircraft, airports, and routes"
                   title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
                   aria-label="Search aircraft, flights, airports, airlines, routes, and locations"
                   role="combobox"

@@ -5198,10 +5198,13 @@
                 <input
                   bind:this={searchInput}
                   bind:value={filters.query}
+                  id="global-flight-search"
+                  name="q"
                   data-testid="global-search-input"
                   type="text"
                   placeholder="Search aircraft, flights, airports, airlines, routes, locations"
                   title="Search by callsign, registration, ICAO24, airline, route, airport or saved location"
+                  aria-label="Search aircraft, flights, airports, airlines, routes, and locations"
                   role="combobox"
                   aria-autocomplete="list"
                   aria-controls={SEARCH_RESULTS_PANEL_ID}

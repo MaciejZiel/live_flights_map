@@ -1,0 +1,100 @@
+name: live-flights-map
+
+x-backend-environment: &backend-environment
+  FLASK_DEBUG: "false"
+  HOST: 0.0.0.0
+  PORT: "5000"
+  FLIGHT_ARCHIVE_PATH: /data/history.sqlite3
+  WORKSPACE_DB_PATH: /data/workspace.sqlite3
+  AIRCRAFT_PHOTO_CACHE_PATH: /data/aircraft-photos.sqlite3
+  OPENSKY_CACHE_PATH: /data/provider-cache.json
+  AIRPORT_CATALOG_CACHE_PATH: /data/airports.csv
+  FLIGHT_ARCHIVE_RETENTION_HOURS: ${FLIGHT_ARCHIVE_RETENTION_HOURS:-24}
+  FLIGHT_ARCHIVE_MAX_SNAPSHOTS: ${FLIGHT_ARCHIVE_MAX_SNAPSHOTS:-720}
+  FLIGHT_DATA_PROVIDERS: ${FLIGHT_DATA_PROVIDERS:-opensky,adsb_lol}
+  OPENSKY_USERNAME: ${OPENSKY_USERNAME:-}
+  OPENSKY_PASSWORD: ${OPENSKY_PASSWORD:-}
+  ADSB_LOL_BASE_URL: ${ADSB_LOL_BASE_URL:-https://api.adsb.lol}
+  CORS_ALLOWED_ORIGIN: "http://localhost:${FRONTEND_PORT:-5173}"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    environment: *backend-environment
+    volumes:
+      - flight-data:/data
+    expose:
+      - "5000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "from urllib.request import urlopen; urlopen('http://127.0.0.1:5000/health', timeout=3)"
+      interval: 20s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: frontend
+      dockerfile: Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-5173}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  collector:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    profiles: [workers]
+    command: ["python", "-m", "backend.entrypoints.collector", "--interval", "300"]
+    environment: *backend-environment
+    volumes:
+      - flight-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  alert-worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    profiles: [workers]
+    command: ["python", "-m", "backend.entrypoints.alerts", "--interval", "120"]
+    environment: *backend-environment
+    volumes:
+      - flight-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  archive-maintenance:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    command: ["python", "-m", "backend.entrypoints.archive", "--interval", "300"]
+    environment: *backend-environment
+    volumes:
+      - flight-data:/data
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  flight-data:

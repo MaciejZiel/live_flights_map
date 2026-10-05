@@ -1,12 +1,15 @@
 import { writable } from "svelte/store";
 
-import { buildFlightsStreamUrl, fetchFlights } from "../api/flights.js";
+import { buildFlightsStreamUrl, fetchFlights, fetchLocalFlights } from "../api/flights.js";
+import { buildLocalRegionTile } from "../utils/flightCoverage.js";
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 30000);
 const BBOX_PRECISION = 4;
 const USE_SSE = import.meta.env.VITE_USE_SSE === "true";
 const SNAPSHOT_STORAGE_KEY = "live-flights-map.snapshot.v4";
 const WORLD_BBOX = Object.freeze({ lamin: -90, lamax: 90, lomin: -180, lomax: 180 });
+const LOCAL_REGION_CACHE_TTL_MS = 5 * 60 * 1000;
+const LOCAL_REGION_CACHE_MAX_TILES = 64;
 
 const initialState = {
   status: "idle",
@@ -39,6 +42,7 @@ function sanitizeStoredSnapshot(payload) {
     bbox: isPlainObject(payload.bbox) ? payload.bbox : null,
     meta: isPlainObject(payload.meta) ? payload.meta : {},
     etag: typeof payload.etag === "string" ? payload.etag : null,
+    regionalTiles: Array.isArray(payload.regionalTiles) ? payload.regionalTiles : [],
   };
 }
 
@@ -105,6 +109,29 @@ function createFlightsStore() {
   let streamClosedManually = false;
   const storedSnapshot = loadStoredSnapshot();
   let snapshotEtag = storedSnapshot?.etag ?? null;
+  let regionalTiles = new Map(
+    (storedSnapshot?.regionalTiles ?? [])
+      .filter(
+        (tile) =>
+          tile &&
+          typeof tile.key === "string" &&
+          Number.isFinite(tile.fetchedAt) &&
+          isPlainObject(tile.bbox) &&
+          Array.isArray(tile.flights)
+      )
+      .map((tile) => [tile.key, tile])
+  );
+  const inFlightRegionalTiles = new Set();
+  const storedRegionalIcao24s = new Set(
+    [...regionalTiles.values()].flatMap((tile) => tile.flights.map((flight) => flight?.icao24).filter(Boolean))
+  );
+  let globalPayload = storedSnapshot
+    ? {
+        ...storedSnapshot,
+        flights: storedSnapshot.flights.filter((flight) => !storedRegionalIcao24s.has(flight?.icao24)),
+        count: storedSnapshot.flights.filter((flight) => !storedRegionalIcao24s.has(flight?.icao24)).length,
+      }
+    : null;
 
   if (storedSnapshot?.flights?.length) {
     set({
@@ -123,24 +150,120 @@ function createFlightsStore() {
     });
   }
 
+  function mergeRegionalTiles(payload) {
+    const flightsById = new Map(
+      (payload.flights ?? []).filter((flight) => flight?.icao24).map((flight) => [flight.icao24, flight])
+    );
+    const nowTimestamp = Date.now();
+    let supplementalCount = 0;
+
+    for (const [key, tile] of regionalTiles) {
+      if (nowTimestamp - tile.fetchedAt > LOCAL_REGION_CACHE_TTL_MS) {
+        regionalTiles.delete(key);
+        continue;
+      }
+      for (const flight of tile.flights) {
+        if (!flight?.icao24) {
+          continue;
+        }
+        const existingFlight = flightsById.get(flight.icao24);
+        const existingTime = Number(existingFlight?.last_contact ?? 0);
+        const candidateTime = Number(flight.last_contact ?? 0);
+        if (!existingFlight) {
+          supplementalCount += 1;
+          flightsById.set(flight.icao24, flight);
+        } else if (candidateTime > existingTime) {
+          flightsById.set(flight.icao24, flight);
+        }
+      }
+    }
+
+    return {
+      ...payload,
+      flights: [...flightsById.values()],
+      count: flightsById.size,
+      meta: {
+        ...(payload.meta ?? {}),
+        regional_supplement_count: supplementalCount,
+        regional_supplement_tiles: regionalTiles.size,
+      },
+    };
+  }
+
+  function persistSnapshot(payload) {
+    saveStoredSnapshot({
+      ...payload,
+      etag: snapshotEtag,
+      regionalTiles: [...regionalTiles.values()],
+    });
+  }
+
+  async function refreshLocalRegion(tile) {
+    const cachedTile = regionalTiles.get(tile.key);
+    const nowTimestamp = Date.now();
+    if (cachedTile && nowTimestamp - cachedTile.fetchedAt < LOCAL_REGION_CACHE_TTL_MS) {
+      regionalTiles.delete(tile.key);
+      regionalTiles.set(tile.key, cachedTile);
+      return;
+    }
+    if (inFlightRegionalTiles.has(tile.key)) {
+      return;
+    }
+
+    inFlightRegionalTiles.add(tile.key);
+    try {
+      const result = await fetchLocalFlights(tile.bbox);
+      if (result.notModified) {
+        return;
+      }
+      regionalTiles.delete(tile.key);
+      regionalTiles.set(tile.key, {
+        key: tile.key,
+        bbox: tile.bbox,
+        fetchedAt: Date.now(),
+        flights: result.payload.flights ?? [],
+      });
+      while (regionalTiles.size > LOCAL_REGION_CACHE_MAX_TILES) {
+        regionalTiles.delete(regionalTiles.keys().next().value);
+      }
+
+      update((state) => {
+        const combinedPayload = mergeRegionalTiles(globalPayload ?? state);
+        persistSnapshot(combinedPayload);
+        return {
+          ...state,
+          flights: combinedPayload.flights,
+          count: combinedPayload.count,
+          meta: combinedPayload.meta ?? state.meta,
+        };
+      });
+    } catch {
+      // Keep the world snapshot visible if the regional provider is unavailable.
+    } finally {
+      inFlightRegionalTiles.delete(tile.key);
+    }
+  }
+
   function applyPayload(payload, transport, etag = null) {
     if (transport === "polling") {
       snapshotEtag = etag;
     }
-    saveStoredSnapshot({ ...payload, etag: snapshotEtag });
+    globalPayload = payload;
+    const combinedPayload = mergeRegionalTiles(payload);
+    persistSnapshot(combinedPayload);
     set({
       status: "success",
-      flights: payload.flights ?? [],
+      flights: combinedPayload.flights ?? [],
       error: null,
-      fetchedAt: payload.fetched_at ?? null,
-      count: payload.count ?? 0,
-      bbox: viewBbox ?? payload.bbox ?? null,
-      source: payload.meta?.source ?? "live",
-      warning: payload.meta?.warning ?? null,
-      stale: payload.meta?.stale ?? false,
-      reason: payload.meta?.reason ?? "live",
+      fetchedAt: combinedPayload.fetched_at ?? null,
+      count: combinedPayload.count ?? 0,
+      bbox: viewBbox ?? combinedPayload.bbox ?? null,
+      source: combinedPayload.meta?.source ?? "live",
+      warning: combinedPayload.meta?.warning ?? null,
+      stale: combinedPayload.meta?.stale ?? false,
+      reason: combinedPayload.meta?.reason ?? "live",
       transport,
-      meta: payload.meta ?? {},
+      meta: combinedPayload.meta ?? {},
     });
   }
 
@@ -294,17 +417,21 @@ function createFlightsStore() {
     };
   }
 
-  function setBbox(nextBbox) {
+  function setBbox(nextBbox, zoom) {
     const normalizedBbox = normalizeBbox(nextBbox);
-    if (sameBbox(viewBbox, normalizedBbox)) {
-      return;
+    const bboxChanged = !sameBbox(viewBbox, normalizedBbox);
+    if (bboxChanged) {
+      viewBbox = normalizedBbox;
+      update((state) => ({
+        ...state,
+        bbox: normalizedBbox,
+      }));
     }
 
-    viewBbox = normalizedBbox;
-    update((state) => ({
-      ...state,
-      bbox: normalizedBbox,
-    }));
+    const tile = buildLocalRegionTile(normalizedBbox, zoom);
+    if (tile) {
+      void refreshLocalRegion(tile);
+    }
   }
 
   function start() {

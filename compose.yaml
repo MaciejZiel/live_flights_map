@@ -21,6 +21,7 @@ x-backend-environment: &backend-environment
   OPENSKY_CLIENT_SECRET: ${OPENSKY_CLIENT_SECRET:-}
   OPENSKY_TOKEN_URL: ${OPENSKY_TOKEN_URL:-https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token}
   ADSB_LOL_BASE_URL: ${ADSB_LOL_BASE_URL:-https://api.adsb.lol}
+  ADSB_LOL_REGION_MIN_INTERVAL_SECONDS: ${ADSB_LOL_REGION_MIN_INTERVAL_SECONDS:-30}
   CORS_ALLOWED_ORIGIN: "http://localhost:${FRONTEND_PORT:-5174}"
 
 services:

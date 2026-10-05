@@ -80,6 +80,9 @@ class Config:
     ADSB_LOL_TIMEOUT = float(os.getenv("ADSB_LOL_TIMEOUT", "10"))
     ADSB_LOL_RETRY_COUNT = int(os.getenv("ADSB_LOL_RETRY_COUNT", "1"))
     ADSB_LOL_RADIUS_LIMIT_NM = int(os.getenv("ADSB_LOL_RADIUS_LIMIT_NM", "250"))
+    ADSB_LOL_REGION_MIN_INTERVAL_SECONDS = float(
+        os.getenv("ADSB_LOL_REGION_MIN_INTERVAL_SECONDS", "30")
+    )
     ADSB_LOL_ROUTE_API_URL = os.getenv(
         "ADSB_LOL_ROUTE_API_URL",
         "https://api.adsb.lol/api/0/routeset",

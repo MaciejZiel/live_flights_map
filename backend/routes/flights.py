@@ -84,6 +84,11 @@ def _provider_names_for_bbox(bbox: dict[str, float]) -> tuple[str, ...] | None:
     return ("opensky",) if is_world_bbox else None
 
 
+def _is_local_live_bbox(bbox: dict[str, float]) -> bool:
+    area = (bbox["lamax"] - bbox["lamin"]) * (bbox["lomax"] - bbox["lomin"])
+    return area <= 25
+
+
 def _parse_optional_float(name: str) -> float | None:
     raw_value = request.args.get(name)
     if raw_value is None or raw_value == "":
@@ -203,6 +208,33 @@ def list_flights():
         flights_payload = service.get_flights(
             bbox=bbox,
             provider_names=_provider_names_for_bbox(bbox),
+        )
+    except FlightProviderError as exc:
+        return jsonify({"error": str(exc)}), 502
+
+    return _snapshot_response(_enrich_live_payload(flights_payload))
+
+
+@api.get("/flights/local")
+def list_local_flights():
+    try:
+        bbox = _parse_bbox()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    if not _is_local_live_bbox(bbox):
+        return jsonify({"error": "Local live lookups are limited to a 25 square-degree area."}), 400
+
+    service = current_app.extensions["flight_snapshot_service"]
+    try:
+        flights_payload = service.get_flights(
+            bbox=bbox,
+            prefer_latest_cache=False,
+            update_latest_cache=False,
+            provider_names=("adsb_lol",),
+            provider_min_interval_seconds=current_app.config[
+                "ADSB_LOL_REGION_MIN_INTERVAL_SECONDS"
+            ],
         )
     except FlightProviderError as exc:
         return jsonify({"error": str(exc)}), 502

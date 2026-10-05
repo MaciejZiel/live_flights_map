@@ -1685,7 +1685,7 @@
   }
 
   function handleBoundsChange(event) {
-    flightsStore.setBbox(event.detail.bbox);
+    flightsStore.setBbox(event.detail.bbox, event.detail.zoom ?? mapViewport?.zoom);
   }
 
   function handleFlightSelect(event) {

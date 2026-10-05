@@ -25,6 +25,10 @@ function buildFlightsUrl(bbox) {
   return buildApiUrl("/api/flights", bbox);
 }
 
+function buildLocalFlightsUrl(bbox) {
+  return buildApiUrl("/api/flights/local", bbox);
+}
+
 function buildFlightDetailsUrl(flight) {
   const pathname = `/api/flights/${encodeURIComponent(flight.icao24)}/details`;
   const url = new URL(`${API_BASE_URL}${pathname}`, window.location.origin);
@@ -99,6 +103,19 @@ export async function fetchFlights(bbox, options = {}) {
   return {
     notModified: false,
     payload: await parseApiResponse(response, "Failed to load flight positions."),
+    etag: response.headers.get("ETag"),
+  };
+}
+
+export async function fetchLocalFlights(bbox, options = {}) {
+  const headers = options.etag ? { "If-None-Match": options.etag } : undefined;
+  const response = await fetch(buildLocalFlightsUrl(bbox), { headers });
+  if (response.status === 304) {
+    return { notModified: true, etag: options.etag ?? null };
+  }
+  return {
+    notModified: false,
+    payload: await parseApiResponse(response, "Failed to load local flight positions."),
     etag: response.headers.get("ETag"),
   };
 }

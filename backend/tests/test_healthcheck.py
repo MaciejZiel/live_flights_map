@@ -3,13 +3,19 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from flask import Flask
 
 from backend import create_app
 from backend.config import Config
-from backend.routes.flights import _provider_names_for_bbox, _snapshot_etag, _snapshot_response
+from backend.routes.flights import (
+    _is_local_live_bbox,
+    _provider_names_for_bbox,
+    _snapshot_etag,
+    _snapshot_response,
+    api,
+)
 
 
 class FlightRouteProviderSelectionTests(unittest.TestCase):
@@ -20,6 +26,40 @@ class FlightRouteProviderSelectionTests(unittest.TestCase):
     def test_regional_snapshot_keeps_configured_provider_fallbacks(self) -> None:
         regional_bbox = {"lamin": 49.0, "lamax": 55.0, "lomin": 14.0, "lomax": 24.0}
         self.assertIsNone(_provider_names_for_bbox(regional_bbox))
+
+    def test_local_live_endpoint_uses_only_adsb_lol_for_small_area(self) -> None:
+        app = Flask(__name__)
+        app.config["CORS_ALLOWED_ORIGIN"] = "*"
+        app.config.update(
+            MAP_DEFAULT_LAMIN=49.0,
+            MAP_DEFAULT_LAMAX=55.0,
+            MAP_DEFAULT_LOMIN=14.0,
+            MAP_DEFAULT_LOMAX=24.0,
+        )
+        snapshot_service = Mock()
+        snapshot_service.get_flights.return_value = {
+            "bbox": {"lamin": 51.0, "lamax": 54.0, "lomin": 18.0, "lomax": 21.0},
+            "count": 0,
+            "flights": [],
+            "fetched_at": "2026-01-01T00:00:00Z",
+            "meta": {},
+        }
+        app.extensions["flight_snapshot_service"] = snapshot_service
+        app.config["ADSB_LOL_REGION_MIN_INTERVAL_SECONDS"] = 30
+        app.register_blueprint(api, url_prefix="/api")
+
+        response = app.test_client().get(
+            "/api/flights/local?lamin=51&lamax=54&lomin=18&lomax=21"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(snapshot_service.get_flights.call_args.kwargs["provider_names"], ("adsb_lol",))
+        self.assertFalse(snapshot_service.get_flights.call_args.kwargs["prefer_latest_cache"])
+        self.assertFalse(snapshot_service.get_flights.call_args.kwargs["update_latest_cache"])
+
+    def test_local_live_endpoint_rejects_large_areas(self) -> None:
+        world_bbox = {"lamin": -90, "lamax": 90, "lomin": -180, "lomax": 180}
+        self.assertFalse(_is_local_live_bbox(world_bbox))
 
     def test_snapshot_etag_ignores_runtime_cooldown_countdown(self) -> None:
         payload = {"fetched_at": "2026-01-01T00:00:00Z", "flights": [], "meta": {"provider_cooldowns": {"opensky": 20}}}

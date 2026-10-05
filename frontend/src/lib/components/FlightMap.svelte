@@ -221,6 +221,7 @@
         lomin: bounds.getWest(),
         lomax: bounds.getEast(),
       },
+      zoom: map.getZoom(),
     });
 
     const center = map.getCenter();

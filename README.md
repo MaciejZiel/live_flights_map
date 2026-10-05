@@ -49,7 +49,7 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-Without OAuth2 credentials, the snapshot collector requests one global OpenSky snapshot every 20 minutes. With OAuth2 credentials, it defaults to every 3 minutes (1,920 credits/day at 4 credits per global request); set `SNAPSHOT_COLLECTOR_INTERVAL_SECONDS` to override. The API and collector share the same cache and provider cooldowns. Positions older than two minutes (four minutes with OAuth2 polling) are marked as delayed. Global requests use OpenSky's single global endpoint instead of expanding into regional ADSB requests. Provider cooldowns honor upstream `Retry-After` values. The persisted alert sweeper remains opt-in:
+Without OAuth2 credentials, the snapshot collector requests one global OpenSky snapshot every 20 minutes. With OAuth2 credentials, it defaults to every 3 minutes (1,920 credits/day at 4 credits per global request); set `SNAPSHOT_COLLECTOR_INTERVAL_SECONDS` to override. The API and collector share the same cache and provider cooldowns. Positions older than two minutes (four minutes with OAuth2 polling) are marked as delayed. Global requests use OpenSky's single global endpoint instead of expanding into regional ADSB requests. At zoom level 6 or higher, the browser can supplement the world snapshot with one cached 3° ADSB.lol area when panning into a different cell; the server enforces a 30-second shared provider interval and a 25 square-degree request cap. Zooming within the same cell does not trigger another aircraft request. Provider cooldowns honor upstream `Retry-After` values. The persisted alert sweeper remains opt-in:
 
 ```bash
 docker compose --profile workers up --build -d alert-worker

@@ -145,6 +145,11 @@ class Config:
     LIVE_LATEST_CACHE_MAX_AGE_SECONDS = float(
         os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "150")
     )
+    SNAPSHOT_COLLECTOR_SECTORS = tuple(
+        sector.strip()
+        for sector in os.getenv("SNAPSHOT_COLLECTOR_SECTORS", "poland_focus").split(",")
+        if sector.strip()
+    )
     FLIGHT_DETAILS_CACHE_TTL = float(os.getenv("FLIGHT_DETAILS_CACHE_TTL", "21600"))
     FLIGHT_STREAM_INTERVAL_SECONDS = float(
         os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "30")

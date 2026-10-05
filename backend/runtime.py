@@ -181,6 +181,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         snapshot_service=flight_snapshot_service,
         traffic_intelligence_service=traffic_intelligence_service,
         archive_service=archive_service,
+        sectors=SnapshotCollectorService.select_sectors(config.SNAPSHOT_COLLECTOR_SECTORS),
     )
     alert_sweep_service = AlertSweepService(
         snapshot_service=flight_snapshot_service,

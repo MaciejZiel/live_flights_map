@@ -44,6 +44,17 @@ class _TrafficIntelligenceStub:
 
 
 class SnapshotCollectorServiceTests(unittest.TestCase):
+    def test_select_sectors_supports_regional_and_full_coverage(self) -> None:
+        poland = SnapshotCollectorService.select_sectors(("poland_focus",))
+        all_sectors = SnapshotCollectorService.select_sectors(("*",))
+
+        self.assertEqual([sector["key"] for sector in poland], ["poland_focus"])
+        self.assertEqual(all_sectors, SnapshotCollectorService.DEFAULT_SECTORS)
+
+    def test_select_sectors_rejects_unknown_sector(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unknown snapshot collector sector"):
+            SnapshotCollectorService.select_sectors(("atlantis",))
+
     def test_collect_once_stores_latest_positions_cache(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             archive_service = FlightArchiveService(

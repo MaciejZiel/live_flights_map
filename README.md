@@ -26,8 +26,7 @@ Browser
               ├── route, aircraft metadata, airport, weather and photo providers
               └── SQLite archive, workspace, and provider caches
 
-Optional worker profile: snapshot collector + persisted alert sweeper
-Background service: archive retention and maintenance
+Background services: regional snapshot collector + archive retention and maintenance
 ```
 
 The frontend uses Svelte, Leaflet and a WebGL overlay for dense traffic. The backend uses Flask and SQLite. API responses remain under `/api`; `/health` reports provider, collector, archive and cache diagnostics.
@@ -50,10 +49,10 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-The collector and persisted alert sweeper make additional live-provider requests. They are opt-in to avoid surprising provider rate limits:
+The snapshot collector runs by default for the Poland focus area and refreshes the shared cache every 60 seconds. To collect every configured region, set `SNAPSHOT_COLLECTOR_SECTORS=*`; this makes substantially more provider requests. The persisted alert sweeper remains opt-in:
 
 ```bash
-docker compose --profile workers up --build -d
+docker compose --profile workers up --build -d alert-worker
 ```
 
 Useful commands:

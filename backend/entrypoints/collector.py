@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 from backend.runtime import build_runtime
 
-DEFAULT_INTERVAL_SECONDS = 45.0
+DEFAULT_INTERVAL_SECONDS = 60.0
 
 
 def _run_loop(*, once: bool, interval_seconds: float) -> None:

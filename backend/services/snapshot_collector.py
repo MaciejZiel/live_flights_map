@@ -27,6 +27,18 @@ class SnapshotCollectorService:
         },
     )
 
+    @classmethod
+    def select_sectors(cls, configured_keys: tuple[str, ...]) -> tuple[dict[str, object], ...]:
+        if "*" in configured_keys:
+            return cls.DEFAULT_SECTORS
+
+        sectors_by_key = {str(sector["key"]): sector for sector in cls.DEFAULT_SECTORS}
+        unknown_keys = sorted(set(configured_keys) - sectors_by_key.keys())
+        if unknown_keys:
+            raise ValueError(f"Unknown snapshot collector sector(s): {', '.join(unknown_keys)}")
+
+        return tuple(sectors_by_key[key] for key in configured_keys)
+
     def __init__(
         self,
         snapshot_service,
@@ -37,7 +49,7 @@ class SnapshotCollectorService:
         self.snapshot_service = snapshot_service
         self.traffic_intelligence_service = traffic_intelligence_service
         self.archive_service = archive_service
-        self.sectors = sectors or self.DEFAULT_SECTORS
+        self.sectors = self.DEFAULT_SECTORS if sectors is None else sectors
 
     def collect_once(self) -> dict[str, object]:
         started_at = datetime.now(timezone.utc)

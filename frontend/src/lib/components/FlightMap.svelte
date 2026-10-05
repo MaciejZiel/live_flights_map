@@ -15,6 +15,7 @@
     getAircraftRenderMode,
     shouldUseGpuAircraftLayer,
   } from "../utils/mapPerformance.js";
+  import { filterFlightsForMapViewport } from "../utils/aircraftViewport.js";
   import { buildGreatCircleSegments } from "../utils/geodesic.js";
 
   export let flights = [];
@@ -63,6 +64,7 @@
   let effectiveAircraftRenderMode = "detailed";
   let gpuTrafficLayerEnabled = false;
   let markerFlights = [];
+  let visibleFlights = [];
   let isFullscreen = false;
   let lastFullscreenRequestId = 0;
   let lastViewPresetRequestId = 0;
@@ -84,7 +86,6 @@
       [84.0, 178.0],
     ],
   };
-  const DENSE_CANVAS_MARGIN_PX = 12;
 
   function getCurrentAiracId(dateValue = new Date()) {
     const currentDate = new Date(dateValue);
@@ -215,6 +216,7 @@
     }
 
     const bounds = map.getBounds();
+    updateVisibleFlights(bounds);
     dispatch("boundschange", {
       bbox: {
         lamin: bounds.getSouth(),
@@ -232,6 +234,21 @@
         center: [center.lat, center.lng],
         zoom: currentZoom,
       },
+    });
+  }
+
+  function updateVisibleFlights(bounds = map?.getBounds()) {
+    if (!bounds) {
+      visibleFlights = flights ?? [];
+      return;
+    }
+
+    const paddedBounds = bounds.pad(0.35);
+    visibleFlights = filterFlightsForMapViewport(flights, {
+      lamin: paddedBounds.getSouth(),
+      lamax: paddedBounds.getNorth(),
+      lomin: paddedBounds.getWest(),
+      lomax: paddedBounds.getEast(),
     });
   }
 
@@ -820,13 +837,12 @@
 
     drawAircraftWebGlOverlay(denseAircraftOverlay, denseAircraftCanvas, {
       map,
-      flights,
+      flights: visibleFlights,
       selectedIcao24,
       watchedIcao24s,
       dimmedIcao24s,
       watchModeEnabled,
       active: true,
-      marginPx: DENSE_CANVAS_MARGIN_PX,
       detailMode: aircraftRenderMode,
     });
   }
@@ -1006,7 +1022,7 @@
 
       dispatch("backgroundclick");
     });
-    map.on("moveend zoomend", emitBounds);
+    map.on("moveend", emitBounds);
     map.on("move zoom resize", scheduleDenseAircraftOverlayDraw);
     document.addEventListener("fullscreenchange", syncFullscreenState);
     emitBounds();
@@ -1014,7 +1030,7 @@
     return () => {
       container.removeEventListener("click", handleMarkerElementClick, true);
       map.off("click");
-      map.off("moveend zoomend", emitBounds);
+      map.off("moveend", emitBounds);
       map.off("move zoom resize", scheduleDenseAircraftOverlayDraw);
       document.removeEventListener("fullscreenchange", syncFullscreenState);
       map.remove();
@@ -1048,7 +1064,7 @@
   }
 
   $: gpuTrafficLayerEnabled = shouldUseGpuAircraftLayer({
-    aircraftCount: flights?.length ?? 0,
+    aircraftCount: visibleFlights.length,
     clusteringEnabled: aircraftClusteringEnabled,
     webglSupported: Boolean(denseAircraftOverlay),
     renderMode: aircraftRenderMode,
@@ -1061,10 +1077,10 @@
 
   $: markerFlights =
     gpuTrafficLayerEnabled
-      ? (flights ?? []).filter(
+      ? visibleFlights.filter(
           (flight) => flight?.icao24 && (flight.icao24 === selectedIcao24 || watchedIcao24s.includes(flight.icao24))
         )
-      : flights ?? [];
+      : visibleFlights;
 
   $: if (aircraftLayer) {
     syncAircraftMarkers(
@@ -1083,10 +1099,15 @@
   }
 
   $: aircraftRenderMode = getAircraftRenderMode({
-    aircraftCount: flights?.length ?? 0,
+    aircraftCount: visibleFlights.length,
     zoom: currentZoom,
     clusteringEnabled: aircraftClusteringEnabled,
   });
+
+  $: if (map) {
+    flights;
+    updateVisibleFlights();
+  }
 
   $: if (map && denseAircraftCanvas) {
     flights;

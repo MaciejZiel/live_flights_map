@@ -4398,6 +4398,16 @@
   }
 
   function sortFlights(flights, mode, viewport) {
+    if (mode === "distance_asc") {
+      return flights
+        .map((flight) => ({
+          flight,
+          distance: calculateDistanceKm(flight.latitude, flight.longitude, viewport),
+        }))
+        .sort((left, right) => left.distance - right.distance)
+        .map(({ flight }) => flight);
+    }
+
     const sortedFlights = [...flights];
 
     sortedFlights.sort((left, right) => {
@@ -4409,13 +4419,6 @@
         return (right.velocity ?? -Infinity) - (left.velocity ?? -Infinity);
       }
 
-      if (mode === "distance_asc") {
-        return (
-          calculateDistanceKm(left.latitude, left.longitude, viewport) -
-          calculateDistanceKm(right.latitude, right.longitude, viewport)
-        );
-      }
-
       if (mode === "last_contact_desc") {
         return (right.last_contact ?? -Infinity) - (left.last_contact ?? -Infinity);
       }
@@ -4424,6 +4427,21 @@
     });
 
     return sortedFlights;
+  }
+
+  let sortedFlightsCache = { flights: null, mode: null, center: null, result: [] };
+
+  function getSortedFlights(flights, mode, viewport) {
+    const center = mode === "distance_asc" ? viewport?.center?.join(",") ?? "" : "";
+    const cache = sortedFlightsCache;
+
+    if (cache.flights === flights && cache.mode === mode && cache.center === center) {
+      return cache.result;
+    }
+
+    const result = sortFlights(flights, mode, viewport);
+    sortedFlightsCache = { flights, mode, center, result };
+    return result;
   }
 
   $: normalizedQuery = filters.query.trim().toLowerCase();
@@ -4551,7 +4569,7 @@
       matchesRecentActivity
     );
   });
-  $: sortedFlights = sortFlights(filteredFlights, sortBy, mapViewport);
+  $: sortedFlights = getSortedFlights(filteredFlights, sortBy, mapViewport);
   $: filteredFlightIds = new Set(filteredFlights.map((flight) => flight.icao24));
   $: mapFeedFlights = (
     filters.dimFilteredTraffic && activeFilterCount
@@ -4572,7 +4590,6 @@
   $: dimmedFlightIds = filters.dimFilteredTraffic && activeFilterCount
     ? mapFeedFlights.filter((flight) => flight.is_dimmed).map((flight) => flight.icao24)
     : [];
-  $: renderedFlights = sortFlights(mapFeedFlights, sortBy, mapViewport);
   $: watchedFlightEntries = watchlist.map((icao24) => {
     const flight = state.flights.find((candidate) => candidate.icao24 === icao24) ?? null;
     return {
@@ -4591,7 +4608,7 @@
     .filter((entry) => entry.flight)
     .map((entry) => entry.flight)
     .slice(0, 4);
-  $: visibleLeaderboardFlights = sortFlights(filteredFlights, "speed_desc", mapViewport).slice(0, 6);
+  $: visibleLeaderboardFlights = sortFlights(filteredFlights, "speed_desc", null).slice(0, 6);
   $: airborneCount = filteredFlights.filter((flight) => !flight.on_ground).length;
   $: groundCount = Math.max(0, filteredFlights.length - airborneCount);
   $: snapshotAirborneCount = replayFlights.filter((flight) => !flight.on_ground).length;
@@ -5148,7 +5165,7 @@
   <section class="radar-stage">
     <div class="map-layer">
       <FlightMap
-        flights={renderedFlights}
+        flights={mapFeedFlights}
         airports={airportFeed.airports}
         selectedIcao24={selectedIcao24}
         selectedAirportKey={selectedAirportCode}

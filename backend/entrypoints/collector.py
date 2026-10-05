@@ -9,6 +9,21 @@ from dotenv import load_dotenv
 from backend.runtime import build_runtime
 
 DEFAULT_INTERVAL_SECONDS = 1200.0
+MIN_RETRY_DELAY_SECONDS = 30.0
+FAILURE_RETRY_DELAY_SECONDS = 60.0
+
+
+def _next_delay_seconds(payload: dict, interval_seconds: float) -> float:
+    if not payload.get("warnings"):
+        return interval_seconds
+
+    retry_after_seconds = max(
+        (float(sector.get("retry_after_seconds") or 0) for sector in payload.get("sectors", [])),
+        default=0.0,
+    )
+    if retry_after_seconds > 0:
+        return max(MIN_RETRY_DELAY_SECONDS, retry_after_seconds)
+    return min(interval_seconds, FAILURE_RETRY_DELAY_SECONDS)
 
 
 def _run_loop(*, once: bool, interval_seconds: float) -> None:
@@ -18,12 +33,7 @@ def _run_loop(*, once: bool, interval_seconds: float) -> None:
         print(json.dumps(payload, ensure_ascii=True), flush=True)
         if once:
             return
-        retry_after_seconds = max(
-            (int(sector.get("retry_after_seconds") or 0) for sector in payload.get("sectors", [])),
-            default=0,
-        )
-        delay_seconds = max(interval_seconds, retry_after_seconds) if payload.get("warnings") else interval_seconds
-        time.sleep(delay_seconds)
+        time.sleep(_next_delay_seconds(payload, interval_seconds))
 
 
 def main() -> None:

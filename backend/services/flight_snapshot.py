@@ -403,11 +403,25 @@ class FlightSnapshotService:
         now: float,
         provider_name: str | None = None,
     ) -> dict[str, object]:
-        return {
+        provider_quotas = {}
+        for provider in self.providers:
+            remaining = getattr(provider, "last_rate_limit_remaining", None)
+            reset = getattr(provider, "last_rate_limit_reset", None)
+            if remaining is None and reset is None:
+                continue
+            provider_quotas[self._get_provider_label(provider)] = {
+                "remaining": remaining,
+                "reset": reset,
+            }
+
+        meta = {
             "provider_used": provider_name,
             "providers_configured": [self._get_provider_label(provider) for provider in self.providers],
             "provider_cooldowns": self._active_cooldowns(now),
         }
+        if provider_quotas:
+            meta["provider_quotas"] = provider_quotas
+        return meta
 
     def _active_cooldowns(self, now: float) -> dict[str, int]:
         cooldowns = {

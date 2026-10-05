@@ -41,15 +41,15 @@ docker compose up --build -d
 
 Open <http://localhost:5174>. The API is reached through the frontend proxy and is not published as a separate host port. SQLite data and caches persist in a named Docker volume. Set `FRONTEND_PORT` in `.env` to override the port.
 
-To use authenticated OpenSky access, create `.env` from the example and add the account credentials. Anonymous OpenSky access and the ADSB.lol fallback are used when credentials are empty.
+To use authenticated OpenSky access, create an API client in your OpenSky account and set its client ID and secret in `.env`. OAuth2 tokens are cached and refreshed automatically. Legacy username/password credentials remain supported for existing accounts; new clients should use OAuth2.
 
 ```bash
 cp .env.example .env
-# Set OPENSKY_USERNAME and OPENSKY_PASSWORD if available.
+# Set OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET in .env.
 docker compose up --build -d
 ```
 
-The snapshot collector requests one global OpenSky snapshot every 20 minutes and stores it in the shared cache. Positions older than two minutes are marked as delayed in the API and UI. The global request is intentionally limited to OpenSky rather than fanning out into dozens of regional ADSB requests. To add an extra cached region, set `SNAPSHOT_COLLECTOR_SECTORS=global_world,poland_focus`. Provider cooldowns honor upstream `Retry-After` values. The persisted alert sweeper remains opt-in:
+Without OAuth2 credentials, the snapshot collector requests one global OpenSky snapshot every 20 minutes. With OAuth2 credentials, it defaults to every 3 minutes (1,920 credits/day at 4 credits per global request); set `SNAPSHOT_COLLECTOR_INTERVAL_SECONDS` to override. The API and collector share the same cache and provider cooldowns. Positions older than two minutes (four minutes with OAuth2 polling) are marked as delayed. Global requests use OpenSky's single global endpoint instead of expanding into regional ADSB requests. Provider cooldowns honor upstream `Retry-After` values. The persisted alert sweeper remains opt-in:
 
 ```bash
 docker compose --profile workers up --build -d alert-worker

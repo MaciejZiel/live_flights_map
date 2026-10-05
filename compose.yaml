@@ -17,6 +17,9 @@ x-backend-environment: &backend-environment
   FLIGHT_DATA_PROVIDERS: ${FLIGHT_DATA_PROVIDERS:-opensky,adsb_lol}
   OPENSKY_USERNAME: ${OPENSKY_USERNAME:-}
   OPENSKY_PASSWORD: ${OPENSKY_PASSWORD:-}
+  OPENSKY_CLIENT_ID: ${OPENSKY_CLIENT_ID:-}
+  OPENSKY_CLIENT_SECRET: ${OPENSKY_CLIENT_SECRET:-}
+  OPENSKY_TOKEN_URL: ${OPENSKY_TOKEN_URL:-https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token}
   ADSB_LOL_BASE_URL: ${ADSB_LOL_BASE_URL:-https://api.adsb.lol}
   CORS_ALLOWED_ORIGIN: "http://localhost:${FRONTEND_PORT:-5174}"
 

@@ -86,6 +86,9 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
                     password=config.OPENSKY_PASSWORD,
                     timeout=config.OPENSKY_TIMEOUT,
                     max_retries=config.OPENSKY_RETRY_COUNT,
+                    client_id=config.OPENSKY_CLIENT_ID,
+                    client_secret=config.OPENSKY_CLIENT_SECRET,
+                    token_url=config.OPENSKY_TOKEN_URL,
                 )
             )
             continue

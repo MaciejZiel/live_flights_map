@@ -68,6 +68,12 @@ class Config:
     )
     OPENSKY_USERNAME = os.getenv("OPENSKY_USERNAME")
     OPENSKY_PASSWORD = os.getenv("OPENSKY_PASSWORD")
+    OPENSKY_CLIENT_ID = os.getenv("OPENSKY_CLIENT_ID")
+    OPENSKY_CLIENT_SECRET = os.getenv("OPENSKY_CLIENT_SECRET")
+    OPENSKY_TOKEN_URL = os.getenv(
+        "OPENSKY_TOKEN_URL",
+        "https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token",
+    )
     OPENSKY_TIMEOUT = float(os.getenv("OPENSKY_TIMEOUT", "10"))
     OPENSKY_RETRY_COUNT = int(os.getenv("OPENSKY_RETRY_COUNT", "1"))
     ADSB_LOL_BASE_URL = os.getenv("ADSB_LOL_BASE_URL", "https://api.adsb.lol")
@@ -146,7 +152,10 @@ class Config:
         os.getenv("LIVE_LATEST_CACHE_MAX_AGE_SECONDS", "1260")
     )
     LIVE_LATEST_CACHE_STALE_AFTER_SECONDS = float(
-        os.getenv("LIVE_LATEST_CACHE_STALE_AFTER_SECONDS", "120")
+        os.getenv(
+            "LIVE_LATEST_CACHE_STALE_AFTER_SECONDS",
+            "240" if OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET else "120",
+        )
     )
     SNAPSHOT_COLLECTOR_SECTORS = tuple(
         sector.strip()

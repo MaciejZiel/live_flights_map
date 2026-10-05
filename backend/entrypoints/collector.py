@@ -2,15 +2,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import time
 
 from dotenv import load_dotenv
 
 from backend.runtime import build_runtime
 
-DEFAULT_INTERVAL_SECONDS = 1200.0
 MIN_RETRY_DELAY_SECONDS = 30.0
 FAILURE_RETRY_DELAY_SECONDS = 60.0
+
+
+def _default_interval_seconds() -> float:
+    configured = os.getenv("SNAPSHOT_COLLECTOR_INTERVAL_SECONDS", "").strip()
+    if configured:
+        return float(configured)
+    if os.getenv("OPENSKY_CLIENT_ID") and os.getenv("OPENSKY_CLIENT_SECRET"):
+        return 180.0
+    return 1200.0
 
 
 def _next_delay_seconds(payload: dict, interval_seconds: float) -> float:
@@ -43,8 +52,8 @@ def main() -> None:
     parser.add_argument(
         "--interval",
         type=float,
-        default=DEFAULT_INTERVAL_SECONDS,
-        help=f"Polling interval in seconds when running continuously (default: {DEFAULT_INTERVAL_SECONDS}).",
+        default=_default_interval_seconds(),
+        help="Polling interval in seconds when running continuously.",
     )
     args = parser.parse_args()
     _run_loop(once=args.once, interval_seconds=max(args.interval, 5.0))

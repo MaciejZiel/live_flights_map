@@ -9,6 +9,7 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 30000,
   fullyParallel: true,
+  workers: process.env.CI ? 1 : undefined,
   use: {
     baseURL: BASE_URL,
     headless: true,

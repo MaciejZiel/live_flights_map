@@ -1,90 +1,43 @@
-# Live Flights Map Feature Backlog
+# Product and feature inventory
 
-## Map and Movement
+This file describes implemented behavior in the repository. Provider coverage, enrichment and freshness depend on external aviation data sources.
 
-- Additional layers: country borders, FIRs, airports, ATS routes.
-- Traffic heatmap for the selected region.
+## Live traffic map
 
-## Aircraft Details
+- Polling by default, with an optional server-sent event transport and a local snapshot fallback.
+- OpenSky and ADSB.lol provider chain, bounding-box aware queries, rate-limit cooldowns and provider diagnostics.
+- Aircraft selection, marker clustering, density-aware Canvas/WebGL rendering, map style presets, airport markers and optional weather overlay.
+- Filters for aircraft identity, altitude, speed, aircraft type, operator, route, traffic category, movement and activity.
 
-- Callsign, ICAO24, registration, aircraft type, operator, origin country.
-- Origin and destination airports when available.
-- Estimated arrival time.
-- Aircraft or airline image where available.
-- Flight category: passenger, cargo, private, military, medical.
-- Dedicated full flight details view.
+## Flight discovery and inspection
 
-## Search and Filtering
+- Scoped search for callsign, ICAO24, registration, airport, airline, route and named location.
+- Aircraft details with best-effort identity, route and image enrichment, plus data-quality and freshness indicators.
+- Position trail, estimated movement vector, flight selection history, watchlist, notes and map follow mode.
+- Airport search and dashboards with nearby/live traffic, archived movements, weather, reports and CSV export.
 
-- Search by callsign, ICAO24, registration, airline, aircraft type.
-- `Arrivals/departures for selected airport` filter.
-- Traffic type filter: passenger, cargo, private, helicopter.
+## History and monitoring
 
-## Airports and Routes
+- SQLite snapshots, latest-position cache, per-aircraft trail, recent-traffic search and time-window replay.
+- Replay timeline with playback speed, timestamp selection and snapshot comparison.
+- Browser alerts for matching traffic and transitions; optional server-side sweeper persists profile alert state.
+- CSV and printable reports, saved views, share URLs and embeddable map links.
 
-- Clickable airports with arrivals and departures board.
-- Nearby airports for a selected aircraft.
-- Origin-to-destination route line.
-- Active approach and departure view for airports.
-- Live airport traffic statistics.
-- Runway layout, approach zones, and holding pattern overlays.
+## Local workspaces
 
-## Alerts and Monitoring
+- Local workspace accounts and profiles persist map settings, filters, alert rules, notes, saved views and watchlists.
+- The profile role field is descriptive demo state only. There is no authentication or server-side authorization; do not use it as a security boundary.
 
-- Alert when a selected aircraft enters a chosen area.
-- Alert when an aircraft changes altitude, heading, or disappears.
-- Airport alerts for arrival, departure, delay, or cancellation.
-- Push, email, or webhook notifications.
-- Geofencing with custom drawn areas.
+## Runtime and reliability
 
-## History and Analytics
+- Flask API, Svelte frontend, SQLite persistence and Docker Compose local setup.
+- API diagnostics cover provider cooldowns, archive freshness, collector status and workspace/photo caches.
+- Collector and alert workers are optional because they make additional live-provider requests. Archive retention maintenance runs separately.
+- GitHub Actions checks backend tests, frontend unit tests, production build and a mocked Playwright browser flow.
 
-- Regional traffic stats: flight count, average altitude, popular routes.
-- Day-over-day and week-over-week traffic comparison.
+## Data limitations
 
-## UX and Accessibility
-
-- Collapsible and reorderable side panels.
-- Multi-language interface.
-- Favorites for airports and aircraft.
-
-## Data Quality and Performance
-
-- Unified retry and error-handling policy.
-- Performance monitoring and error logging.
-- Automated backend and frontend tests.
-- Support for multiple data providers, not only OpenSky.
-
-## Pro and Collaboration Features
-
-- Public or private user API.
-- Embeddable map widget.
-- PDF and CSV reports.
-- User roles: viewer, analyst, admin.
-- Integrations with Discord, Slack, and Telegram.
-
-## Suggested Delivery Order
-
-### Must Have
-
-- Advanced search and filtering.
-- Aircraft details view with trail history.
-- Watchlist and alerting basics.
-- History and replay foundation.
-- Better realtime transport such as WebSocket or SSE.
-
-### Should Have
-
-- Airport views and route overlays.
-- Saved presets and saved dashboards.
-- Data quality indicators and richer caching logic.
-- Mobile UX and theme support.
-- Export and reporting.
-
-### Nice to Have
-
-- Multi-provider support.
-- Collaboration features and notes.
-- Embeddable widgets and public sharing.
-- Role-based access.
-- Premium analytics and comparisons.
+- ADS-B coverage depends on receivers, provider availability and rate limits. Global traffic views can be incomplete.
+- Route, identity, photo, weather and airport movement details are best-effort enrichment and may be absent or stale.
+- Replay only contains positions archived while a collector or a user-facing live request was active; it is not a complete historical flight database.
+- Live position data is observational and should not be used for operational navigation or safety decisions.

@@ -1,154 +1,143 @@
 # Live Flights Map
 
-Minimal MVP for real-time aircraft tracking:
+Live Flights Map is a local-first aviation operations desk for exploring aircraft traffic, inspecting flight and airport details, and replaying recent movement from archived data.
 
-- `backend/`: Flask proxy for OpenSky Network with ADSB.lol fallback
-- `frontend/`: Svelte + Leaflet for aircraft visualization on the map
+The app uses live public data providers. Provider coverage and rate limits vary, so the interface identifies the source and freshness of each snapshot and keeps the last available data when a provider is temporarily unavailable.
+
+## What you can do
+
+- Explore live aircraft positions on a Leaflet map, with map styles, airport markers, weather and density-aware aircraft rendering.
+- Search by callsign, ICAO24, registration, airline, route, airport or named location; filter traffic by altitude, speed, type and activity.
+- Inspect aircraft identity, route, photos, position history and estimated direction of travel.
+- Open airport dashboards with nearby traffic, recorded movements, weather and CSV export.
+- Replay archived traffic, compare snapshots, save map views, annotate aircraft and manage watchlists.
+- Configure browser and webhook alerts for aircraft and traffic transitions.
+- Export traffic and airport reports as CSV or printable HTML, and share a map view or embed link.
 
 ## Architecture
 
+```text
+Browser
+  └── Nginx: built Svelte app + same-origin API proxy
+        └── Flask API
+              ├── OpenSky → ADSB.lol fallback for live positions
+              ├── route, aircraft metadata, airport, weather and photo providers
+              └── SQLite archive, workspace, and provider caches
+
+Optional worker profile: snapshot collector + persisted alert sweeper
+Background service: archive retention and maintenance
+```
+
+The frontend uses Svelte, Leaflet and a WebGL overlay for dense traffic. The backend uses Flask and SQLite. API responses remain under `/api`; `/health` reports provider, collector, archive and cache diagnostics.
+
+## Run the full app with Docker
+
+Docker Engine and the Docker Compose plugin are required.
+
+```bash
+docker compose up --build -d
+```
+
+Open <http://localhost:5174>. The API is reached through the frontend proxy and is not published as a separate host port. SQLite data and caches persist in a named Docker volume. Set `FRONTEND_PORT` in `.env` to override the port.
+
+To use authenticated OpenSky access, create `.env` from the example and add the account credentials. Anonymous OpenSky access and the ADSB.lol fallback are used when credentials are empty.
+
+```bash
+cp .env.example .env
+# Set OPENSKY_USERNAME and OPENSKY_PASSWORD if available.
+docker compose up --build -d
+```
+
+The collector and persisted alert sweeper make additional live-provider requests. They are opt-in to avoid surprising provider rate limits:
+
+```bash
+docker compose --profile workers up --build -d
+```
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f api frontend
+docker compose logs -f collector alert-worker
+docker compose down
+```
+
+The frontend is bound to loopback by default. Workspace profiles are local saved desks, not authenticated user accounts or an access-control boundary. Do not expose this local demo directly to the public internet.
+
+## Run for development
+
 ### Backend
 
-- `GET /api/flights`
-- `GET /api/flights/stream` (SSE transport)
-- `GET /api/history/replay` (recent snapshots for the current bbox)
-- `GET /api/flights/<icao24>/trail` (flight trail from the archive)
-- `GET /api/search?q=...` (search across recently seen traffic)
-- fetches fresh snapshots from the provider chain `opensky -> adsb_lol`
-- keeps a per-`bbox` cache, applies cooldown during rate limits, and falls back to the latest cached snapshot on upstream errors
-- archives snapshots and positions into a local SQLite database for replay, trail, and search
-- supports SSE for the frontend with fallback to standard polling
-- filters the response down to:
-  - `icao24`
-  - `callsign`
-  - `longitude`
-  - `latitude`
-  - `true_track`
-  - `altitude`
-- supports a default bounding box from `.env`
+Python 3.12 or newer is recommended.
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python -m backend.entrypoints.api
+```
+
+The backend listens on <http://127.0.0.1:5000> by default.
 
 ### Frontend
 
-- polls the backend every 30 seconds
-- uses standard polling by default; SSE can be enabled explicitly with an environment variable
-- sends the current map bounding box after pan or zoom
-- renders aircraft as Leaflet markers
-- animates marker positions between snapshots
-- allows filtering by callsign, ICAO24, country, and minimum altitude
-- shows a details panel for the selected aircraft
-- rotates the aircraft icon based on `true_track`
-- removes markers that are missing from the next response and updates the existing ones
+```bash
+cd frontend
+npm ci
+npx playwright install chromium  # only needed for browser tests
+npm run dev
+```
 
-## Running The Project
+Open <http://127.0.0.1:5173>. The Vite development proxy forwards `/api` and `/health` to the backend. Use `VITE_API_BASE_URL` only when intentionally connecting to a different API origin.
 
-### 1. Backend
+## Main API routes
 
-Edit the `.env` file. If you remove it, you can restore it from `.env.example`.
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/api/flights` | Current traffic for a bounding box |
+| `GET` | `/api/flights/stream` | Server-sent live updates |
+| `GET` | `/api/flights/{icao24}/details` | Aircraft, route and photo details |
+| `GET` | `/api/flights/{icao24}/trail` | Archived positions for an aircraft |
+| `GET` | `/api/history/replay` | Archived snapshots for a map area |
+| `GET` | `/api/search` | Search recent traffic and known entities |
+| `GET` | `/api/airports` | Airports visible in a map area, with catalog status |
+| `GET` | `/api/airports/{code}` | Airport traffic dashboard |
+| `GET` | `/api/airports/{code}/weather` | Current METAR where available |
+| `GET/POST/PUT` | `/api/workspace/*` | Local workspace profiles and saved state |
+| `GET` | `/api/traffic/leaderboard` | Regional traffic summary |
+| `GET` | `/health` | Runtime diagnostics |
 
-Install dependencies:
+Bounding-box coordinates use `lamin`, `lamax`, `lomin` and `lomax`. The airport list is capped server-side to keep broad map views responsive.
+
+## Configuration and data
+
+Copy `.env.example` to `.env` to configure provider credentials and retention. Compose also supports standard environment overrides, including `FRONTEND_PORT`, `FLIGHT_DATA_PROVIDERS`, `FLIGHT_ARCHIVE_RETENTION_HOURS` and `FLIGHT_ARCHIVE_MAX_SNAPSHOTS`.
+
+| Source | Use |
+| --- | --- |
+| [OpenSky Network](https://opensky-network.org/) | Aircraft state vectors |
+| [ADSB.lol](https://adsb.lol/) | Position fallback and aircraft metadata |
+| [OurAirports](https://ourairports.com/data/) | Airport catalog |
+| [Aviation Weather Center](https://aviationweather.gov/data/api/) | METAR weather |
+| [OpenStreetMap](https://www.openstreetmap.org/copyright) | Map data and attribution |
+| Wikimedia Commons, Openverse and Planespotting | Aircraft imagery, when a match is available |
+
+Live traffic is not complete coverage and route enrichment is best-effort. A missing route, photo or airport movement means the provider did not return enough matching data; it does not mean the flight or event did not happen. The app shows provider warnings and stale-cache state rather than presenting cached positions as live.
+
+## Quality checks
+
+From the repository root:
 
 ```bash
-.venv/bin/python -m pip install -r requirements.txt
+docker compose config --quiet
+docker compose build
+docker compose run --rm --no-deps api python -m unittest discover -s backend/tests -v
+cd frontend
+npm test
+npm run build
+npm run test:e2e
 ```
 
-Start the backend:
-
-```bash
-.venv/bin/python app.py
-```
-
-You can override the backend host and port:
-
-```bash
-HOST=127.0.0.1 PORT=5002 .venv/bin/python app.py
-```
-
-The backend will be available at:
-
-```text
-http://127.0.0.1:5000
-```
-
-Healthcheck:
-
-```text
-http://127.0.0.1:5000/health
-```
-
-API:
-
-```text
-http://127.0.0.1:5000/api/flights
-```
-
-SSE stream:
-
-```text
-http://127.0.0.1:5000/api/flights/stream
-```
-
-Example with a custom bounding box:
-
-```text
-http://127.0.0.1:5000/api/flights?lamin=49&lamax=55.1&lomin=14&lomax=24.5
-```
-
-### 2. Frontend
-
-Install dependencies:
-
-```bash
-npm --prefix frontend install
-```
-
-Start the dev server:
-
-```bash
-npm --prefix frontend run dev
-```
-
-You can point the frontend to a different backend without editing code:
-
-```bash
-VITE_API_BASE_URL=http://127.0.0.1:5002 npm --prefix frontend run dev
-```
-
-Or keep relative `/api` paths and only switch the dev proxy:
-
-```bash
-VITE_DEV_PROXY_TARGET=http://127.0.0.1:5002 npm --prefix frontend run dev
-```
-
-The frontend will be available at:
-
-```text
-http://127.0.0.1:5173
-```
-
-## Flight Provider Configuration
-
-Add values to the existing `.env` file:
-
-```env
-FLIGHT_ARCHIVE_PATH=/tmp/live-flights-map-history.sqlite3
-FLIGHT_ARCHIVE_RETENTION_HOURS=24
-FLIGHT_ARCHIVE_MAX_SNAPSHOTS=720
-FLIGHT_SEARCH_LOOKBACK_HOURS=6
-FLIGHT_DATA_PROVIDERS=opensky,adsb_lol
-OPENSKY_USERNAME=
-OPENSKY_PASSWORD=
-OPENSKY_RETRY_COUNT=1
-ADSB_LOL_BASE_URL=https://api.adsb.lol
-ADSB_LOL_TIMEOUT=10
-ADSB_LOL_RETRY_COUNT=1
-ADSB_LOL_RADIUS_LIMIT_NM=250
-OPENSKY_CACHE_TTL=25
-OPENSKY_COOLDOWN_SECONDS=75
-FLIGHT_STREAM_INTERVAL_SECONDS=30
-```
-
-`FLIGHT_DATA_PROVIDERS` defines the upstream order. By default the backend tries OpenSky first and switches to ADSB.lol on errors or rate limits.
-
-The current OpenSky integration expects standard credentials (`username` + `password`), not a separate API token.
-
-If the OpenSky fields are left empty, the backend will try an anonymous connection, but the limits will be stricter. ADSB.lol works as a public fallback and, for wider views such as Europe or World, may return only part of the traffic because the point endpoint has a `250nm` radius cap.
+The same backend tests, frontend unit tests, production build and browser flow run in GitHub Actions. The Playwright flow mocks external API responses so it does not depend on live feeds.

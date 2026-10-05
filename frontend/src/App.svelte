@@ -45,6 +45,7 @@
   import { getTrailPoints, updateFlightHistory } from "./lib/utils/flightHistory.js";
   import { getFlightPositionAgeSeconds } from "./lib/utils/flightFreshness.js";
   import { normalizeMapViewport } from "./lib/utils/mapViewport.js";
+  import { buildProviderStatus } from "./lib/utils/providerStatus.js";
   import {
     classifyTrafficCategory,
     TRAFFIC_CATEGORY_OPTIONS,
@@ -4715,6 +4716,7 @@
   $: qualitySummaryLabel = getQualitySummaryLabel(state);
   $: feedLabel = getFeedLabel(state);
   $: feedSummaryLabel = getFeedSummaryLabel(state);
+  $: providerStatus = buildProviderStatus(state.meta, now);
   $: zoomLabel = Number.isFinite(mapViewport?.zoom) ? mapViewport.zoom.toFixed(1) : "7.1";
   $: visibleTrackedCount = activeReplaySnapshot?.count ?? state.count;
   $: canStepReplayBackward =
@@ -5212,13 +5214,16 @@
               <div
                 class="mobile-feed-summary"
                 class:delayed={state.stale && !activeReplaySnapshot}
-                aria-label={`${activeReplaySnapshot ? "Archive frame" : statusLabel}: ${visibleTrackedCount} positions, ${snapshotAirborneCount} airborne, ${snapshotGroundCount} ground, ${freshnessLabel}`}
+                aria-label={`${activeReplaySnapshot ? "Archive frame" : statusLabel}: ${visibleTrackedCount} positions, ${snapshotAirborneCount} airborne, ${snapshotGroundCount} ground, ${freshnessLabel}. Sources: ${providerStatus.summary}`}
               >
                 <span class:online={["success", "refreshing"].includes(state.status) && !state.stale} class:delayed={state.stale && !activeReplaySnapshot} class="traffic-dot"></span>
                 <strong>{formatCompactCount(visibleTrackedCount)}</strong>
                 <span>{snapshotAirborneCount} airborne</span>
                 <span>{snapshotGroundCount} ground</span>
                 <span class="mobile-feed-age">{activeReplaySnapshot ? "Replay" : `${statusLabel} · ${freshnessLabel}`}</span>
+                {#if !activeReplaySnapshot}
+                  <span class="mobile-feed-sources" title={providerStatus.summary}>{providerStatus.compactRegional}</span>
+                {/if}
               </div>
             {/if}
 
@@ -5243,8 +5248,8 @@
                 <div
                   class="topbar-live-pill"
                   class:delayed={state.stale && !activeReplaySnapshot}
-                  aria-label={`${activeReplaySnapshot ? "Archive frame" : statusLabel}: ${visibleTrackedCount} positions, ${snapshotAirborneCount} airborne, ${snapshotGroundCount} ground, ${freshnessLabel}`}
-                  title={`${activeReplaySnapshot ? "Archive frame" : feedSummaryLabel} · ${snapshotAirborneCount} airborne · ${snapshotGroundCount} on ground`}
+                  aria-label={`${activeReplaySnapshot ? "Archive frame" : statusLabel}: ${visibleTrackedCount} positions, ${snapshotAirborneCount} airborne, ${snapshotGroundCount} ground, ${freshnessLabel}. Sources: ${providerStatus.summary}`}
+                  title={`${activeReplaySnapshot ? "Archive frame" : feedSummaryLabel} · ${snapshotAirborneCount} airborne · ${snapshotGroundCount} on ground · ${providerStatus.summary}`}
                 >
                   <span
                     class:online={["success", "refreshing"].includes(state.status) && !state.stale}
@@ -5257,6 +5262,9 @@
                     <small class:delayed={state.stale && !activeReplaySnapshot}>
                       {activeReplaySnapshot ? "Historical playback" : `${statusLabel} · ${freshnessLabel}`}
                     </small>
+                    {#if !activeReplaySnapshot}
+                      <small class="topbar-live-sources" title={providerStatus.summary}>{providerStatus.summary}</small>
+                    {/if}
                   </div>
                 </div>
                 {#if simpleModeEnabled}
@@ -7334,6 +7342,12 @@
     min-width: 0;
   }
 
+  .topbar-live-sources {
+    max-width: 18rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .topbar-live-pill strong {
     display: block;
     font-size: 0.75rem;
@@ -8944,6 +8958,7 @@
     .mobile-feed-summary strong { color: #f3f6fb; font-size: 0.7rem; }
     .mobile-feed-summary.delayed { color: #edbd7f; }
     .mobile-feed-age { margin-left: auto; }
+    .mobile-feed-sources { overflow: hidden; text-overflow: ellipsis; }
     .center-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; }
     .topbar-live-pill { min-height: 2.3rem; padding: 0.32rem 0.5rem; }
     .topbar-live-pill small { display: none; }

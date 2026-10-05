@@ -155,13 +155,32 @@ function createFlightsStore() {
       (payload.flights ?? []).filter((flight) => flight?.icao24).map((flight) => [flight.icao24, flight])
     );
     const nowTimestamp = Date.now();
+    const providerCooldowns = {};
+    const providerCooldownObservedAt = {};
     let supplementalCount = 0;
+
+    const mergeCooldowns = (meta = {}, fallbackObservedAt = nowTimestamp) => {
+      for (const [provider, secondsValue] of Object.entries(meta.provider_cooldowns ?? {})) {
+        const seconds = Number(secondsValue);
+        const observedAt = Number(meta.provider_cooldowns_observed_at?.[provider] ?? fallbackObservedAt);
+        const elapsed = Number.isFinite(observedAt) ? Math.max(0, (nowTimestamp - observedAt) / 1000) : 0;
+        const remaining = Math.max(0, seconds - elapsed);
+        const existing = Number(providerCooldowns[provider] ?? 0);
+        if (remaining > existing) {
+          providerCooldowns[provider] = remaining;
+          providerCooldownObservedAt[provider] = nowTimestamp;
+        }
+      }
+    };
+
+    mergeCooldowns(payload.meta);
 
     for (const [key, tile] of regionalTiles) {
       if (nowTimestamp - tile.fetchedAt > LOCAL_REGION_CACHE_TTL_MS) {
         regionalTiles.delete(key);
         continue;
       }
+      mergeCooldowns(tile.meta, tile.fetchedAt);
       for (const flight of tile.flights) {
         if (!flight?.icao24) {
           continue;
@@ -184,6 +203,8 @@ function createFlightsStore() {
       count: flightsById.size,
       meta: {
         ...(payload.meta ?? {}),
+        provider_cooldowns: providerCooldowns,
+        provider_cooldowns_observed_at: providerCooldownObservedAt,
         regional_supplement_count: supplementalCount,
         regional_supplement_tiles: regionalTiles.size,
       },
@@ -222,6 +243,7 @@ function createFlightsStore() {
         bbox: tile.bbox,
         fetchedAt: Date.now(),
         flights: result.payload.flights ?? [],
+        meta: result.payload.meta ?? {},
       });
       while (regionalTiles.size > LOCAL_REGION_CACHE_MAX_TILES) {
         regionalTiles.delete(regionalTiles.keys().next().value);
@@ -248,8 +270,19 @@ function createFlightsStore() {
     if (transport === "polling") {
       snapshotEtag = etag;
     }
-    globalPayload = payload;
-    const combinedPayload = mergeRegionalTiles(payload);
+    const observedAt = Date.now();
+    const cooldowns = payload.meta?.provider_cooldowns ?? {};
+    const payloadWithCooldownTime = {
+      ...payload,
+      meta: {
+        ...(payload.meta ?? {}),
+        provider_cooldowns_observed_at: Object.fromEntries(
+          Object.keys(cooldowns).map((provider) => [provider, observedAt])
+        ),
+      },
+    };
+    globalPayload = payloadWithCooldownTime;
+    const combinedPayload = mergeRegionalTiles(payloadWithCooldownTime);
     persistSnapshot(combinedPayload);
     set({
       status: "success",

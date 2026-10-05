@@ -46,6 +46,7 @@
   import { getFlightPositionAgeSeconds } from "./lib/utils/flightFreshness.js";
   import { normalizeMapViewport } from "./lib/utils/mapViewport.js";
   import { buildProviderStatus } from "./lib/utils/providerStatus.js";
+  import { buildAirportCoverageRequest } from "./lib/utils/airportCoverage.js";
   import {
     classifyTrafficCategory,
     TRAFFIC_CATEGORY_OPTIONS,
@@ -307,6 +308,10 @@
   };
   let airportFeedRequestId = 0;
   let airportFeedDebounceTimer = null;
+  const AIRPORT_TILE_CACHE_TTL_MS = 5 * 60 * 1000;
+  const AIRPORT_TILE_CACHE_MAX_ENTRIES = 48;
+  const airportTileCache = new Map();
+  const airportTileRequests = new Map();
   let selectedAirportDashboard = null;
   let selectedAirportStatus = "idle";
   let selectedAirportError = null;
@@ -2936,6 +2941,7 @@
 
   async function refreshAirports(bbox) {
     if (!bbox) {
+      airportFeedRequestId += 1;
       airportFeed = {
         status: "idle",
         airports: [],
@@ -2944,7 +2950,27 @@
       return;
     }
 
+    const coverage = buildAirportCoverageRequest(
+      bbox,
+      Number.isFinite(mapViewport?.zoom) ? Number(mapViewport.zoom) : 7
+    );
+    if (!coverage) {
+      return;
+    }
+
     const requestId = ++airportFeedRequestId;
+    const cachedTile = airportTileCache.get(coverage.key);
+    if (cachedTile && Date.now() - cachedTile.fetchedAt < AIRPORT_TILE_CACHE_TTL_MS) {
+      airportTileCache.delete(coverage.key);
+      airportTileCache.set(coverage.key, cachedTile);
+      airportFeed = {
+        status: "success",
+        airports: cachedTile.airports,
+        error: null,
+      };
+      return;
+    }
+
     airportFeed = {
       ...airportFeed,
       status: airportFeed.airports.length ? "refreshing" : "loading",
@@ -2952,17 +2978,26 @@
     };
 
     try {
-      const zoom = Number.isFinite(mapViewport?.zoom) ? Number(mapViewport.zoom) : 7;
-      const payload = await fetchAirports(bbox, {
-        limit:
-          zoom >= 9
-            ? 1500
-            : zoom >= 7
-              ? 1000
-              : zoom >= 5
-                ? 600
-                : 300,
-      });
+      let request = airportTileRequests.get(coverage.key);
+      if (!request) {
+        request = fetchAirports(coverage.bbox, { limit: coverage.limit }).then((payload) => {
+          const tile = {
+            airports: payload.airports ?? [],
+            fetchedAt: Date.now(),
+          };
+          airportTileCache.delete(coverage.key);
+          airportTileCache.set(coverage.key, tile);
+          while (airportTileCache.size > AIRPORT_TILE_CACHE_MAX_ENTRIES) {
+            airportTileCache.delete(airportTileCache.keys().next().value);
+          }
+          return payload;
+        }).finally(() => {
+          airportTileRequests.delete(coverage.key);
+        });
+        airportTileRequests.set(coverage.key, request);
+      }
+
+      const payload = await request;
       if (requestId !== airportFeedRequestId) {
         return;
       }

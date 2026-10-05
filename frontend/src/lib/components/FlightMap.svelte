@@ -68,6 +68,7 @@
   let lastViewPresetRequestId = 0;
   let lastFocusRequestId = null;
   let currentZoom = initialViewport?.zoom ?? 7.1;
+  let airportZoomBand = currentZoom < 7.5 ? 0 : currentZoom < 9 ? 1 : 2;
   const TRAIL_PANE_NAME = "selected-flight-trail-pane";
   const viewPresets = {
     poland: [
@@ -854,6 +855,7 @@
       return;
     }
 
+    const airportMarkers = [];
     for (const airport of airports) {
       if (!Number.isFinite(airport?.latitude) || !Number.isFinite(airport?.longitude)) {
         continue;
@@ -881,8 +883,12 @@
       });
       marker.on("mouseover", () => marker.openTooltip());
       marker.on("mouseout", () => marker.closeTooltip());
-      marker.addTo(airportLayer);
+      airportMarkers.push(marker);
       airportRegistry.set(airport.entity_key, marker);
+    }
+
+    if (airportMarkers.length) {
+      airportLayer.addLayers(airportMarkers);
     }
   }
 
@@ -936,7 +942,7 @@
 
     map = L.map(container, {
       zoomControl: false,
-      fadeAnimation: true,
+      fadeAnimation: false,
       markerZoomAnimation: true,
       minZoom: 2,
       preferCanvas: true,
@@ -1093,9 +1099,11 @@
     scheduleDenseAircraftOverlayDraw();
   }
 
+  $: airportZoomBand = currentZoom < 7.5 ? 0 : currentZoom < 9 ? 1 : 2;
+
   $: if (map && airportLayer) {
     airports;
-    currentZoom;
+    airportZoomBand;
     selectedAirportKey;
     showAirportMarkers;
     syncAirportLayer();

@@ -685,8 +685,8 @@
 
   function createAirportIcon(airport, selected) {
     const airportCode = airport?.iata ?? airport?.icao ?? airport?.entity_key ?? "?";
-    const showLabel = selected || currentZoom >= 9;
     const importance = Number(airport?.importance ?? 0);
+    const showLabel = selected || (currentZoom >= 9 && importance >= 9);
     const visualClass =
       importance >= 10 ? "airport-hub" : importance >= 7 ? "airport-major" : "airport-regional";
 
@@ -858,8 +858,15 @@
         continue;
       }
 
+      const importance = Number(airport?.importance ?? 0);
+      const isSelected = selectedAirportKey === airport.entity_key;
+      const minimumImportance = currentZoom < 7.5 ? 12 : currentZoom < 9 ? 9 : 0;
+      if (!isSelected && importance < minimumImportance) {
+        continue;
+      }
+
       const marker = L.marker([airport.latitude, airport.longitude], {
-        icon: createAirportIcon(airport, selectedAirportKey === airport.entity_key),
+        icon: createAirportIcon(airport, isSelected),
         keyboard: false,
       }).bindTooltip(buildAirportTooltipContent(airport), {
         direction: "top",

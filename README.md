@@ -12,6 +12,8 @@
 
 *Demo mode: live map, then the replay timeline playing back the archive. The aircraft are synthetic.*
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MaciejZiel/live_flights_map) deploys the public [demo mode](#demo-mode) (synthetic traffic) on Render's free plan.
+
 No API keys are needed: `docker compose up` starts the app against OpenSky's anonymous API with ADSB.lol as a fallback. OpenSky OAuth2 credentials are optional and only raise the polling rate.
 
 ## What it does
@@ -83,6 +85,20 @@ What `DEMO_MODE=true` changes:
 Other settings: `DEMO_FLIGHT_COUNT`, `DEMO_SEED`, `DEMO_SNAPSHOT_INTERVAL_SECONDS`, `DEMO_BACKFILL_MINUTES`.
 
 **Why the traffic is synthetic rather than recorded.** The collector's output can't be freely redistributed. OpenSky offers its API "for research and non-commercial purposes" under its own [terms and data license](https://opensky-network.org/about/terms-of-use), which do not grant a public redistribution right. ADSB.lol data is [ODbL 1.0](https://www.adsb.lol/docs/open-data/api/) (share-alike, with attribution). So the demo bundles no recorded traffic: every position is generated from the seed when the app runs. Only airport coordinates and codes are real, used as route endpoints.
+
+### Deploy the demo to Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MaciejZiel/live_flights_map)
+
+The button reads [`render.yaml`](render.yaml): one free Docker web service in Frankfurt, built from `Dockerfile.demo` with demo mode enabled. Nothing needs to be configured, as the demo uses no secrets.
+
+1. Sign in to [Render](https://render.com) and connect your GitHub account (Render asks for access to this repository).
+2. Click **Deploy to Render** above, or go to **New > Blueprint** and pick this repository. Render detects `render.yaml`.
+3. Keep the service name `live-flights-map-demo` (or change it), check that the plan is **Free**, and click **Apply**.
+4. Wait for the first build (about 3 to 5 minutes). The app is then at `https://<service-name>.onrender.com`, and `/health` should report `"demo_mode": true`.
+5. Optional: change `DEMO_FLIGHT_COUNT` or the rate limits under **Environment**. Pushing to `master` redeploys automatically (`autoDeploy`).
+
+Free Render services sleep after 15 minutes without traffic and take up to a minute to wake. The free plan has no persistent disk, so the archive is rebuilt (backfilled) on each start, which is all the demo needs. To keep history across restarts, switch to a paid plan and uncomment the `disk` block in `render.yaml`.
 
 ## Tests
 

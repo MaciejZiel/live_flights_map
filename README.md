@@ -12,8 +12,6 @@
 
 *Demo mode: live map, then the replay timeline playing back the archive. The aircraft are synthetic.*
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MaciejZiel/live_flights_map) deploys the public [demo mode](#demo-mode) (synthetic traffic) on Render's free plan.
-
 No API keys are needed: `docker compose up` starts the app against OpenSky's anonymous API with ADSB.lol as a fallback. OpenSky OAuth2 credentials are optional and only raise the polling rate.
 
 ## What it does

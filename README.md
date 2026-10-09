@@ -153,3 +153,7 @@ npm run test:e2e
 ```
 
 The same backend tests, frontend unit tests, production build and browser flow run in GitHub Actions. The Playwright flow mocks external API responses so it does not depend on live feeds.
+
+## License
+
+MIT License, see [LICENSE](LICENSE).

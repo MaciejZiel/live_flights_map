@@ -3,9 +3,10 @@ import hashlib
 from datetime import datetime, timezone
 from time import sleep
 
-from flask import Blueprint, Response, current_app, jsonify, request, stream_with_context
+from flask import Blueprint, Response, current_app, has_app_context, jsonify, request, stream_with_context
 
 from backend.services.airport_weather import AirportWeatherError
+from backend.services.demo_traffic import DEMO_SOURCE_LABEL, DEMO_WARNING
 from backend.services.provider_base import FlightProviderError
 from backend.services.alert_delivery import AlertDeliveryError, InvalidWebhookTargetError
 
@@ -116,6 +117,8 @@ def _parse_bbox():
 
 
 def _provider_names_for_bbox(bbox: dict[str, float]) -> tuple[str, ...] | None:
+    if has_app_context() and current_app.config.get("DEMO_MODE"):
+        return None
     is_world_bbox = (
         bbox["lamin"] <= -89.999
         and bbox["lamax"] >= 89.999
@@ -196,6 +199,23 @@ def _parse_json_body() -> dict[str, object]:
 
 
 def _enrich_live_payload(payload: dict[str, object]) -> dict[str, object]:
+    return _with_demo_meta(_enrich_flights(payload))
+
+
+def _with_demo_meta(payload: dict[str, object]) -> dict[str, object]:
+    if not current_app.config.get("DEMO_MODE") or not isinstance(payload, dict):
+        return payload
+    meta = payload.get("meta") if isinstance(payload.get("meta"), dict) else {}
+    return {
+        **payload,
+        "meta": {
+            **meta,
+            "demo": {"synthetic": True, "label": DEMO_SOURCE_LABEL, "notice": DEMO_WARNING},
+        },
+    }
+
+
+def _enrich_flights(payload: dict[str, object]) -> dict[str, object]:
     flights = payload.get("flights")
     if not isinstance(flights, list) or not flights:
         return payload
@@ -274,7 +294,7 @@ def list_local_flights():
             bbox=bbox,
             prefer_latest_cache=False,
             update_latest_cache=False,
-            provider_names=("adsb_lol",),
+            provider_names=None if current_app.config.get("DEMO_MODE") else ("adsb_lol",),
             provider_min_interval_seconds=current_app.config[
                 "ADSB_LOL_REGION_MIN_INTERVAL_SECONDS"
             ],

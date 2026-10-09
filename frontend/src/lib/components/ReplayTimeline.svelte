@@ -161,7 +161,7 @@
 
     <div class="timeline-speed-row">
       <span>Playback speed</span>
-      <select value={playbackSpeed} on:change={handleSpeedChange}>
+      <select value={String(playbackSpeed)} on:change={handleSpeedChange} aria-label="Playback speed">
         <option value="0.5">0.5x</option>
         <option value="1">1x</option>
         <option value="2">2x</option>

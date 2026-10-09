@@ -51,6 +51,8 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile
+      args:
+        VITE_USE_SSE: ${VITE_USE_SSE:-false}
     depends_on:
       api:
         condition: service_healthy

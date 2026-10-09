@@ -4,6 +4,8 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
+ARG VITE_USE_SSE=false
+ENV VITE_USE_SSE=${VITE_USE_SSE}
 RUN npm run build
 
 FROM nginx:1.27-alpine

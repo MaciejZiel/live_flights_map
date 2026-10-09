@@ -42,3 +42,29 @@ jobs:
       - run: npm run build
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  demo-image:
+    name: Demo image smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -f Dockerfile.demo -t live-flights-map-demo .
+      - name: Start the demo container and check it serves synthetic traffic
+        run: |
+          docker run -d --name demo -p 10000:10000 live-flights-map-demo
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:10000/health > health.json; then break; fi
+            sleep 2
+          done
+          python3 -c "import json; assert json.load(open('health.json'))['demo_mode'] is True"
+          curl -fsS http://127.0.0.1:10000/ | grep -q 'id="app"'
+          for attempt in $(seq 1 30); do
+            count=$(curl -fsS 'http://127.0.0.1:10000/api/flights?lamin=-90&lamax=90&lomin=-180&lomax=180' | python3 -c "import json,sys; print(json.load(sys.stdin).get('count', 0))")
+            if [ "$count" -gt 0 ]; then echo "synthetic flights: $count"; break; fi
+            sleep 2
+          done
+          [ "$count" -gt 0 ]
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X PUT http://127.0.0.1:10000/api/workspace/state)" = "403"
+      - if: always()
+        run: docker logs demo || true

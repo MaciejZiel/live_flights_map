@@ -360,5 +360,54 @@ class FlightArchiveServiceTests(unittest.TestCase):
             self.assertEqual(summary["warning_sector_count"], 1)
 
 
+class ReplayFromContainingSnapshotsTests(unittest.TestCase):
+    WORLD = {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0}
+    POLAND = {"lamin": 49.0, "lamax": 55.1, "lomin": 14.0, "lomax": 24.5}
+
+    def _store_world_snapshot(self, service) -> None:
+        service.store_snapshot(
+            {
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "bbox": self.WORLD,
+                "count": 2,
+                "flights": [
+                    {"icao24": "5e0001", "latitude": 52.2, "longitude": 21.0},
+                    {"icao24": "5e0002", "latitude": 40.6, "longitude": -73.8},
+                ],
+            }
+        )
+
+    def test_viewport_replay_is_clipped_from_world_snapshots_when_enabled(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = FlightArchiveService(
+                str(Path(directory) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+                replay_from_containing_snapshots=True,
+            )
+            self._store_world_snapshot(service)
+
+            replay = service.list_replay_snapshots(self.POLAND, minutes=30, limit=10)
+
+        self.assertEqual(replay["count"], 1)
+        snapshot = replay["snapshots"][0]
+        self.assertEqual([flight["icao24"] for flight in snapshot["flights"]], ["5e0001"])
+        self.assertEqual(snapshot["count"], 1)
+        self.assertEqual(snapshot["bbox"], self.POLAND)
+
+    def test_viewport_replay_requires_an_exact_match_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            service = FlightArchiveService(
+                str(Path(directory) / "history.sqlite3"),
+                retention_hours=24,
+                max_snapshots=100,
+            )
+            self._store_world_snapshot(service)
+
+            replay = service.list_replay_snapshots(self.POLAND, minutes=30, limit=10)
+
+        self.assertEqual(replay["count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

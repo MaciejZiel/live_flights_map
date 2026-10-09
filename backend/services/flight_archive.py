@@ -14,10 +14,15 @@ class FlightArchiveService:
         archive_path: str,
         retention_hours: float,
         max_snapshots: int,
+        replay_from_containing_snapshots: bool = False,
     ) -> None:
         self.archive_path = Path(archive_path).expanduser()
         self.retention_hours = max(retention_hours, 0.0)
         self.max_snapshots = max(max_snapshots, 1)
+        # When no snapshot was stored for exactly the requested area, cut the
+        # replay out of larger stored snapshots (e.g. the world sector). Off by
+        # default because large real snapshots are expensive to decode.
+        self.replay_from_containing_snapshots = replay_from_containing_snapshots
         self._lock = Lock()
         self._initialize_database()
 
@@ -330,12 +335,25 @@ class FlightArchiveService:
             finally:
                 connection.close()
 
+        clip_to_bbox = False
+        if not rows and self.replay_from_containing_snapshots:
+            rows = self._list_containing_snapshot_rows(
+                normalized_bbox,
+                cutoff_timestamp,
+                normalized_end_at.isoformat(),
+                normalized_limit,
+            )
+            clip_to_bbox = True
+
         snapshots = []
         for row in reversed(rows):
             try:
-                snapshots.append(json.loads(row["payload_json"]))
+                snapshot = json.loads(row["payload_json"])
             except (TypeError, json.JSONDecodeError):
                 continue
+            if clip_to_bbox:
+                snapshot = self._clip_snapshot(snapshot, normalized_bbox)
+            snapshots.append(snapshot)
 
         return {
             "bbox": normalized_bbox,
@@ -344,6 +362,52 @@ class FlightArchiveService:
             "lookback_minutes": normalized_minutes,
             "snapshots": snapshots,
         }
+
+    def _list_containing_snapshot_rows(
+        self,
+        bbox: dict[str, float],
+        cutoff_timestamp: str,
+        end_timestamp: str,
+        limit: int,
+    ) -> list[sqlite3.Row]:
+        with self._lock:
+            connection = self._connect()
+            try:
+                return connection.execute(
+                    """
+                    SELECT payload_json
+                    FROM snapshots
+                    WHERE bbox_lamin <= ? AND bbox_lamax >= ?
+                      AND bbox_lomin <= ? AND bbox_lomax >= ?
+                      AND fetched_at BETWEEN ? AND ?
+                    ORDER BY fetched_at DESC
+                    LIMIT ?
+                    """,
+                    (
+                        bbox["lamin"],
+                        bbox["lamax"],
+                        bbox["lomin"],
+                        bbox["lomax"],
+                        cutoff_timestamp,
+                        end_timestamp,
+                        limit,
+                    ),
+                ).fetchall()
+            finally:
+                connection.close()
+
+    @staticmethod
+    def _clip_snapshot(snapshot: dict[str, object], bbox: dict[str, float]) -> dict[str, object]:
+        flights = [
+            flight
+            for flight in snapshot.get("flights") or []
+            if isinstance(flight, dict)
+            and isinstance(flight.get("latitude"), (int, float))
+            and isinstance(flight.get("longitude"), (int, float))
+            and bbox["lamin"] <= flight["latitude"] <= bbox["lamax"]
+            and bbox["lomin"] <= flight["longitude"] <= bbox["lomax"]
+        ]
+        return {**snapshot, "bbox": dict(bbox), "count": len(flights), "flights": flights}
 
     def get_flight_trail(
         self,

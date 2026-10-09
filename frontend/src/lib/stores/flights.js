@@ -2,6 +2,7 @@ import { writable } from "svelte/store";
 
 import { buildFlightsStreamUrl, fetchFlights, fetchLocalFlights } from "../api/flights.js";
 import { buildLocalRegionTile } from "../utils/flightCoverage.js";
+import { confirmCachedSnapshot } from "../utils/snapshotRevalidation.js";
 
 const REFRESH_INTERVAL_MS = Number(import.meta.env.VITE_REFRESH_INTERVAL_MS ?? 30000);
 const BBOX_PRECISION = 4;
@@ -311,12 +312,7 @@ function createFlightsStore() {
     try {
       const result = await fetchFlights(WORLD_BBOX, { etag: snapshotEtag });
       if (result.notModified) {
-        update((state) => ({
-          ...state,
-          status: "success",
-          error: null,
-          transport,
-        }));
+        update((state) => confirmCachedSnapshot(state, globalPayload?.meta ?? state.meta, transport));
         return;
       }
       applyPayload(result.payload, transport, result.etag);

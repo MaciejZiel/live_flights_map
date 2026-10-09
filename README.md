@@ -8,7 +8,9 @@
 ![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask)
 ![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
 
-![Live Flights Map showing current traffic over central Europe](docs/live-flights-map.webp)
+![Live map and archive replay running in demo mode with synthetic traffic](docs/demo-mode.gif)
+
+*Demo mode: live map, then the replay timeline playing back the archive. The aircraft are synthetic.*
 
 No API keys are needed: `docker compose up` starts the app against OpenSky's anonymous API with ADSB.lol as a fallback. OpenSky OAuth2 credentials are optional and only raise the polling rate.
 
@@ -21,6 +23,8 @@ No API keys are needed: `docker compose up` starts the app against OpenSky's ano
 - **Local workspace**: saved views, watchlists, notes and browser/webhook alerts stored per local profile.
 
 The full list is in [FEATURES.md](FEATURES.md).
+
+![Live Flights Map showing current traffic over central Europe](docs/live-flights-map.webp)
 
 ![Flight inspector open for a selected aircraft](docs/flight-inspector.webp)
 
@@ -59,13 +63,48 @@ docker compose up --build -d
 
 Open <http://localhost:5174>. The first global snapshot appears after the collector's first run, usually within a minute. Run `docker compose down` to stop.
 
+## Demo mode
+
+Demo mode runs the whole app in one container with **synthetic traffic**, so it can be deployed publicly without API keys and without redistributing third-party flight data.
+
+```bash
+docker compose -f compose.demo.yaml up --build -d
+# open http://localhost:8080
+```
+
+What `DEMO_MODE=true` changes:
+
+- **Data:** the only flight provider is a built-in generator (`backend/services/demo_traffic.py`). A seeded fleet of 900 aircraft flies between real airport locations on great-circle routes with climb, cruise and descent. Positions depend only on time, so every instance shows the same sky. Callsigns start with `DEMO`, registrations with `SYN-`, the origin country is `Synthetic`, and the UI shows a *Demo* banner.
+- **Replay:** on start the archive is backfilled with 90 minutes of snapshots, and a background thread adds one every 30 s, so the replay timeline works immediately without separate workers.
+- **Read-only:** every non-GET API request returns `403`, the SSE stream is disabled, and flight details are answered locally. Route, photo and metadata providers are never called, and the photo proxy allows no hosts. The only outbound requests are for the public-domain OurAirports catalog and METAR weather.
+- **Rate limiting:** a per-client sliding window (`DEMO_RATE_LIMIT_PER_MINUTE`, default 240) and a global backstop (`DEMO_GLOBAL_RATE_LIMIT_PER_MINUTE`, default 3000). Both return `429` with `Retry-After`. Set `DEMO_TRUST_PROXY_HEADERS=true` behind a PaaS proxy so the client IP is read from `X-Forwarded-For`.
+- **Serving:** `Dockerfile.demo` builds the frontend and serves it from Flask under gunicorn (one worker, eight threads), so Nginx is not needed.
+
+Other settings: `DEMO_FLIGHT_COUNT`, `DEMO_SEED`, `DEMO_SNAPSHOT_INTERVAL_SECONDS`, `DEMO_BACKFILL_MINUTES`.
+
+**Why the traffic is synthetic rather than recorded.** The collector's output can't be freely redistributed. OpenSky offers its API "for research and non-commercial purposes" under its own [terms and data license](https://opensky-network.org/about/terms-of-use), which do not grant a public redistribution right. ADSB.lol data is [ODbL 1.0](https://www.adsb.lol/docs/open-data/api/) (share-alike, with attribution). So the demo bundles no recorded traffic: every position is generated from the seed when the app runs. Only airport coordinates and codes are real, used as route endpoints.
+
+### Deploy the demo to Render
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/MaciejZiel/live_flights_map)
+
+The button reads [`render.yaml`](render.yaml): one free Docker web service built from `Dockerfile.demo` with demo mode enabled.
+
+1. Sign in to [Render](https://render.com) and connect your GitHub account (Render asks for access to this repository).
+2. Click **Deploy to Render** above, or go to **New > Blueprint** and pick this repository. Render detects `render.yaml`.
+3. Keep the service name `live-flights-map-demo` (or change it), check that the plan is **Free**, and click **Apply**.
+4. Wait for the first build (about 3 to 5 minutes). The app is then at `https://<service-name>.onrender.com`, and `/health` should report `"demo_mode": true`.
+5. Optional: change `DEMO_FLIGHT_COUNT` or the rate limits under **Environment**. Pushing to `master` redeploys automatically (`autoDeploy`).
+
+Free Render services sleep after 15 minutes without traffic and take up to a minute to wake. The free plan has no persistent disk, so the archive is rebuilt (backfilled) on each start, which is all the demo needs. To keep history across restarts, switch to a paid plan and uncomment the `disk` block in `render.yaml`.
+
 ## Tests
 
 ```bash
-# Backend: 92 unittest tests
+# Backend: 104 unittest tests
 python -m unittest discover -s backend/tests -v
 
-# Frontend: 62 unit tests, production build, 4 Playwright browser flows
+# Frontend: 63 unit tests, production build, 4 Playwright browser flows
 cd frontend
 npm ci
 npm test
@@ -87,7 +126,7 @@ The backend tests can also run inside the image: `docker compose run --rm --no-d
 
 - Data quality is whatever the public feeds provide. Coverage has gaps, and routes and photos are best-effort lookups that are often missing.
 - The API runs on Flask's built-in server, and each server-sent events connection keeps a thread busy. A production setup would need a WSGI server (for example gunicorn) or an async framework for the stream.
-- Workspace profiles are not user accounts. There is no authentication, so the app is bound to loopback and should not be exposed to the internet.
+- Workspace profiles are not user accounts. There is no authentication, so the full app is bound to loopback and should not be exposed to the internet. Use [demo mode](#demo-mode) for a public deployment.
 - SQLite limits this to a single host. Moving the archive to PostgreSQL/PostGIS would allow multiple API instances and spatial queries.
 
 ## Docker details

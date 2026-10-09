@@ -1,56 +1,98 @@
 # Live Flights Map
 
+**A self-hosted live air-traffic map: real aircraft positions from public ADS-B feeds, flight and airport details, and replay of recent traffic from a local archive.**
+
 [![CI](https://github.com/MaciejZiel/live_flights_map/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/live_flights_map/actions/workflows/ci.yml)
-
-Live Flights Map is a local-first aviation operations desk for exploring aircraft traffic, inspecting flight and airport details, and replaying recent movement from archived data. It is a full-stack project: a Python/Flask backend with a background snapshot collector and a SQLite archive, and a Svelte + Leaflet frontend.
-
-**Backend (Python, Flask, SQLite)**
-
-- **Flask API** (`backend/`): aggregates live positions from OpenSky with ADSB.lol fallback, enriches flights with routes, aircraft metadata, photos, airports and METAR weather, and serves search, replay, airport dashboards, workspace state and server-sent live updates under `/api`.
-- **Snapshot collector** (`backend/entrypoints/collector.py`): a separate worker that polls providers on a schedule, honours provider cooldowns and `Retry-After`, and feeds a shared cache used by the API.
-- **SQLite archive** (`backend/services/flight_archive.py`): stores traffic snapshots for replay, aircraft trails and airport movement history, with retention and maintenance jobs.
-- Optional alert worker for persisted browser/webhook alerts, plus `/health` diagnostics for providers, collector, archive and caches.
-
-**Frontend (Svelte, Leaflet, WebGL)**: the map UI, served by Nginx with a same-origin proxy to the API.
-
-The app uses live public data providers. Provider coverage and rate limits vary, so the interface identifies the source and freshness of each snapshot and keeps the last available data when a provider is temporarily unavailable.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-3.1-000000?logo=flask)
+![Svelte 5](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte&logoColor=white)
 
 ![Live Flights Map showing current traffic over central Europe](docs/live-flights-map.webp)
 
-## What you can do
+No API keys are needed: `docker compose up` starts the app against OpenSky's anonymous API with ADSB.lol as a fallback. OpenSky OAuth2 credentials are optional and only raise the polling rate.
 
-- Explore live aircraft positions on a Leaflet map, with map styles, airport markers, weather and density-aware aircraft rendering.
-- Search by callsign, ICAO24, registration, airline, route, airport or named location; filter traffic by altitude, speed, type and activity.
-- Inspect aircraft identity, route, photos, position history and estimated direction of travel.
-- Open airport dashboards with nearby traffic, recorded movements, weather and CSV export.
-- Replay archived traffic, compare snapshots, save map views, annotate aircraft and manage watchlists.
-- Configure browser and webhook alerts for aircraft and traffic transitions.
-- Export traffic and airport reports as CSV or printable HTML, and share a map view or embed link.
+## What it does
+
+- **Live map** of aircraft from OpenSky, with ADSB.lol as a fallback, rendered with Leaflet and a WebGL overlay when thousands of aircraft are in view.
+- **Flight and airport inspection**: callsign, registration, best-effort route, photos, position trail, airport dashboards with METAR weather and CSV export.
+- **Search** by callsign, ICAO24, registration, airline, route, airport or place, plus filters for altitude, speed, aircraft type and activity.
+- **History**: a background collector writes snapshots to SQLite, which powers aircraft trails, airport movement history and a replay timeline.
+- **Local workspace**: saved views, watchlists, notes and browser/webhook alerts stored per local profile.
+
+The full list is in [FEATURES.md](FEATURES.md).
+
+![Flight inspector open for a selected aircraft](docs/flight-inspector.webp)
 
 ## Architecture
 
-```text
-Browser
-  └── Nginx: built Svelte app + same-origin API proxy
-        └── Flask API
-              ├── OpenSky → ADSB.lol fallback for live positions
-              ├── route, aircraft metadata, airport, weather and photo providers
-              └── SQLite archive, workspace, and provider caches
-
-Background services: regional snapshot collector + archive retention and maintenance
+```mermaid
+flowchart LR
+    Browser["Browser<br/>Svelte + Leaflet + WebGL"] --> Nginx["Nginx<br/>static app + /api proxy"]
+    Nginx --> API["Flask API"]
+    Collector["Snapshot collector<br/>(worker)"] --> Providers
+    API --> Providers["OpenSky / ADSB.lol<br/>+ route, photo, airport,<br/>METAR providers"]
+    Collector --> DB[("SQLite<br/>archive, workspace,<br/>caches")]
+    API --> DB
+    Maintenance["Archive maintenance<br/>(worker)"] --> DB
+    Alerts["Alert worker<br/>(optional)"] --> DB
 ```
 
-The frontend uses Svelte, Leaflet and a WebGL overlay for dense traffic. The backend uses Flask and SQLite. API responses remain under `/api`; `/health` reports provider, collector, archive and cache diagnostics.
+Each box is a separate Docker Compose service built from the same backend image. The API and workers share one Docker volume, so the API can answer most map requests from the collector's latest snapshot instead of calling a provider per browser request. `/health` reports provider, collector, archive and cache state.
 
-## Run the full app with Docker
+## Tech stack
+
+- **Backend:** Python 3.12, Flask 3, `requests`, SQLite (WAL mode), server-sent events
+- **Frontend:** Svelte 5, Vite 6, Leaflet with marker clustering, a custom WebGL layer for dense traffic
+- **Infrastructure:** Docker Compose (API, frontend, collector, archive maintenance, optional alert worker), Nginx
+- **Testing:** `unittest` (backend), `node:test` (frontend utilities), Playwright (browser flows), GitHub Actions
+
+## Quick start
 
 Docker Engine and the Docker Compose plugin are required.
 
 ```bash
+git clone https://github.com/MaciejZiel/live_flights_map.git
+cd live_flights_map
 docker compose up --build -d
 ```
 
-Open <http://localhost:5174>. The API is reached through the frontend proxy and is not published as a separate host port. SQLite data and caches persist in a named Docker volume. Set `FRONTEND_PORT` in `.env` to override the port.
+Open <http://localhost:5174>. The first global snapshot appears after the collector's first run, usually within a minute. Run `docker compose down` to stop.
+
+## Tests
+
+```bash
+# Backend: 85 unittest tests
+python -m unittest discover -s backend/tests -v
+
+# Frontend: 59 unit tests, production build, 3 Playwright browser flows
+cd frontend
+npm ci
+npm test
+npm run build
+npx playwright install chromium
+npm run test:e2e
+```
+
+The backend tests can also run inside the image: `docker compose run --rm --no-deps api python -m unittest discover -s backend/tests -v`. GitHub Actions runs all of the above on every push and pull request. The Playwright flows mock the API responses, so CI does not depend on live feeds.
+
+## Key technical decisions
+
+- **One collector instead of per-user provider calls.** OpenSky limits anonymous clients heavily, so a separate worker fetches one global snapshot on a schedule (every 20 minutes anonymously, 3 minutes with OAuth2) and stores it in SQLite. The API serves map requests from that snapshot and only adds a small, rate-capped ADSB.lol area request (max 25 square degrees, one per 30 s shared across clients) when the user zooms in. The cost is freshness: anonymous data can be several minutes old, so the UI marks positions as delayed instead of presenting them as live.
+- **Provider chain with explicit cooldowns.** Providers sit behind a small `FlightProvider` protocol. Rate-limit errors carry the upstream `Retry-After` value, the provider is put on cooldown, and the next provider or the last cached snapshot is used. Every response says which source it came from and how old it is.
+- **SQLite instead of a database server.** The archive, workspace profiles and caches are SQLite files on a shared volume, with WAL mode so the API can read while the collector writes. This keeps the app a single `docker compose up` with no extra service, at the cost of horizontal scaling. Retention (24 h / 720 snapshots by default) is enforced by a maintenance worker.
+- **Rendering mode chosen by density.** Thousands of Leaflet DOM markers make the map slow, so the frontend switches between detailed markers, a lighter marker mode and a WebGL overlay depending on aircraft count and zoom (`frontend/src/lib/utils/mapPerformance.js`), and only processes aircraft in the visible map area.
+
+## Limitations / next steps
+
+- Data quality is whatever the public feeds provide. Coverage has gaps, and routes and photos are best-effort lookups that are often missing.
+- The API runs on Flask's built-in server, and each server-sent events connection keeps a thread busy. A production setup would need a WSGI server (for example gunicorn) or an async framework for the stream.
+- Workspace profiles are not user accounts. There is no authentication, so the app is bound to loopback and should not be exposed to the internet.
+- SQLite limits this to a single host. Moving the archive to PostgreSQL/PostGIS would allow multiple API instances and spatial queries.
+
+## Docker details
+
+The API is reached through the frontend proxy and is not published as a separate host port. SQLite data and caches persist in a named Docker volume. Set `FRONTEND_PORT` in `.env` to override the port.
 
 To use authenticated OpenSky access, create an API client in your OpenSky account and set its client ID and secret in `.env`. OAuth2 tokens are cached and refreshed automatically. Legacy username/password credentials remain supported for existing accounts; new clients should use OAuth2.
 
@@ -137,22 +179,6 @@ Copy `.env.example` to `.env` to configure provider credentials and retention. C
 | Wikimedia Commons, Openverse and Planespotting | Aircraft imagery, when a match is available |
 
 Live traffic is not complete coverage and route enrichment is best-effort. A missing route, photo or airport movement means the provider did not return enough matching data; it does not mean the flight or event did not happen. The app shows provider warnings and stale-cache state rather than presenting cached positions as live.
-
-## Quality checks
-
-From the repository root:
-
-```bash
-docker compose config --quiet
-docker compose build
-docker compose run --rm --no-deps api python -m unittest discover -s backend/tests -v
-cd frontend
-npm test
-npm run build
-npm run test:e2e
-```
-
-The same backend tests, frontend unit tests, production build and browser flow run in GitHub Actions. The Playwright flow mocks external API responses so it does not depend on live feeds.
 
 ## License
 

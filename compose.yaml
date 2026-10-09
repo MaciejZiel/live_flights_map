@@ -10,6 +10,7 @@ x-backend-environment: &backend-environment
   OPENSKY_CACHE_PATH: /data/provider-cache.json
   LIVE_LATEST_CACHE_MAX_AGE_SECONDS: ${LIVE_LATEST_CACHE_MAX_AGE_SECONDS:-1260}
   LIVE_LATEST_CACHE_STALE_AFTER_SECONDS: ${LIVE_LATEST_CACHE_STALE_AFTER_SECONDS:-120}
+  SNAPSHOT_COLLECTOR_INTERVAL_SECONDS: ${SNAPSHOT_COLLECTOR_INTERVAL_SECONDS:-}
   SNAPSHOT_COLLECTOR_SECTORS: ${SNAPSHOT_COLLECTOR_SECTORS:-global_world}
   AIRPORT_CATALOG_CACHE_PATH: /data/airports.csv
   FLIGHT_ARCHIVE_RETENTION_HOURS: ${FLIGHT_ARCHIVE_RETENTION_HOURS:-24}
@@ -66,7 +67,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
-    command: ["python", "-m", "backend.entrypoints.collector", "--interval", "1200"]
+    command: ["python", "-m", "backend.entrypoints.collector"]
     environment: *backend-environment
     volumes:
       - flight-data:/data

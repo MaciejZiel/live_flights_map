@@ -44,3 +44,15 @@ test("drops cooldowns that have elapsed and explains local zoom coverage", () =>
   assert.equal(status.regionalSource, "ADSB.lol at zoom 6+");
   assert.equal(status.compactRegional, "Local ADS-B at zoom 6+");
 });
+
+test("labels synthetic demo traffic instead of live providers", () => {
+  const status = buildProviderStatus({
+    provider_used: "demo",
+    providers_configured: ["demo"],
+    demo: { synthetic: true },
+  });
+
+  assert.equal(status.globalSource, "Synthetic demo");
+  assert.equal(status.regionalSource, "Synthetic, no regional lookups");
+  assert.doesNotMatch(status.summary, /ADSB\.lol/);
+});

@@ -493,6 +493,12 @@ function createFlightsStore() {
       }));
     }
 
+    // Demo snapshots already contain every synthetic aircraft; there is no
+    // regional provider to supplement them with.
+    if (globalPayload?.meta?.demo?.synthetic) {
+      return;
+    }
+
     const tile = buildLocalRegionTile(normalizedBbox, zoom);
     if (tile) {
       void refreshLocalRegion(tile);

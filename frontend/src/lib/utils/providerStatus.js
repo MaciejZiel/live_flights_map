@@ -1,6 +1,7 @@
 const PROVIDER_LABELS = {
   adsb_lol: "ADSB.lol",
   opensky: "OpenSky",
+  demo: "Synthetic demo",
 };
 
 export function formatCooldownDuration(seconds) {
@@ -30,7 +31,9 @@ export function buildProviderStatus(meta = {}, nowTimestamp = Date.now()) {
   const globalSource = providerUsed ?? (configured.join(" + ") || "Flight providers");
   const localCount = Math.max(0, Number(meta.regional_supplement_count) || 0);
   const localTiles = Math.max(0, Number(meta.regional_supplement_tiles) || 0);
-  const regionalSource = localCount
+  const regionalSource = meta.demo?.synthetic
+    ? "Synthetic, no regional lookups"
+    : localCount
     ? `ADSB.lol +${localCount} local`
     : localTiles
       ? "ADSB.lol local cache"
@@ -48,7 +51,11 @@ export function buildProviderStatus(meta = {}, nowTimestamp = Date.now()) {
     })
     .filter(Boolean);
   const compactCooldowns = cooldowns.map((cooldown) => cooldown.replace(" retry ~", " ~"));
-  const compactRegional = localCount ? `Local +${localCount}` : "Local ADS-B at zoom 6+";
+  const compactRegional = meta.demo?.synthetic
+    ? "Synthetic only"
+    : localCount
+      ? `Local +${localCount}`
+      : "Local ADS-B at zoom 6+";
 
   return {
     globalSource,

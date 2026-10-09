@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from flask import Flask
 
 from .config import Config
+from .demo import DemoSnapshotCollector, install_demo_guards, install_frontend
 from .routes import api
 from .services.adsb_lol import ADSBLolClient
 from .services.adsb_lol_routes import ADSBLolRouteClient
@@ -16,6 +17,7 @@ from .services.airport_weather import AirportWeatherService
 from .services.airport_workflow import AirportWorkflowService
 from .services.alerts_worker import AlertSweepService
 from .services.alert_delivery import AlertDeliveryService
+from .services.demo_traffic import NoPhotoClient, SyntheticRouteClient, SyntheticTrafficProvider
 from .services.diagnostics import DiagnosticsService
 from .services.entity_search import EntitySearchService
 from .services.flight_archive import FlightArchiveService
@@ -50,6 +52,7 @@ class BackendRuntime:
     snapshot_collector_service: SnapshotCollectorService
     alert_sweep_service: AlertSweepService
     alert_delivery_service: AlertDeliveryService
+    demo_provider: SyntheticTrafficProvider | None = None
 
 
 def build_runtime(config: object | None = None) -> BackendRuntime:
@@ -60,6 +63,7 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         archive_path=config.FLIGHT_ARCHIVE_PATH,
         retention_hours=config.FLIGHT_ARCHIVE_RETENTION_HOURS,
         max_snapshots=config.FLIGHT_ARCHIVE_MAX_SNAPSHOTS,
+        replay_from_containing_snapshots=bool(getattr(config, "DEMO_MODE", False)),
     )
     traffic_intelligence_service = TrafficIntelligenceService(
         archive_path=config.FLIGHT_ARCHIVE_PATH,
@@ -77,7 +81,19 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         cache_path=config.AIRCRAFT_PHOTO_CACHE_PATH,
     )
 
+    demo_mode = bool(getattr(config, "DEMO_MODE", False))
+    demo_provider = None
+
     for provider_name in config.FLIGHT_DATA_PROVIDERS:
+        if provider_name == "demo":
+            if demo_provider is None:
+                demo_provider = SyntheticTrafficProvider(
+                    flight_count=getattr(config, "DEMO_FLIGHT_COUNT", 900),
+                    seed=getattr(config, "DEMO_SEED", 20260311),
+                )
+            providers.append(demo_provider)
+            continue
+
         if provider_name == "opensky":
             providers.append(
                 OpenSkyClient(
@@ -123,39 +139,22 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         cache_ttl=config.GLOBAL_TRAFFIC_BOARD_CACHE_TTL,
         lookback_minutes=config.GLOBAL_TRAFFIC_BOARD_LOOKBACK_MINUTES,
     )
-    flight_details_service = FlightDetailsService(
-        route_client=ADSBLolRouteClient(
-            base_url=config.ADSB_LOL_ROUTE_API_URL,
-            timeout=config.ADSB_LOL_ROUTE_TIMEOUT,
-            max_retries=config.ADSB_LOL_ROUTE_RETRY_COUNT,
-        ),
-        photo_client=AircraftPhotoService(
-            providers=[
-                PlanespottingClient(
-                    base_url=config.PLANESPOTTING_BASE_URL,
-                    timeout=config.PLANESPOTTING_TIMEOUT,
-                    max_retries=config.PLANESPOTTING_RETRY_COUNT,
-                ),
-                WikimediaCommonsClient(
-                    base_url=config.WIKIMEDIA_COMMONS_BASE_URL,
-                    timeout=config.WIKIMEDIA_COMMONS_TIMEOUT,
-                    max_retries=config.WIKIMEDIA_COMMONS_RETRY_COUNT,
-                ),
-                OpenverseClient(
-                    base_url=config.OPENVERSE_BASE_URL,
-                    timeout=config.OPENVERSE_TIMEOUT,
-                    max_retries=config.OPENVERSE_RETRY_COUNT,
-                ),
-            ],
-            cache_service=aircraft_photo_cache_service,
-            cache_ttl_seconds=config.AIRCRAFT_PHOTO_LOOKUP_CACHE_TTL,
-        ),
-        cache_ttl=config.FLIGHT_DETAILS_CACHE_TTL,
-        metadata_client=adsb_lol_client,
-    )
+    if demo_mode and demo_provider is not None:
+        # Synthetic aircraft have no real route or photo: answer locally and
+        # never query third-party services on behalf of public demo visitors.
+        flight_details_service = FlightDetailsService(
+            route_client=SyntheticRouteClient(demo_provider),
+            photo_client=NoPhotoClient(),
+            cache_ttl=config.FLIGHT_DETAILS_CACHE_TTL,
+            metadata_client=None,
+        )
+    else:
+        flight_details_service = _build_live_flight_details_service(
+            config, aircraft_photo_cache_service, adsb_lol_client
+        )
     aircraft_photo_proxy_service = AircraftPhotoProxyService(
         timeout=config.AIRCRAFT_PHOTO_PROXY_TIMEOUT,
-        allowed_hosts=config.AIRCRAFT_PHOTO_PROXY_ALLOWED_HOSTS,
+        allowed_hosts=() if demo_mode else config.AIRCRAFT_PHOTO_PROXY_ALLOWED_HOSTS,
         cache_service=aircraft_photo_cache_service,
         cache_ttl_seconds=config.AIRCRAFT_PHOTO_ASSET_CACHE_TTL,
     )
@@ -185,7 +184,11 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         snapshot_service=flight_snapshot_service,
         traffic_intelligence_service=traffic_intelligence_service,
         archive_service=archive_service,
-        sectors=SnapshotCollectorService.select_sectors(config.SNAPSHOT_COLLECTOR_SECTORS),
+        sectors=(
+            ({"key": "global_world", "bbox": {"lamin": -90.0, "lamax": 90.0, "lomin": -180.0, "lomax": 180.0}},)
+            if demo_mode
+            else SnapshotCollectorService.select_sectors(config.SNAPSHOT_COLLECTOR_SECTORS)
+        ),
     )
     alert_sweep_service = AlertSweepService(
         snapshot_service=flight_snapshot_service,
@@ -215,6 +218,40 @@ def build_runtime(config: object | None = None) -> BackendRuntime:
         snapshot_collector_service=snapshot_collector_service,
         alert_sweep_service=alert_sweep_service,
         alert_delivery_service=alert_delivery_service,
+        demo_provider=demo_provider,
+    )
+
+
+def _build_live_flight_details_service(config, aircraft_photo_cache_service, adsb_lol_client) -> FlightDetailsService:
+    return FlightDetailsService(
+        route_client=ADSBLolRouteClient(
+            base_url=config.ADSB_LOL_ROUTE_API_URL,
+            timeout=config.ADSB_LOL_ROUTE_TIMEOUT,
+            max_retries=config.ADSB_LOL_ROUTE_RETRY_COUNT,
+        ),
+        photo_client=AircraftPhotoService(
+            providers=[
+                PlanespottingClient(
+                    base_url=config.PLANESPOTTING_BASE_URL,
+                    timeout=config.PLANESPOTTING_TIMEOUT,
+                    max_retries=config.PLANESPOTTING_RETRY_COUNT,
+                ),
+                WikimediaCommonsClient(
+                    base_url=config.WIKIMEDIA_COMMONS_BASE_URL,
+                    timeout=config.WIKIMEDIA_COMMONS_TIMEOUT,
+                    max_retries=config.WIKIMEDIA_COMMONS_RETRY_COUNT,
+                ),
+                OpenverseClient(
+                    base_url=config.OPENVERSE_BASE_URL,
+                    timeout=config.OPENVERSE_TIMEOUT,
+                    max_retries=config.OPENVERSE_RETRY_COUNT,
+                ),
+            ],
+            cache_service=aircraft_photo_cache_service,
+            cache_ttl_seconds=config.AIRCRAFT_PHOTO_LOOKUP_CACHE_TTL,
+        ),
+        cache_ttl=config.FLIGHT_DETAILS_CACHE_TTL,
+        metadata_client=adsb_lol_client,
     )
 
 
@@ -247,6 +284,23 @@ def create_api_app(config: object | None = None, runtime: BackendRuntime | None 
 
     @app.get("/health")
     def healthcheck():
-        return app.extensions["diagnostics_service"].build_healthcheck()
+        payload = app.extensions["diagnostics_service"].build_healthcheck()
+        payload["demo_mode"] = bool(app.config.get("DEMO_MODE"))
+        return payload
+
+    if app.config.get("DEMO_MODE"):
+        install_demo_guards(app)
+        if runtime.demo_provider is not None and app.config.get("DEMO_BACKGROUND_COLLECTOR", True):
+            collector = DemoSnapshotCollector(
+                runtime,
+                runtime.demo_provider,
+                interval_seconds=app.config.get("DEMO_SNAPSHOT_INTERVAL_SECONDS", 30),
+                backfill_minutes=app.config.get("DEMO_BACKFILL_MINUTES", 90),
+            )
+            app.extensions["demo_snapshot_collector"] = collector
+            collector.start()
+
+    if app.config.get("FRONTEND_DIST_PATH"):
+        install_frontend(app, app.config["FRONTEND_DIST_PATH"])
 
     return app

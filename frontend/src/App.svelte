@@ -4292,6 +4292,7 @@
     const knownLabels = {
       adsb_lol: "ADSB.lol",
       opensky: "OpenSky",
+      demo: "Synthetic demo",
     };
 
     return knownLabels[normalizedValue] ?? normalizedValue;
@@ -5403,6 +5404,13 @@
     {/if}
 
     <div class="floating-messages">
+      {#if state.meta?.demo?.synthetic}
+        <div class="demo-banner" data-testid="demo-banner" role="status">
+          <strong>Demo</strong>
+          <span>{state.meta.demo.notice ?? "Synthetic flights, not real air traffic."}</span>
+        </div>
+      {/if}
+
       {#if state.error}
         <div class="error-banner">{state.error}</div>
       {/if}
@@ -7692,6 +7700,29 @@
   .error-banner {
     color: #ffdada;
     background: rgba(120, 33, 33, 0.85);
+  }
+
+  .demo-banner {
+    display: flex;
+    align-items: baseline;
+    gap: 0.55rem;
+    padding: 0.6rem 0.92rem;
+    border-radius: 14px;
+    color: #d9ecff;
+    background: rgba(24, 58, 112, 0.88);
+    backdrop-filter: blur(14px);
+    box-shadow: 0 16px 34px rgba(0, 0, 0, 0.24);
+    font-size: 0.84rem;
+  }
+
+  .demo-banner strong {
+    padding: 0.08rem 0.42rem;
+    border-radius: 6px;
+    color: #0d2346;
+    background: #9cc8ff;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
   }
 
   .warning-banner {

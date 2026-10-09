@@ -11,6 +11,23 @@ def _env_bool(name: str, default: bool) -> bool:
 
 class Config:
     DEBUG = _env_bool("FLASK_DEBUG", False)
+    # Demo mode replaces every live provider with generated synthetic traffic,
+    # makes the API read-only and rate limited, and needs no API keys.
+    DEMO_MODE = _env_bool("DEMO_MODE", False)
+    DEMO_FLIGHT_COUNT = int(os.getenv("DEMO_FLIGHT_COUNT", "900"))
+    DEMO_SEED = int(os.getenv("DEMO_SEED", "20260311"))
+    DEMO_SNAPSHOT_INTERVAL_SECONDS = float(os.getenv("DEMO_SNAPSHOT_INTERVAL_SECONDS", "30"))
+    DEMO_BACKFILL_MINUTES = float(os.getenv("DEMO_BACKFILL_MINUTES", "90"))
+    DEMO_BACKGROUND_COLLECTOR = _env_bool("DEMO_BACKGROUND_COLLECTOR", True)
+    DEMO_RATE_LIMIT_PER_MINUTE = int(os.getenv("DEMO_RATE_LIMIT_PER_MINUTE", "240"))
+    # A backstop across all clients, since X-Forwarded-For can be spoofed.
+    DEMO_GLOBAL_RATE_LIMIT_PER_MINUTE = int(os.getenv("DEMO_GLOBAL_RATE_LIMIT_PER_MINUTE", "3000"))
+    # Key the per-client limit on the first X-Forwarded-For hop (behind a PaaS
+    # proxy) instead of the socket address.
+    DEMO_TRUST_PROXY_HEADERS = _env_bool("DEMO_TRUST_PROXY_HEADERS", False)
+    # Optional: serve the built frontend (frontend/dist) from Flask, used by
+    # the single-container demo image.
+    FRONTEND_DIST_PATH = os.getenv("FRONTEND_DIST_PATH", "").strip() or None
     HOST = os.getenv("HOST", "127.0.0.1")
     PORT = int(os.getenv("PORT", "5000"))
     FLIGHT_ARCHIVE_PATH = os.getenv(
@@ -61,7 +78,7 @@ class Config:
         "OPENSKY_BASE_URL",
         "https://opensky-network.org/api/states/all",
     )
-    FLIGHT_DATA_PROVIDERS = tuple(
+    FLIGHT_DATA_PROVIDERS = ("demo",) if DEMO_MODE else tuple(
         provider.strip()
         for provider in os.getenv("FLIGHT_DATA_PROVIDERS", "opensky,adsb_lol").split(",")
         if provider.strip()

@@ -12,8 +12,51 @@ from backend.services.alert_delivery import AlertDeliveryError, InvalidWebhookTa
 api = Blueprint("api", __name__)
 
 
-def _build_sse_event(event_name: str, payload: dict[str, object]) -> str:
-    return f"event: {event_name}\ndata: {json.dumps(payload)}\n\n"
+SSE_RETRY_MILLISECONDS = 5000
+
+
+def _build_sse_event(
+    event_name: str,
+    payload: dict[str, object],
+    event_id: str | None = None,
+) -> str:
+    id_line = f"id: {event_id}\n" if event_id else ""
+    return f"{id_line}event: {event_name}\ndata: {json.dumps(payload)}\n\n"
+
+
+def _flight_stream_events(
+    fetch_payload,
+    *,
+    interval_seconds: float,
+    heartbeat_seconds: float,
+    last_event_id: str | None = None,
+    sleep_fn=sleep,
+):
+    """Yield SSE frames: snapshots on change, heartbeat comments in between.
+
+    The snapshot ETag doubles as the event id, so a client that reconnects with
+    a matching ``Last-Event-ID`` is not sent the snapshot it already has.
+    """
+    last_etag = last_event_id or None
+    heartbeat_seconds = max(1.0, min(heartbeat_seconds, interval_seconds))
+    yield f"retry: {SSE_RETRY_MILLISECONDS}\n\n"
+
+    while True:
+        try:
+            payload = fetch_payload()
+            next_etag = _snapshot_etag(payload)
+            if next_etag != last_etag:
+                yield _build_sse_event("snapshot", payload, event_id=next_etag)
+                last_etag = next_etag
+        except FlightProviderError as exc:
+            yield _build_sse_event("upstream_error", {"error": str(exc)})
+
+        waited = 0.0
+        while waited < interval_seconds:
+            step = min(heartbeat_seconds, interval_seconds - waited)
+            sleep_fn(step)
+            waited += step
+            yield ": keep-alive\n\n"
 
 
 def _snapshot_etag(payload: dict[str, object]) -> str:
@@ -567,31 +610,28 @@ def stream_flights():
         return jsonify({"error": str(exc)}), 400
 
     service = current_app.extensions["flight_snapshot_service"]
-    interval_seconds = current_app.config["FLIGHT_STREAM_INTERVAL_SECONDS"]
+    interval_seconds = float(current_app.config["FLIGHT_STREAM_INTERVAL_SECONDS"])
+    heartbeat_seconds = float(current_app.config.get("FLIGHT_STREAM_HEARTBEAT_SECONDS", 15))
+    last_event_id = request.headers.get("Last-Event-ID") or request.args.get("lastEventId")
+
+    def fetch_payload() -> dict[str, object]:
+        return _enrich_live_payload(
+            service.get_flights(
+                bbox=bbox,
+                provider_names=_provider_names_for_bbox(bbox),
+            )
+        )
 
     @stream_with_context
     def generate():
-        last_etag = None
-        yield "retry: 5000\n\n"
-
-        while True:
-            try:
-                flights_payload = service.get_flights(
-                    bbox=bbox,
-                    provider_names=_provider_names_for_bbox(bbox),
-                )
-                enriched_payload = _enrich_live_payload(flights_payload)
-                next_etag = _snapshot_etag(enriched_payload)
-                if next_etag != last_etag:
-                    yield _build_sse_event("snapshot", enriched_payload)
-                    last_etag = next_etag
-            except FlightProviderError as exc:
-                yield _build_sse_event("upstream_error", {"error": str(exc)})
-
-            sleep(interval_seconds)
+        yield from _flight_stream_events(
+            fetch_payload,
+            interval_seconds=interval_seconds,
+            heartbeat_seconds=heartbeat_seconds,
+            last_event_id=last_event_id,
+        )
 
     response = Response(generate(), mimetype="text/event-stream")
-    response.headers["Cache-Control"] = "no-cache"
-    response.headers["Connection"] = "keep-alive"
+    response.headers["Cache-Control"] = "no-cache, no-transform"
     response.headers["X-Accel-Buffering"] = "no"
     return response

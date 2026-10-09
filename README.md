@@ -62,10 +62,10 @@ Open <http://localhost:5174>. The first global snapshot appears after the collec
 ## Tests
 
 ```bash
-# Backend: 85 unittest tests
+# Backend: 92 unittest tests
 python -m unittest discover -s backend/tests -v
 
-# Frontend: 59 unit tests, production build, 3 Playwright browser flows
+# Frontend: 62 unit tests, production build, 4 Playwright browser flows
 cd frontend
 npm ci
 npm test
@@ -107,6 +107,8 @@ Without OAuth2 credentials, the snapshot collector requests one global OpenSky s
 ```bash
 docker compose --profile workers up --build -d alert-worker
 ```
+
+The browser polls `/api/flights` with `If-None-Match` every 30 seconds by default. To push updates over server-sent events instead, build the frontend with `VITE_USE_SSE=true docker compose up --build -d`. The stream sends a heartbeat comment every `FLIGHT_STREAM_HEARTBEAT_SECONDS` (15 s) so proxies do not drop it as idle, and Nginx serves it from a dedicated location without buffering or compression.
 
 Useful commands:
 

@@ -169,6 +169,11 @@ class Config:
     FLIGHT_STREAM_INTERVAL_SECONDS = float(
         os.getenv("FLIGHT_STREAM_INTERVAL_SECONDS", "30")
     )
+    # Comment lines sent while the snapshot is unchanged, so reverse proxies and
+    # PaaS load balancers do not close the stream as idle.
+    FLIGHT_STREAM_HEARTBEAT_SECONDS = float(
+        os.getenv("FLIGHT_STREAM_HEARTBEAT_SECONDS", "15")
+    )
 
     MAP_DEFAULT_LAMIN = float(os.getenv("MAP_DEFAULT_LAMIN", "49.0"))
     MAP_DEFAULT_LAMAX = float(os.getenv("MAP_DEFAULT_LAMAX", "55.1"))

@@ -1,6 +1,17 @@
 # Live Flights Map
 
-Live Flights Map is a local-first aviation operations desk for exploring aircraft traffic, inspecting flight and airport details, and replaying recent movement from archived data.
+[![CI](https://github.com/MaciejZiel/live_flights_map/actions/workflows/ci.yml/badge.svg)](https://github.com/MaciejZiel/live_flights_map/actions/workflows/ci.yml)
+
+Live Flights Map is a local-first aviation operations desk for exploring aircraft traffic, inspecting flight and airport details, and replaying recent movement from archived data. It is a full-stack project: a Python/Flask backend with a background snapshot collector and a SQLite archive, and a Svelte + Leaflet frontend.
+
+**Backend (Python, Flask, SQLite)**
+
+- **Flask API** (`backend/`): aggregates live positions from OpenSky with ADSB.lol fallback, enriches flights with routes, aircraft metadata, photos, airports and METAR weather, and serves search, replay, airport dashboards, workspace state and server-sent live updates under `/api`.
+- **Snapshot collector** (`backend/entrypoints/collector.py`): a separate worker that polls providers on a schedule, honours provider cooldowns and `Retry-After`, and feeds a shared cache used by the API.
+- **SQLite archive** (`backend/services/flight_archive.py`): stores traffic snapshots for replay, aircraft trails and airport movement history, with retention and maintenance jobs.
+- Optional alert worker for persisted browser/webhook alerts, plus `/health` diagnostics for providers, collector, archive and caches.
+
+**Frontend (Svelte, Leaflet, WebGL)**: the map UI, served by Nginx with a same-origin proxy to the API.
 
 The app uses live public data providers. Provider coverage and rate limits vary, so the interface identifies the source and freshness of each snapshot and keeps the last available data when a provider is temporarily unavailable.
 

@@ -11,6 +11,8 @@ const SNAPSHOT_STORAGE_KEY = "live-flights-map.snapshot.v4";
 const WORLD_BBOX = Object.freeze({ lamin: -90, lamax: 90, lomin: -180, lomax: 180 });
 const LOCAL_REGION_CACHE_TTL_MS = 5 * 60 * 1000;
 const LOCAL_REGION_CACHE_MAX_TILES = 64;
+const STREAM_RECONNECT_MIN_MS = 5000;
+const STREAM_RECONNECT_MAX_MS = 60000;
 
 const initialState = {
   status: "idle",
@@ -108,6 +110,8 @@ function createFlightsStore() {
   let viewBbox = null;
   let eventSource = null;
   let streamClosedManually = false;
+  let streamReconnectTimer = null;
+  let streamReconnectDelayMs = STREAM_RECONNECT_MIN_MS;
   const storedSnapshot = loadStoredSnapshot();
   let snapshotEtag = storedSnapshot?.etag ?? null;
   let regionalTiles = new Map(
@@ -364,12 +368,30 @@ function createFlightsStore() {
     eventSource = null;
   }
 
+  function clearStreamReconnect() {
+    if (streamReconnectTimer) {
+      window.clearTimeout(streamReconnectTimer);
+      streamReconnectTimer = null;
+    }
+  }
+
+  function scheduleStreamReconnect() {
+    clearStreamReconnect();
+    const delay = streamReconnectDelayMs;
+    streamReconnectDelayMs = Math.min(streamReconnectDelayMs * 2, STREAM_RECONNECT_MAX_MS);
+    streamReconnectTimer = window.setTimeout(() => {
+      streamReconnectTimer = null;
+      connectStream();
+    }, delay);
+  }
+
   function connectStream() {
     if (!USE_SSE || typeof window === "undefined" || typeof window.EventSource === "undefined") {
       startPolling();
       return;
     }
 
+    clearStreamReconnect();
     stopPolling();
     closeStream();
 
@@ -382,6 +404,10 @@ function createFlightsStore() {
 
     streamClosedManually = false;
     eventSource = new window.EventSource(buildFlightsStreamUrl(WORLD_BBOX));
+
+    eventSource.addEventListener("open", () => {
+      streamReconnectDelayMs = STREAM_RECONNECT_MIN_MS;
+    });
 
     eventSource.addEventListener("snapshot", (event) => {
       try {
@@ -435,6 +461,15 @@ function createFlightsStore() {
         return;
       }
 
+      // CONNECTING: the browser is already retrying (after the server's
+      // `retry:` delay) and will send Last-Event-ID, so the server skips the
+      // snapshot the map already shows. Keep the current data on screen.
+      if (eventSource?.readyState === window.EventSource.CONNECTING) {
+        return;
+      }
+
+      // CLOSED: the browser gave up (for example an HTTP error from a proxy).
+      // Poll in the meantime and try the stream again with backoff.
       closeStream();
       update((state) => ({
         ...state,
@@ -443,6 +478,7 @@ function createFlightsStore() {
         transport: "polling",
       }));
       startPolling();
+      scheduleStreamReconnect();
     };
   }
 
@@ -472,6 +508,7 @@ function createFlightsStore() {
   }
 
   function stop() {
+    clearStreamReconnect();
     closeStream();
     stopPolling();
   }
